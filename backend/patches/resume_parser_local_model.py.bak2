@@ -1,0 +1,749 @@
+"""
+Patch to integrate local model parsing into the resume parser.
+This replaces LLM-based extraction with local Ollama model for better performance and no API costs.
+"""
+import logging
+import json
+import re
+import asyncio
+from typing import Dict, List, Any, Optional
+from collections import Counter
+
+from backend.utils.resume_parser import ResumeParser
+from backend.services.local_model_service import get_local_model_service
+
+logger = logging.getLogger(__name__)
+
+# Original extraction methods to be patched
+original_extract_experience_llm = ResumeParser._extract_experience_llm
+original_extract_education_llm = ResumeParser._extract_education_llm
+original_extract_skills = ResumeParser._extract_skills
+original_extract_personal_info = ResumeParser._extract_personal_info
+
+# Helper for running async functions synchronously with timeout
+def run_async(async_func, *args, timeout=30, **kwargs):
+    try:
+        # Check if there's already an event loop in this thread
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            # If there's no event loop, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+        
+        # Add timeout to prevent hanging
+        task = asyncio.ensure_future(async_func(*args, **kwargs))
+        return loop.run_until_complete(asyncio.wait_for(task, timeout=timeout))
+    except asyncio.TimeoutError:
+        logger.error(f"Operation timed out after {timeout} seconds: {async_func.__name__}")
+        return None
+    except Exception as e:
+        logger.error(f"Error in run_async for {async_func.__name__}: {str(e)}")
+        return None
+
+# Local model helper functions
+async def extract_with_local_model(model_service, prompt, model_name='resume-parser-code'):
+    """Extract structured data from text using local Ollama model."""
+    # Define regex patterns for fallback extraction if needed
+    job_pattern = r'(?:job|title|position)[\s:]+(.*?)(?:\n|\.|,|$)'
+    company_pattern = r'(?:company|employer|organization)[\s:]+(.*?)(?:\n|\.|,|$)'
+    date_pattern = r'(?:date|duration|period)[\s:]+(.*?)(?:\n|\.|,|$)'
+    location_pattern = r'(?:location|place|city|state)[\s:]+(.*?)(?:\n|\.|,|$)'
+    
+    # Add explicit instructions to format response as JSON
+    enhanced_prompt = f"""{prompt}
+    
+IMPORTANT: Format your response ONLY as a valid JSON object or array. Do not include any explanatory text, markdown formatting, or code blocks.
+For example, if asked to extract names, your response should be: ["John Smith", "Jane Doe"]
+NOT: ```json["John Smith", "Jane Doe"]```
+NOT: The names are: ["John Smith", "Jane Doe"]
+JUST: ["John Smith", "Jane Doe"]"""
+
+    # Try the local model with timeout protection
+    try:
+        logger.info(f"Calling Ollama API with model {model_name} and 15-second timeout")
+        
+        # Get response from Ollama with timeout
+        try:
+            response_task = model_service._generate_response(
+                model_name,
+                enhanced_prompt,
+                temperature=0.1,
+                max_tokens=2000  # Reduced token count for faster response
+            )
+            response_text = await asyncio.wait_for(response_task, timeout=15.0)
+            logger.info("Successfully received response from Ollama API")
+        except asyncio.TimeoutError:
+            logger.error("Ollama API call timed out after 15 seconds")
+            return [{"title": "Resume Parsing Timeout", "company": "Unknown", "date_range": "", "description": "Local model timed out while parsing resume."}]
+        
+        # Process the response with timeout protection
+        try:
+            logger.info("Processing JSON response with timeout")
+            
+            # Simple extraction function with timeout
+            async def extract_json():
+                # Try to find a JSON array
+                start_idx = response_text.find('[')
+                end_idx = response_text.rfind(']')
+                
+                if start_idx >= 0 and end_idx > start_idx:
+                    try:
+                        json_str = response_text[start_idx:end_idx+1]
+                        logger.info(f"Found JSON array: {json_str[:50]}...")
+                        return json.loads(json_str)
+                    except json.JSONDecodeError:
+                        pass
+                
+                # Try to find a JSON object
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                
+                if start_idx >= 0 and end_idx > start_idx:
+                    try:
+                        json_str = response_text[start_idx:end_idx+1]
+                        logger.info(f"Found JSON object: {json_str[:50]}...")
+                        obj = json.loads(json_str)
+                        return [obj] if isinstance(obj, dict) else obj
+                    except json.JSONDecodeError:
+                        pass
+                
+                # If no valid JSON found, create a fallback response
+                logger.warning("No valid JSON found in response")
+                return [{"title": "Parsing Error", "company": "Unknown", "date_range": "", "description": "Failed to parse valid JSON from response"}]
+            
+            # Run JSON extraction with timeout
+            result = await asyncio.wait_for(extract_json(), timeout=3.0)
+            logger.info(f"Successfully extracted {len(result)} items from response")
+            return result
+            
+        except asyncio.TimeoutError:
+            logger.error("JSON processing timed out")
+            return [{"title": "JSON Processing Timeout", "company": "Unknown", "date_range": "", "description": "Timed out while processing JSON"}]
+        except Exception as e:
+            logger.error(f"Error processing response: {str(e)}")
+            return [{"title": "Processing Error", "company": "Unknown", "date_range": "", "description": f"Error: {str(e)}"}]
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in local model extraction: {str(e)}")
+        
+        # Last resort fallback - return minimal valid structure
+        return [{"title": "Error", "company": "Unknown", "date_range": "", "description": f"Failed to extract data: {str(e)}"}]
+# Enhanced experience extraction for local model
+def _extract_experience_llm_local(self) -> List[Dict[str, Any]]:
+    """Extract experience information using local Ollama model with fallback to original method."""
+    try:
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Extracting experience with local model...")
+            
+            # Prepare a focused prompt for experience extraction with specific instructions
+            experience_prompt = f"""You are a resume parsing assistant that extracts structured experience data from resumes.
+
+Extract ALL work experience entries from this resume text.
+
+For each position, extract the following information into JSON format:
+- title: The job title or position name
+- company: The company name
+- date_range: The full date range of employment (e.g., 'Jan 2020 - Mar 2022')
+- start_date: Start date in YYYY-MM format when possible
+- end_date: End date in YYYY-MM format, or 'Present' for current positions
+- location: The job location (city, state, country)
+- description: The COMPLETE job description including all responsibilities and achievements
+
+Format the output ONLY as a clean JSON array of objects with the fields above.
+
+RESUME TEXT:
+{self.text}
+"""
+            
+            # Run the async extraction synchronously with a shorter timeout
+            logger.info("Calling local model with 10 second timeout")
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                experience_prompt,
+                timeout=10,  # Shorter 10 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            # Check if the result is valid
+            if result and isinstance(result, list) and len(result) > 0:
+                logger.info(f"Local model extracted {len(result)} experience entries")
+                return result
+            else:
+                logger.warning("Local model returned empty or invalid experience results, falling back to original method")
+        else:
+            logger.warning("Local model not available for experience extraction, using original method")
+    except Exception as e:
+        logger.error(f"Error in local model experience extraction: {str(e)}")
+    
+    # Fall back to original method
+    logger.info("Falling back to original experience extraction method")
+    return original_extract_experience_llm(self)
+                
+# Enhanced education extraction for local model
+def _extract_education_llm_local(self) -> List[Dict[str, Any]]:
+    """Extract education information using local Ollama model with fallback to original method."""
+    try:
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Extracting education with local model...")
+            
+            # Prepare a focused prompt for education extraction with specific instructions
+            education_prompt = f"""You are a resume parsing assistant that extracts structured education data from resumes.
+
+Extract ALL education entries from this resume text.
+
+For each education entry, extract the following information into JSON format:
+- degree: The degree or qualification obtained
+- institution: The name of the educational institution
+- date_range: The full date range of education (e.g., 'Sep 2010 - Jun 2014')
+- start_date: Start date in YYYY-MM format when possible
+- end_date: End date in YYYY-MM format (graduation date)
+- location: The location of the institution
+- description: Any additional information like GPA, honors, relevant coursework
+
+Format the output ONLY as a clean JSON array of objects with the fields above.
+
+RESUME TEXT:
+{self.text}
+"""
+            
+            # Run the async extraction synchronously with a shorter timeout
+            logger.info("Calling local model with 10 second timeout for education")
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                education_prompt,
+                timeout=10,  # Shorter 10 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            # Check if the result is valid
+            if result and isinstance(result, list) and len(result) > 0:
+                logger.info(f"Local model extracted {len(result)} education entries")
+                return result
+            else:
+                logger.warning("Local model returned empty or invalid education results, falling back to original method")
+        else:
+            logger.warning("Local model not available for education extraction, using original method")
+    except Exception as e:
+        logger.error(f"Error in local model education extraction: {str(e)}")
+
+    # Fall back to original method
+    logger.info("Falling back to original education extraction method")
+    return original_extract_education_llm(self)
+
+# Enhanced skills extraction for local model
+def _extract_skills_local(self) -> List[str]:
+    """Extract skills using local model with standard extraction fallback."""
+    try:
+        # Get local model service
+        local_model_service = get_local_model_service()
+
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+
+        if model_available and model_available is not None:
+            logger.info("Extracting skills with local model...")
+
+            # Prepare a focused prompt for skills extraction with specific instructions
+            skills_prompt = f"""You are a resume parsing assistant that extracts skills from resumes.
+
+Analyze this resume text and extract ALL technical and professional skills mentioned.
+
+Format your response as a simple JSON array of skill strings.
+Example: ["Python", "Project Management", "JavaScript"]
+
+RESUME TEXT:
+{self.text}
+"""
+
+            # Run the async extraction synchronously with a shorter timeout
+            logger.info("Calling local model with 10 second timeout for skills")
+            skills_result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                skills_prompt,
+                timeout=10,  # 10 second timeout
+                model_name='resume-parser-code'
+            )
+
+            # Process the skills result
+            if skills_result and isinstance(skills_result, list):
+                # The model might return skills as objects or strings
+                if all(isinstance(item, str) for item in skills_result):
+                    skills = [skill.lower() for skill in skills_result]
+                    logger.info(f"Local model extracted {len(skills)} skills as strings")
+                    return skills
+                elif all(isinstance(item, dict) for item in skills_result):
+                    # Try to extract skills from objects
+                    skills = []
+                    for item in skills_result:
+                        if isinstance(item, dict) and 'skill' in item:
+                            skills.append(item['skill'].lower())
+                        elif isinstance(item, dict) and 'name' in item:
+                            skills.append(item['name'].lower())
+                    logger.info(f"Local model extracted {len(skills)} skills from objects")
+                    return skills
+
+            logger.warning("Local model returned invalid skills format, falling back to original method")
+        else:
+            logger.warning("Local model not available for skills extraction, using original method")
+
+    except Exception as e:
+        logger.error(f"Error in local model skills extraction: {str(e)}")
+
+    # Fall back to original method
+    logger.info("Falling back to original skills extraction method")
+    return original_extract_skills(self)
+
+# Enhanced personal info extraction for local model
+def _extract_personal_info_local(self) -> Dict[str, Optional[str]]:
+    """Enhanced personal information extraction using both local model and spaCy.
+    This method combines the power of the local LLM with spaCy's NER to improve extraction accuracy.
+    """
+    # Start with the original personal info extraction
+    personal_info = original_extract_personal_info(self)
+    
+    # If we already have a name, just return the original result
+    if personal_info.get('name') and personal_info.get('name') != 'Unknown':
+        logger.info(f"Already found name via standard extraction: {personal_info.get('name')}")
+        return personal_info
+    
+    try:
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Attempting to extract personal info with local model...")
+            
+            # Focused prompt for personal information extraction
+            personal_info_prompt = f"""You are a resume parser that extracts personal information from resumes.
+
+Extract ONLY the following personal information from this resume text:
+- name: The candidate's full name (first and last name)
+- email: Email address if present
+- phone: Phone number if present
+- location: Location/address if present
+
+Format the output ONLY as a clean JSON object with the fields above. 
+OMIT any fields where you couldn't find information.
+
+RESUME TEXT:
+{self.text[:2000]}  # Focus on the first 2000 chars where personal info is typically found
+"""
+            
+            # Run async extraction synchronously with timeout
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                personal_info_prompt,
+                timeout=15,  # 15 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            if result and isinstance(result, dict):
+                # Process name if found
+                if 'name' in result and result['name'] and result['name'] != 'Unknown':
+                    candidate_name = result['name'].strip()
+                    
+                    # Validate it looks like a proper name
+                    name_words = candidate_name.split()
+                    if len(name_words) >= 2 and all(word[0].isupper() for word in name_words if len(word) > 1):
+                        personal_info['name'] = candidate_name
+                        logger.info(f"Found name using local model: {candidate_name}")
+                
+                # Process other fields if found
+                for field in ['email', 'phone', 'location']:
+                    if field in result and result[field] and (field not in personal_info or not personal_info[field]):
+                        personal_info[field] = result[field]
+                        logger.info(f"Found {field} using local model: {result[field]}")
+            
+            # If name is still unknown but we have a spaCy doc, try one more approach with named entity frequency
+            if personal_info.get('name') == 'Unknown' and self.doc:
+                # Use a heuristic based on the frequency and position of person entities
+                person_entities = [ent.text.strip() for ent in self.doc.ents if ent.label_ == "PERSON"]
+                
+                if person_entities:
+                    # Count occurrences of each person entity
+                    from collections import Counter
+                    person_counts = Counter(person_entities)
+                    
+                    # Filter to entities with at least 2 words (likely full names)
+                    full_names = [name for name in person_counts.keys() if len(name.split()) >= 2]
+                    
+                    if full_names:
+                        # Get the most frequent full name
+                        most_common_name = max([(name, person_counts[name]) for name in full_names], key=lambda x: x[1])[0]
+                        personal_info['name'] = most_common_name
+                        logger.info(f"Found name using frequency analysis: {most_common_name}")
+        else:
+            logger.info("Local model not available for personal info extraction")
+            
+    except Exception as e:
+        logger.error(f"Error in enhanced personal info extraction: {str(e)}")
+        # Just continue with the original results if there's an error
+    
+    return personal_info
+
+# Patched methods
+def _extract_experience_llm_local(self) -> List[Dict[str, Any]]:
+    """Extract experience information using local Ollama model with fallback to original method."""
+    try:
+        # Use the re module imported at the top level
+        
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Extracting experience with local model...")
+            
+            # Prepare a focused prompt for experience extraction with specific instructions
+            experience_prompt = f"""You are a resume parsing assistant that extracts structured experience data from resumes.
+
+Extract ALL work experience entries from this resume text.
+
+For each position, extract the following information into JSON format:
+- title: The job title or position name
+- company: The company name
+- date_range: The full date range of employment (e.g., 'Jan 2020 - Mar 2022')
+- start_date: Start date in YYYY-MM format when possible
+- end_date: End date in YYYY-MM format, or 'Present' for current positions
+- location: The job location (city, state, country)
+- description: The COMPLETE job description including all responsibilities and achievements
+
+Format the output ONLY as a clean JSON array of objects with the fields above.
+
+RESUME TEXT:
+{self.text}
+"""
+            
+            # Run the async extraction synchronously with a shorter timeout
+            logger.info("Calling local model with 10 second timeout")
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                experience_prompt,
+                timeout=10,  # Shorter 10 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            if result and isinstance(result, list) and len(result) > 0:
+                # Normalize and accept any entries with at least one non-empty value
+                valid_items = []
+                for item in result:
+                    if not isinstance(item, dict):
+                        logger.warning(f"Skipping non-dictionary item from local model: {item}")
+                        continue
+                    # Normalize field names
+                    normalized = {}
+                    field_map = {
+                        'organization': 'company',
+                        'employer': 'company',
+                        'position': 'title',
+                        'role': 'title',
+                        'field_of_work': 'description',
+                        'field_of_study': 'description',
+                        'summary': 'description',
+                    }
+                    for k, v in item.items():
+                        key = field_map.get(k, k)
+                        normalized[key] = v
+                    # Accept if any field has a non-empty value
+                    if any(str(v).strip() for v in normalized.values()):
+                        clean_item = {}
+                        for field in ['title', 'company', 'date_range', 'start_date', 'end_date', 'location', 'description']:
+                            clean_item[field] = normalized.get(field, "")
+                        valid_items.append(clean_item)
+                if valid_items:
+                    logger.info(f"Successfully validated {len(valid_items)} experience entries with local model (relaxed)")
+                    return valid_items
+                else:
+                    logger.warning("No valid experience entries found after normalization")
+            logger.warning("Local model extraction returned invalid or incomplete experience data")
+        else:
+            logger.info("Local model not available for experience extraction")
+        
+        # Fall back to the original implementation
+        logger.info("Falling back to original experience extraction method")
+        return original_extract_experience_llm(self)
+    except Exception as e:
+        logger.error(f"Error in patched _extract_experience_llm: {str(e)}")
+        # Fall back to the original method
+        return original_extract_experience_llm(self)
+
+def _extract_education_llm_local(self) -> List[Dict[str, Any]]:
+    """Extract education information using local Ollama model with fallback to original method."""
+    try:
+        # Use the re module imported at the top level
+        
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Extracting education with local model...")
+            
+            # Prepare a focused prompt for education extraction with specific instructions
+            education_prompt = f"""You are a resume parsing assistant that extracts structured education data from resumes.
+
+Extract ALL educational qualifications from this resume text.
+
+For each education entry, extract the following information into JSON format:
+- degree: The degree name or certification (e.g., 'Bachelor of Science', 'MBA')
+- institution: The name of the school, university or institution
+- location: The location of the institution
+- date_range: The full date range (e.g., '2015-2019')
+- start_date: Start date in YYYY-MM format when possible
+- end_date: End date in YYYY-MM format when possible
+- description: Additional details like major, minor, GPA, honors, etc.
+
+Format the output ONLY as a clean JSON array of objects with the fields above.
+
+RESUME TEXT:
+{self.text}
+"""
+            
+            # Run the async extraction synchronously with timeout
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                education_prompt,
+                timeout=20,  # 20 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            if result and isinstance(result, list) and len(result) > 0:
+                # Normalize and accept any entries with at least one non-empty value
+                valid_items = []
+                for item in result:
+                    if not isinstance(item, dict):
+                        logger.warning(f"Skipping non-dictionary item from local model: {item}")
+                        continue
+                    # Normalize field names and certifications
+                    normalized = {}
+                    field_map = {
+                        'provider': 'institution',
+                        'school': 'institution',
+                        'university': 'institution',
+                        'college': 'institution',
+                        'certification': 'degree',
+                        'major': 'description',
+                        'field_of_study': 'description',
+                        'summary': 'description',
+                    }
+                    for k, v in item.items():
+                        key = field_map.get(k, k)
+                        normalized[key] = v
+                    # Accept if any field has a non-empty value
+                    if any(str(v).strip() for v in normalized.values()):
+                        clean_item = {}
+                        for field in ['degree', 'institution', 'location', 'date_range', 'start_date', 'end_date', 'description']:
+                            clean_item[field] = normalized.get(field, "")
+                        valid_items.append(clean_item)
+                if valid_items:
+                    logger.info(f"Successfully validated {len(valid_items)} education entries with local model (relaxed)")
+                    return valid_items
+                else:
+                    logger.warning("No valid education entries found after normalization")
+            logger.warning("Local model extraction returned invalid or incomplete education data")
+        else:
+            logger.info("Local model not available for education extraction")
+        
+        # Fall back to the original implementation
+        logger.info("Falling back to original education extraction method")
+        return original_extract_education_llm(self)
+    except Exception as e:
+        logger.error(f"Error in patched _extract_education_llm: {str(e)}")
+        # Fall back to the original method
+        return original_extract_education_llm(self)
+
+def _extract_skills_local(self) -> List[str]:
+    """Extract skills using local model with standard extraction fallback."""
+    try:
+        # Use the re module imported at the top level
+        
+        # Get local model service
+        local_model_service = get_local_model_service()
+        
+        # Check if local model is available with short timeout
+        model_available = run_async(local_model_service.is_available, timeout=5)
+        
+        if model_available and model_available is not None:
+            logger.info("Extracting skills with local model...")
+            
+            # Prepare a focused prompt for skills extraction with specific instructions
+            skills_prompt = f"""You are a resume parsing assistant that extracts skills from resumes.
+
+Extract ALL technical and professional skills from this resume text. Include:
+- Programming languages (e.g., Python, Java)
+- Frameworks and libraries (e.g., React, TensorFlow)
+- Tools and software (e.g., PostgreSQL, Docker)
+- Methodologies (e.g., Agile, DevOps)
+- Soft skills (e.g., Leadership, Communication)
+
+Format your response ONLY as a clean JSON array of skill strings (all lowercase), with no explanations or additional text.
+Example: ["python", "javascript", "communication", "leadership"]
+
+RESUME TEXT:
+{self.text}
+"""
+            
+            # Run the async extraction synchronously
+            result = run_async(
+                extract_with_local_model,
+                local_model_service,
+                skills_prompt,
+                timeout=15,  # 15 second timeout to prevent hanging
+                model_name='resume-parser-code'
+            )
+            
+            if result and isinstance(result, list):
+                # Normalize skills (lowercase, remove duplicates, remove empty strings)
+                normalized_skills = []
+                
+                for item in result:
+                    # Handle both string skills and potential dictionary items
+                    if isinstance(item, str) and item.strip():
+                        # Convert to lowercase and remove any surrounding quotes
+                        clean_skill = item.lower().strip().strip('"\'')
+                        if clean_skill and clean_skill not in normalized_skills:
+                            normalized_skills.append(clean_skill)
+                    elif isinstance(item, dict):
+                        # Try to extract skills from dictionary structure
+                        for key, value in item.items():
+                            if 'skill' in key.lower() and isinstance(value, str):
+                                skills_from_value = [s.strip().lower() for s in value.split(',')]
+                                for skill in skills_from_value:
+                                    if skill and skill not in normalized_skills:
+                                        normalized_skills.append(skill)
+                
+                # If we still have no skills, try to extract from known categories
+                if not normalized_skills and hasattr(self, 'text') and self.text:
+                    # Extract skills from known categories using regex patterns
+                    common_skills = [
+                        "python", "java", "javascript", "typescript", "html", "css", "sql", "postgresql", 
+                        "mongodb", "react", "angular", "vue", "node", "express", "django", "flask",
+                        "aws", "azure", "gcp", "docker", "kubernetes", "devops", "ci/cd",
+                        "leadership", "communication", "teamwork", "project management", "data analysis",
+                        "ai", "machine learning", "deep learning", "nlp", "data science"
+                    ]
+                    
+                    for skill in common_skills:
+                        if skill.lower() in self.text.lower():
+                            normalized_skills.append(skill.lower())
+                
+                if normalized_skills:
+                    logger.info(f"Successfully extracted {len(normalized_skills)} skills with local model")
+                    return normalized_skills
+            
+            # If we get here, extraction failed or returned no skills
+            logger.warning("Local model extraction returned invalid or incomplete skills data")
+        else:
+            logger.info("Local model not available for skills extraction")
+        
+        # Fall back to the original implementation
+        logger.info("Falling back to original skills extraction method")
+        return original_extract_skills(self)
+    except Exception as e:
+        logger.error(f"Error in patched _extract_skills: {str(e)}")
+        # Fall back to the original method
+        return original_extract_skills(self)
+
+def apply_patch():
+    """Apply the local model patch to ResumeParser."""
+    logger.info("Applying local model patch to ResumeParser")
+    
+    # Store the original methods for fallback
+    ResumeParser._original_extract_experience_llm = ResumeParser._extract_experience_llm
+    ResumeParser._original_extract_education_llm = ResumeParser._extract_education_llm
+    ResumeParser._original_extract_skills = ResumeParser._extract_skills
+    ResumeParser._original_extract_personal_info = ResumeParser._extract_personal_info
+    
+    # Check if Ollama is available
+    try:
+        local_model_service = get_local_model_service()
+        is_available = run_async(local_model_service.is_available, timeout=3)
+        logger.info(f"Local model service available: {is_available}")
+        
+        if is_available:
+            # Apply patched methods
+            ResumeParser._extract_experience_llm = _extract_experience_llm_local
+            ResumeParser._extract_education_llm = _extract_education_llm_local
+            ResumeParser._extract_skills = _extract_skills_local
+            ResumeParser._extract_personal_info = _extract_personal_info_local
+            logger.info("Local model patch successfully applied to ResumeParser")
+            
+            # Patch the generate_text method in LLMService to always use local model
+            from backend.services.llm_service import LLMService
+            original_generate_text = LLMService.generate_text
+            
+            async def generate_text_local_override(self, prompt, model_name=None, max_tokens=2048, temperature=0.7):
+                logger.info("LLM Service generate_text redirected to local Ollama model")
+                try:
+                    # Always use local model
+                    return await extract_with_local_model(local_model_service, prompt)
+                except Exception as e:
+                    logger.error(f"Error using local model, falling back to original: {str(e)}")
+                    return await original_generate_text(self, prompt, model_name, max_tokens, temperature)
+            
+            # Apply the patch to the LLMService
+            LLMService.generate_text = generate_text_local_override
+            logger.info("Applied override to LLMService.generate_text to use local model")
+        else:
+            logger.warning("Ollama service not available - skipping local model patch")
+    except Exception as e:
+        logger.error(f"Error applying local model patch: {str(e)}")
+        
+    logger.info("Resume parsing patch configuration complete")
+    
+    # Create a proper synchronous wrapper that handles async functions
+    original_extract_experience_llm = ResumeParser._extract_experience_llm
+    
+    def extract_experience_llm_wrapper(self):
+        """Synchronous wrapper around experience extraction (no event loop needed)"""
+        logger.info("Using local model for experience extraction - sync wrapper (no event loop)")
+        try:
+            return _extract_experience_llm_local(self)
+        except Exception as e:
+            logger.error(f"Local model experience extraction failed: {str(e)}")
+            return original_extract_experience_llm(self)
+    
+    # Apply the synchronous wrapper override
+    ResumeParser._extract_experience_llm = extract_experience_llm_wrapper
+    
+    # Do the same for education extraction
+    original_extract_education_llm = ResumeParser._extract_education_llm
+    
+    def extract_education_llm_wrapper(self):
+        """Synchronous wrapper around education extraction (no event loop needed)"""
+        logger.info("Using local model for education extraction - sync wrapper (no event loop)")
+        try:
+            return _extract_education_llm_local(self)
+        except Exception as e:
+            logger.error(f"Local model education extraction failed: {str(e)}")
+            return original_extract_education_llm(self)
+    
+    # Apply the synchronous wrapper override
+    ResumeParser._extract_education_llm = extract_education_llm_wrapper
+    logger.info("Applied final override to ensure local model use")

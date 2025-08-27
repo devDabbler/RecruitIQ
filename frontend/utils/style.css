@@ -1,0 +1,603 @@
+/* RecruitIQ Application Styles - Combined Stylesheet */
+
+/*============================================
+  SECTION 1: Original Frontend Styles
+=============================================*/
+
+/* Hide Streamlit branding */
+#MainMenu, footer, header {visibility: hidden;}
+
+/* Custom sidebar navigation */
+.nav-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-top: 15px;
+    margin-bottom: 30px;
+    color: #0066cc;
+    text-align: center;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    text-decoration: none;
+    color: #333;
+    margin-bottom: 8px;
+    border-radius: 5px;
+    transition: background-color 0.3s;
+}
+
+.nav-item:hover {
+    background-color: #f0f2f6;
+}
+
+.nav-item.active {
+    background-color: #e6f0ff;
+    border-left: 4px solid #0066cc;
+    color: #0066cc;
+    font-weight: bold;
+}
+
+.nav-icon {
+    margin-right: 10px;
+    font-size: 18px;
+}
+
+/* Hide automatic pages selector */
+section[data-testid="stSidebar"] > div.block-container {display: none !important;}
+
+/* Ensure our custom navigation is visible */
+.custom-nav {display: block !important;}
+
+/* Card styling */
+.card {
+    background-color: white;
+    border-radius: 5px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* Metric card styling */
+.metric-card {
+    background-color: white;
+    border-radius: 5px;
+    padding: 15px;
+    height: 100%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.metric-label {
+    font-size: 14px;
+    color: #6c757d;
+    margin-bottom: 5px;
+}
+
+.metric-value {
+    font-size: 28px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.metric-change {
+    font-size: 14px;
+}
+
+.metric-change-positive {
+    color: #28a745;
+}
+
+.metric-change-negative {
+    color: #dc3545;
+}
+
+/* Make container background light gray */
+.main .block-container {
+    background-color: #f8f9fa;
+    padding: 2rem;
+    border-radius: 5px;
+}
+
+/* Ensure content is full-width by default */
+.block-container {
+    max-width: 100% !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
+
+/* Job listing view - explicitly set to wide layout */
+body[data-page="jobs"] .main .block-container {
+    max-width: 95% !important;
+    padding: 1.5rem !important;
+}
+
+/* Job detail view - set to narrower, centered layout */
+body[data-page="job_detail"] .main .block-container {
+    max-width: 1000px !important;
+    margin: 0 auto !important;
+    padding: 2rem !important;
+}
+
+/* Clear any lingering layout adjustments when in jobs view */
+body[data-page="jobs"] .stTabs [data-baseweb="tab-list"] {
+    width: 100% !important;
+}
+
+/*============================================
+  SECTION 2: Dashboard Modern Styling (from utils/style.css)
+=============================================*/
+
+/* Global Variables for Styling */
+:root {
+  --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  --color-text:  white
+  --color-text-light: #64748b;
+  --color-primary: #4338ca;
+  --body-text-size: 1rem;
+  --heading-text-size: 1.5rem;
+  --subheading-text-size: 1.25rem;
+  --small-text-size: 0.875rem;
+}
+
+/* Global Resets */
+* {
+  font-family: var(--font-family) !important;
+}
+
+/* Main app container */
+[data-testid="stAppViewContainer"] {
+  background-color: #f7f9fc;
+}
+
+/* Main content area */
+.main .block-container {
+  padding: 1.5rem 1rem !important;
+  max-width: 1200px;
+}
+
+/* Sidebar container */
+[data-testid="stSidebar"] {
+  background-color: white;
+  border-right: 1px solid #edf2f7;
+}
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+  gap: 0.5rem;
+}
+
+/* Enhanced Sidebar Header */
+.sidebar-header {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #4338ca;
+  padding: 1rem 0 0.5rem 0;
+  text-align: center;
+  letter-spacing: -0.5px;
+}
+
+/* User Profile Section in Sidebar */
+.user-profile {
+  display: flex;
+  align-items: center;
+  padding: 1rem 0.5rem;
+  margin: 0.5rem 0;
+  border-radius: 0.5rem;
+  background-color: #f8fafc;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #4338ca;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 0.75rem;
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.user-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-email {
+  font-size: 0.75rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-tier {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #4338ca;
+  background-color: #e0e7ff;
+  padding: 0.15rem 0.4rem;
+  border-radius: 0.25rem;
+  margin-top: 0.25rem;
+  display: inline-block;
+}
+
+/* Welcome Header */
+.welcome-header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.welcome-text {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.25rem;
+}
+
+.user-highlight {
+  color: #4338ca;
+  font-weight: 700;
+}
+
+.welcome-date {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+/* Sidebar navigation items */
+[data-testid="stSidebar"] .element-container {
+  background-color: transparent;
+  transition: background-color 0.2s ease;
+}
+
+[data-testid="stSidebar"] .element-container:hover {
+  background-color: #f8fafc;
+}
+
+/* Dashboard Headers */
+h1, h2 {
+  color: #1e293b;
+  font-weight: 700 !important;
+  margin-bottom: 1.5rem;
+}
+
+h3 {
+  color: #334155;
+  font-weight: 600 !important;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+  font-size: 1.25rem !important;
+}
+
+/* Enhanced Buttons */
+button[kind="secondary"] {
+  background-color: #4338ca !important;
+  color: white !important;
+  border: none !important;
+  border-radius: 0.375rem !important;
+  font-weight: 500 !important;
+  padding: 0.5rem 1rem !important;
+  transition: all 0.2s ease !important;
+}
+
+button[kind="secondary"]:hover {
+  background-color: #3730a3 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+/* Enhanced Input Fields */
+[data-testid="stTextInput"] input, 
+[data-testid="stNumberInput"] input {
+  border-radius: 0.5rem !important;
+  border-color: #e2e8f0 !important;
+  padding: 0.5rem 0.75rem !important;
+  transition: all 0.2s ease;
+}
+
+[data-testid="stTextInput"] input:focus, 
+[data-testid="stNumberInput"] input:focus {
+  border-color: #4338ca !important;
+  box-shadow: 0 0 0 2px rgba(67, 56, 202, 0.1) !important;
+}
+
+/* Dropdown/Select styling */
+[data-testid="stSelectbox"], 
+[data-testid="stMultiselect"] {
+  max-width: 100% !important;
+}
+
+[data-testid="stSelectbox"] > div > div,
+[data-testid="stMultiselect"] > div > div {
+  border-radius: 0.5rem !important;
+  border-color: #e2e8f0 !important;
+  min-height: 2.5rem;
+  font-size: 0.9rem;
+}
+
+/* File uploader styling */
+[data-testid="stFileUploader"] {
+  border-radius: 0.5rem !important;
+  border-color: #e2e8f0 !important;
+  border-style: dashed !important;
+  padding: 1rem !important;
+  margin-bottom: 1rem;
+  transition: all 0.2s ease;
+}
+
+/* Enhanced Job Description and Bullet Point Styling */
+.job-description-container {
+    margin: 1rem 0;
+    padding: 0.5rem 0;
+}
+
+/*============================================
+  SECTION 3: AI ASSISTANT OUTPUT FONT FIXES
+=============================================*/
+
+/* Target AI-generated content specifically */
+.stChatMessage, .stChatMessage *,
+.stExpander, .stExpander *,
+.stAlert, .stAlert *,
+.stInfo, .stInfo *,
+.stSuccess, .stSuccess *,
+.stWarning, .stWarning *,
+.stError, .stError *,
+[data-testid^="StyledThirdPartyBaseButton"],
+[data-testid^="StyledThirdPartyBaseButton"] *,
+[data-testid^="stChatMessageContent"],
+[data-testid^="stChatMessageContent"] *,
+[data-testid^="chatAvatarIcon"],
+[data-testid^="chatAvatarIcon"] *,
+[data-testid^="stMarkdownContainer"] p,
+[data-testid^="stMarkdownContainer"] span,
+[data-testid^="stMarkdownContainer"] div,
+[data-testid^="stMarkdownContainer"] li,
+[data-testid^="element-container"] p,
+[data-testid^="element-container"] span,
+[data-testid^="element-container"] div {
+  font-family: var(--font-family) !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  color: var(--color-text) !important;
+  text-rendering: optimizeLegibility !important;
+  -webkit-font-smoothing: antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  font-feature-settings: "kern" 1, "liga" 1 !important;
+  word-spacing: normal !important;
+  letter-spacing: normal !important;
+}
+
+/* Additional chat-specific styling */
+.stChatMessage [data-testid="stMarkdownContainer"],
+div[data-baseweb="message"],
+div[data-baseweb="message"] * {
+  font-family: var(--font-family) !important;
+  font-style: normal !important;
+  color: var(--color-text) !important;
+  letter-spacing: normal !important;
+}
+
+/* Chat message content */
+[data-testid="stChatMessageContent"],
+[data-testid="stChatMessageContent"] p,
+[data-testid="stChatMessageContent"] div,
+[data-testid="stChatMessageContent"] span,
+[data-testid="stChatMessageContent"] li {
+  font-family: var(--font-family) !important;
+  font-style: normal !important;
+  color: var(--color-text) !important;
+}
+
+/* Fix code blocks in chat */
+[data-testid="stChatMessageContent"] code,
+[data-testid="stChatMessageContent"] pre {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace !important;
+}
+
+/* Specialized wrapper for AI formatted content */
+.ai-formatted-content {
+  font-family: var(--font-family) !important;
+  font-style: normal !important;
+  font-weight: normal !important;
+  color: var(--color-text) !important;
+  font-size: var(--body-text-size) !important;
+  line-height: 1.5 !important;
+}
+
+/* Company policy specific styling */
+.stApp [data-testid="stHeader"] ~ div [data-testid="stVerticalBlock"] [data-testid="stMarkdownContainer"] p,
+.stApp [data-testid="stHeader"] ~ div [data-testid="stVerticalBlock"] [data-testid="stMarkdownContainer"] li,
+.stApp [data-testid="stHeader"] ~ div [data-testid="stVerticalBlock"] [data-testid="stMarkdownContainer"] span,
+.stApp [data-testid="stHeader"] ~ div [data-testid="stVerticalBlock"] [data-testid="element-container"] p,
+.stApp [data-testid="stHeader"] ~ div [data-testid="stVerticalBlock"] [data-testid="element-container"] div {
+  font-family: var(--font-family) !important;
+  font-size: var(--body-text-size) !important;
+  color: var(--color-text) !important;
+  line-height: 1.6 !important;
+}
+
+.job-bullet-item {
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    line-height: 1.6;
+    border-left: 3px solid #e2e8f0;
+    background-color: #f8fafc;
+    border-radius: 0.375rem;
+    transition: all 0.2s ease;
+}
+
+.job-bullet-item:hover {
+    border-left-color: #4338ca;
+    background-color: #f1f5f9;
+}
+
+.job-bullet-marker {
+    color: #4338ca;
+    font-weight: 600;
+    margin-right: 0.5rem;
+}
+
+.job-bullet-text {
+    color: #374151;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.job-description-paragraph {
+    padding: 0.75rem;
+    background-color: #f8fafc;
+    border-radius: 0.5rem;
+    border-left: 4px solid #4338ca;
+    line-height: 1.6;
+    color: #374151;
+    font-size: 0.875rem;
+    margin: 1rem 0;
+}
+
+/* Enhanced spacing for experience sections */
+.experience-section {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.experience-section:last-child {
+    border-bottom: none;
+}
+
+/* Improved metric highlighting in job descriptions */
+.metric-highlight {
+    background-color: #fef3c7;
+    color: #92400e;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-weight: 600;
+}
+
+/* Better readability for long text blocks */
+.text-block {
+    line-height: 1.6;
+    word-spacing: 0.05em;
+    letter-spacing: 0.01em;
+}
+
+/* Force consistent font for all table and dataframe content */
+table, th, td, .stDataFrame, .stTable, .stDataFrame table, .stTable table {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif !important;
+  font-variant-numeric: tabular-nums !important;
+  font-size: 1rem !important;
+}
+
+/* Aggressively force font and size for all Streamlit table/dataframe content */
+.stTable, .stDataFrame, .stTable table, .stDataFrame table,
+.stTable th, .stTable td, .stDataFrame th, .stDataFrame td,
+.stTable tbody, .stDataFrame tbody,
+.stTable thead, .stDataFrame thead {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif !important;
+  font-size: 1rem !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+/*============================================
+  SECTION 4: AI AGENT INDICATOR STYLING
+=============================================*/
+
+/* AI Agent Indicator Styling */
+.ai-agent-indicator {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  background-color: #f0f7ff;
+  padding: 15px;
+  border-radius: 8px;
+  border-left: 4px solid #4361ee;
+}
+
+.agent-icon {
+  margin-right: 15px;
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.agent-content {
+  flex-grow: 1;
+}
+
+.agent-title {
+  font-weight: 600;
+  font-size: 16px;
+  margin-bottom: 5px;
+  color: #1e293b;
+}
+
+.agent-description {
+  font-size: 14px;
+  color: #475569;
+  line-height: 1.5;
+}
+
+/*============================================
+  SECTION 5: MARKET INTELLIGENCE DATA STYLING
+=============================================*/
+
+/* Market Intelligence Data Styling */
+.market-data-container {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin: 15px 0;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.market-data-title {
+  font-size: 16px;
+  color: #64748b;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.market-data-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 5px;
+}
+
+.market-data-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin-top: 5px;
+}
+
+.salary-range-list,
+.factors-list {
+  margin: 15px 0;
+  padding-left: 20px;
+}
+
+.salary-range-list li,
+.factors-list li {
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+.factors-list li strong,
+.salary-range-list li strong {
+  color: #334155;
+}

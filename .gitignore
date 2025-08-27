@@ -1,0 +1,154 @@
+# ==== OS & IDE ====
+.DS_Store
+.DS_Store?
+Thumbs.db
+._*
+*.swp
+*.swo
+.idea/
+.vscode/
+.cursor/
+
+# ==== Environment ====
+.env
+.env.*
+.python-version
+
+# ==== Python ====
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.ipynb_checkpoints/
+.cache/
+.coverage
+htmlcov/
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
+# ==== Logs & Temp ====
+logs/
+*.log
+*.tmp
+*.bak
+
+# ==== Databases & Data ====
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+
+# ==== Large model files ====
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.bin
+*.safetensors
+sentence_transformers/
+models/
+
+# ==== Frontend (if any) ====
+node_modules/
+.npm/
+.yarn/
+
+# ==== Tests (exclude all test files) ====
+tests/
+**/tests/
+**/test_*.py
+**/*_test.py
+
+# ==== Project-specific ====
+# Backups and legacy folders
+backend/z_ollama_backup/
+
+# Resume files in project root only
+/*.pdf
+/*.doc
+/*.docx
+/*.rtf
+/*.txt
+# Common resume naming in root
+/resume*
+/Resume*
+
+# ==== Additional cleanup rules (2025-08-08) ====
+# Documentation Markdown (repo-wide) except any README variants
+**/*.md
+!**/README.md
+!**/Readme.md
+!**/readme.md
+
+# MCP (Model Context Protocol) files
+mcp_*.py
+MCP_*.md
+working_mcp_launcher.py
+
+# Development and debug files
+dev.py
+backend/dev.py
+*.log
+navigation_debug.log
+frontend.log
+resume_parser_test.log
+
+# Resume/CV documents repo-wide (common doc formats)
+**/[Rr]esume*.pdf
+**/[Rr]esume*.doc
+**/[Rr]esume*.docx
+**/[Rr]esume*.rtf
+**/[Rr]esume*.txt
+**/*[Rr]esume*.pdf
+**/*[Rr]esume*.doc
+**/*[Rr]esume*.docx
+**/*[Rr]esume*.rtf
+**/*[Rr]esume*.txt
+**/[Cc][Vv]*.pdf
+**/[Cc][Vv]*.doc
+**/[Cc][Vv]*.docx
+**/[Cc][Vv]*.rtf
+**/[Cc][Vv]*.txt
+
+# Uploaded/storage artifacts
+backend/storage/
+
+# SQL and dump files (repo-wide)
+**/*.sql
+**/*.dump
+**/*.sql.gz
+**/*.sql.zip
+
+# Ignore storage uploads directory at repo root
+storage/
+
+# ==== Dataset, exports, backups (2025-08-08) ====
+data/resumes/
+data/results/
+exports/
+backups/
+
+# Common patch/backup artifacts
+*.orig
+*.rej
+*.backup
+
+# Ignore entire training dataset
+training_data/
+
+# Ignore .gitignore backup files
+.gitignore.backup-*
+
+# Ignore backend scripts
+backend/scripts/
