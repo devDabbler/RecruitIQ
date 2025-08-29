@@ -1,14 +1,10 @@
 # RecruitIQ
 
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
+[![Documentation Status](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](./docs/README.md)
+
 RecruitIQ is an AI-powered recruiting platform that helps teams quickly screen resumes, match candidates to live roles, and surface insights from existing talent pools.
-
-## About
-
-- **What it is**: A full-stack recruiting assistant with resume parsing, job/candidate matching, and market intelligence.
-- **Why it matters**: Unlocks value in your existing ATS/database without migration; delivers actionable shortlists and insights fast.
-- **How it works**: Modern document intelligence for parsing, vector search for skills/experience matching, and an assistant UI for analysis and workflows.
-
-A comprehensive AI-powered recruiting platform that streamlines the hiring process.
 
 ## Features
 
@@ -20,8 +16,6 @@ A comprehensive AI-powered recruiting platform that streamlines the hiring proce
 - **Market Intelligence** - Analyze job market trends and salary data
 - **Communication Tools** - Manage candidate communications and templates
 
----
-
 ## Value Proposition
 
 - **Frustrated with your ATS?**
@@ -29,8 +23,6 @@ A comprehensive AI-powered recruiting platform that streamlines the hiring proce
 - **Does your current search tool waste your time surfacing unqualified or previously rejected candidates?**
 
 RecruitIQ unlocks the value of your existing talent pool—no migration required. Whether you switch platforms or stay with your current ATS, our solution delivers actionable insights and ROI from day one.
-
----
 
 ## Feature Flags & Subscription Tiers
 
@@ -48,15 +40,11 @@ st.session_state.user_tier = "premium"
   - Shows an upgrade prompt/button for features requiring a higher tier
   - See inline TODOs in the code for where to integrate real user profile/tier logic from backend
 
----
-
 ## Backend Integration (Panels)
 
 - **Jobs/Candidates**: Fully wired to backend APIs (async fetch pattern)
 - **Interviews/Tasks/Notifications**: Use demo data by default. Async fetch placeholders and TODOs are present for easy backend integration when endpoints are ready.
 - All panels include error handling, loading states, and fallback logic for backend downtime.
-
----
 
 ## Technical Overview
 
