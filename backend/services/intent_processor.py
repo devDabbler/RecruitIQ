@@ -13,9 +13,11 @@ from backend.utils.config import Settings
 settings = Settings()
 from backend.services.web_search_service import get_web_search_service
 from backend.services.crawler_service import CrawlerService
+from backend.utils.text_sanitizer import clean_generated_text
 
 # Get the configured service instances
 from .travel_service import TravelService
+from .semantic_intent_router import SemanticIntentRouter
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,16 @@ class IntentProcessor:
         self.web_search_service = None
         self.crawler_service = None
         self.travel_service = None  # Add travel service
+        
+        # Initialize semantic intent router if enabled
+        self.semantic_router = None
+        if settings.INTENT_ROUTER_MODE in ["semantic", "hybrid"]:
+            try:
+                if self.llm_service:
+                    self.semantic_router = SemanticIntentRouter(self.llm_service)
+                    logger.info(f"Initialized semantic intent router in {settings.INTENT_ROUTER_MODE} mode")
+            except Exception as e:
+                logger.error(f"Failed to initialize semantic intent router: {e}")
         
         # Store conversation history for context-aware processing
         self.conversation_history = []
@@ -92,8 +104,11 @@ class IntentProcessor:
             # Database query intents
             "candidate_count": [
                 r"(how many|count|number of|total|quantity of) candidates? (do we have|are there|in the database|in our system|available|stored|saved)",
-                r"(candidate|applicant|professional|talent) count|total",
-                r"(how many|count|total number of) (people|applicants|professionals|candidates|talent) (do we have|are there|in our system)"
+                # Robust handling for common grammar/typo variants: 'are this database', 'in this database', 'in database'
+                r"(how many|count|number of|total|quantity of) candidates? (are|is)? (this|the|our)? ?database",
+                r"(how many|count|number of|total|quantity of) candidates? (are|is)? (in|on)? ?(this|the|our)? ?database",
+                r"(candidate|applicant|professional|talent) (count|total)",
+                r"(how many|count|total number of) (people|applicants|professionals|candidates|talent) (do we have|are there|in our system|in the database|in this database)"
             ],
             "job_count": [
                 r"(how many|count|number of|total|quantity of) jobs? (do we have|are there|in the database|in our system|available|posted|open)",
@@ -104,10 +119,9 @@ class IntentProcessor:
                 # How many applicants/applied for a role/job - more specific to avoid conflicts
                 r"(how many|number of|count of) (candidates|applicants|applications) (have )?(applied|applied to|applied for) (the |this |that )?(?P<role>[^?!.]+?)( role| job)?(\?|\.|!|$)",
                 r"(how many|number of|count of) (applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job)?(\?|\.|!|$)",
-                r"(applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job).*(how many|count|number)(\?|\.|!|$)",
-                # More specific patterns to avoid conflicts with market research - EXCLUDE market research keywords
-                r"(how many|number of|count of) (people|candidates|applicants) (have )?(applied|applied to|applied for) (the |this |that )?(?P<role>[^?!.]+?)( role| job)?(\?|\.|!|$)(?!.*(market|analysis|research|viability|feasibility))"
+                r"(applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job).*(how many|count|number)(\?|\.|!|$)"
             ],
+            # More specific patterns to avoid conflicts with market research - EXCLUDE market research keywords
             "search_candidates": [
                 # Priority 1: Skills-based patterns (highest priority) - ENHANCED
                 r"(find|search|show|get|locate|discover|identify) (me |all |the )?candidates? (with|who have|who know|knowing|expertise in|experience in|skilled in|proficient in|familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
@@ -118,36 +132,54 @@ class IntentProcessor:
                 r"(show me all|find me all|get all|display all|list all) candidates? (with|who have|who know|knowing|expertise in|experience in|skilled in|proficient in|familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
                 # Priority 2: Role-based patterns with "all" handling (only when no skills context)
                 r"(find|search|show|get|locate|discover|identify) (me |all |the )?candidates? (for|in|with|specializing in) (?P<role>[a-zA-Z ]+)(?!\s+with)(\?|\.|!|$|\s)",
-                r"(look for|seek|find) (?P<role>[a-zA-Z ]+) (candidates?|professionals?|developers?)(\?|\.|!|$|\s)",
+                r"(look for|seek|find) (?P<role>[a-zA-Z ]+) (candidates?|professionals?|developers?|engineers?)(\?|\.|!|$|\s)",
                 # Priority 3: "All" patterns (lowest priority, only when no skills/role context)
                 r"(find me all|show me all|get all|display all|list all) (?P<role>[a-zA-Z ]+) candidates?(?!\s+with)(\?|\.|!|$|\s)",
                 r"(find|search|show|get|locate|discover|identify) (me |all |the )?(?P<role>[a-zA-Z ]+) candidates?(\?|\.|!|$|\s)"
             ],
-            # Email generation intents - COMPREHENSIVE ENHANCEMENT
+            # Email generation intents - ENHANCED WITH CLEAR DISTINCTION
             "recruiter_outreach_email": [
-                # Core patterns with extensive synonyms
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (prospective |potential |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (prospective |potential |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?email (to|for|sent to|addressed to) (prospective |potential |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (prospective |potential |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter|recruitment|hiring|talent|hr) email (to|for|sent to|addressed to) (prospective |potential |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?recruiter email (to|for|addressed to) (potential |prospective |candidate |job seeker |)candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(draft|create|write|compose|prepare|craft|build|formulate|develop) (a |an )?outreach email (from|by) (a |an )?recruiter (to|for|addressed to) candidates? (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?recruiter email (to|for|addressed to) (potential |prospective |candidate |job seeker |)(?P<role>[^?]*?) candidates?(\?|$|\s)",
-                # Additional variations
-                r"(message|contact|reach out to|connect with) (potential |prospective |)candidates? (for|about|regarding) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(recruitment|hiring|talent) (message|communication|correspondence) (for|about|regarding) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(prospect|recruit|approach) (candidates?|professionals?) (for|about|regarding) (?P<role>[^?]*?)(\?|$|\s)"
+                # HIGHEST PRIORITY: Handle "our job [role]" syntax specifically - most specific first
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop).*?(?:recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources)?.*?(?:outreach |cold |initial |contact |introductory |first |opening )?email.*?(?:to|for|sent to|addressed to).*?(?:our job|the job|job)\s+(?P<role>(?:[a-zA-Z]+(?:\s+[a-zA-Z]+)*))(?:\s+(?:position|role))?(?:[\.\?!]|$)",
+                
+                # SECOND PRIORITY: "to candidates for our job [role]" pattern
+                r"(write|create|draft|compose|prepare|craft|build|formulate|develop).*?(?:recruiter)?.*?email.*?(?:to|for).*?candidates.*?(?:for|about).*?(?:our job|the job|job)\s+(?P<role>(?:[a-zA-Z]+(?:\s+[a-zA-Z]+)*))(?:\s+(?:position|role))?(?:[\.\?!]|$)",
+
+                # Variant: role before candidates e.g., "email to potential data scientist candidates"
+                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter )?email (to|for|addressed to) (a |an )?(potential |prospective )?(?P<role>[^?!.]+?) candidates?(\?|$|\s)",
+
+                # HIGHEST PRIORITY: Explicit recruiter-to-candidate patterns
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s? (for|about|regarding|concerning)(\?|$|\s)",
+                r"(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s? (for|about|regarding|concerning)(\?|$|\s)",
+                r"(draft|create|write|compose|prepare|craft|build|formulate|develop) (a |an )?outreach email (from|by) (a |an )?recruiter (to|for|addressed to) (a |an )?(?:candidate|professional)s? (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?recruiter email (to|for|addressed to) (a |an )?(potential |prospective |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+
+                # HIGH PRIORITY: Candidate pitch/outreach patterns (recruiter perspective)
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?candidate (pitch|outreach) email (to|for|sent to|addressed to) (a |an )?(prospective |potential )?candidate (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+                r"(draft|create|write|compose|prepare|craft|build|formulate|develop) (a |an )?(candidate pitch|outreach email) (to|for|sent to|addressed to) (a |an )?(prospective |potential )?candidate (about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+
+                # MEDIUM PRIORITY: Generic email to candidates (must exclude application context)
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?candidates? (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(?!.*(apply|application|applying|job I want|position I want|role I want|why I\'m|why I am|great fit|qualified for))(\?|$|\s)",
+
+                # LOWER PRIORITY: Action-based patterns
+                r"(message|contact|reach out to|connect with) (potential |prospective )?candidates? (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+                r"(recruitment|hiring|talent) (message|communication|correspondence) (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
+                r"(prospect|recruit|approach) (candidates?|professionals?) (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)"
             ],
             "candidate_pitch_email": [
-                # Core patterns with extensive synonyms
+                # HIGHEST PRIORITY: Explicit candidate-to-company patterns with application intent
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?email (to|for|sent to|addressed to) (a |an )?(company|employer|hiring manager|recruiter|organization|business) (about|regarding|concerning) (a |an |the )?(?P<role>[^?]*?) (I want to apply for|I want|I'm applying for|I am applying for|position|job|role)(\?|$|\s)",
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?email (to|for|sent to|addressed to) (a |an )?(hiring manager|recruiter|company|employer) (about|regarding|concerning) (a |an |the )?(?P<role>[^?]*?) (and why I'm|and why I am|explaining why I'm|explaining why I am) (a |an )?(great fit|good fit|qualified|suitable|perfect|ideal)(\?|$|\s)",
+                
+                # HIGH PRIORITY: Explicit candidate application patterns
                 r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(candidate|job seeker|applicant|professional|individual) (pitch|application|cover letter|email|proposal|presentation|introduction) (to|for|sent to|addressed to) (a |an )?(company|employer|hiring manager|recruiter|organization|business) (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
                 r"(candidate|job seeker|applicant|professional|individual) (pitch|application|cover letter|email|proposal|presentation|introduction) (to|for|sent to|addressed to) (a |an )?(company|employer|hiring manager|recruiter|organization|business) (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
+                
+                # MEDIUM PRIORITY: Application-specific patterns
                 r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(pitch|application|cover letter|email|proposal|presentation|introduction) (from|by) (a |an )?(candidate|job seeker|applicant|professional|individual) (to|for|sent to|addressed to) (a |an )?(company|employer|hiring manager|recruiter|organization|business) (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
                 r"(pitch|application|cover letter|email|proposal|presentation|introduction) (from|by) (a |an )?(candidate|job seeker|applicant|professional|individual) (to|for|sent to|addressed to) (a |an )?(company|employer|hiring manager|recruiter|organization|business) (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?candidate pitch email (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?pitch email (for|about|regarding|concerning) (?P<role>[^?]*?)(\?|$|\s)",
-                # Additional variations
+                
+                # LOWER PRIORITY: Generic application patterns
                 r"(job|position|role) (application|pitch|proposal) (email|letter|message) (for|about|regarding) (?P<role>[^?]*?)(\?|$|\s)",
                 r"(apply|pitch|present) (for|to) (?P<role>[^?]*?) (position|job|role)(\?|$|\s)",
                 r"(cover letter|application letter|introductory email) (for|about|regarding) (?P<role>[^?]*?)(\?|$|\s)"
@@ -309,7 +341,7 @@ class IntentProcessor:
             "candidate_pitch_email": ["candidate", "pitch", "email", "application", "cover letter", "generate", "create", "write", "draft", "company", "employer", "job seeker"],
             "salary_info": ["salary", "pay", "compensation", "how much", "earnings", "income", "wages", "make", "earn", "get paid", "average", "typical"],
             "company_info": ["company", "employer", "organization", "information", "details", "about", "culture", "benefits", "work life"],
-            "applications_count": ["how many", "applied", "applications", "applicants", "for", "role", "job", "count"],
+            "applications_count": ["how many", "applied", "applications", "applicants", "count", "number of"],
             "market_research": ["market", "analysis", "research", "viability", "talent", "sourcing", "assess", "evaluate", "conduct", "feasibility", "hiring", "manager", "briefing", "compare", "identify", "create", "plan", "json", "externally"],
             "web_search": ["search", "find", "information", "about", "what", "how", "tell me", "look up", "research"],
             "general_question": ["what", "how", "why", "when", "where", "who", "help", "hello", "hi", "can you", "could you"],
@@ -427,9 +459,9 @@ class IntentProcessor:
         
     async def detect_intent(self, message: str, conversation_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Enhanced intent detection with multiple fallback strategies.
+        Enhanced intent detection with semantic routing and confidence gating.
         """
-        logger.info(f"detect_intent: Received message: '{message}'")
+        logger.info(f"detect_intent: Received message: '{message}' (mode: {settings.INTENT_ROUTER_MODE})")
         
         # Input validation and preprocessing
         message = message.strip()
@@ -442,6 +474,54 @@ class IntentProcessor:
         # Store in conversation history
         self._update_conversation_history(message, conversation_context)
         
+        # Route based on configured mode
+        if settings.INTENT_ROUTER_MODE == "semantic" and self.semantic_router:
+            return await self._semantic_intent_detection(message, conversation_context)
+        elif settings.INTENT_ROUTER_MODE == "hybrid" and self.semantic_router:
+            return await self._hybrid_intent_detection(message, conversation_context)
+        else:
+            # Legacy mode - use existing detection strategies
+            return await self._legacy_intent_detection(message, conversation_context)
+
+    async def _semantic_intent_detection(self, message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Pure semantic intent detection using the semantic router."""
+        try:
+            result = await self.semantic_router.route_intent(message, conversation_context)
+            return await self._apply_confidence_gating(result, message, conversation_context)
+        except Exception as e:
+            logger.error(f"Semantic intent detection failed: {e}")
+            # Fallback to legacy detection
+            return await self._legacy_intent_detection(message, conversation_context)
+
+    async def _hybrid_intent_detection(self, message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Hybrid intent detection combining semantic and legacy approaches."""
+        try:
+            # Try semantic first
+            semantic_result = await self.semantic_router.route_intent(message, conversation_context)
+            
+            # If semantic has high confidence, use it
+            if semantic_result.get("confidence", 0) >= self.semantic_router.high_threshold:
+                logger.info(f"Hybrid: Using semantic result (confidence: {semantic_result['confidence']})")
+                return await self._apply_confidence_gating(semantic_result, message, conversation_context)
+            
+            # Try legacy detection for comparison
+            legacy_result = await self._legacy_intent_detection(message, conversation_context)
+            
+            # Choose the better result
+            if legacy_result.get("confidence", 0) > semantic_result.get("confidence", 0):
+                logger.info(f"Hybrid: Using legacy result (confidence: {legacy_result['confidence']})")
+                return legacy_result
+            else:
+                logger.info(f"Hybrid: Using semantic result (confidence: {semantic_result['confidence']})")
+                return await self._apply_confidence_gating(semantic_result, message, conversation_context)
+                
+        except Exception as e:
+            logger.error(f"Hybrid intent detection failed: {e}")
+            # Fallback to legacy detection
+            return await self._legacy_intent_detection(message, conversation_context)
+
+    async def _legacy_intent_detection(self, message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Legacy intent detection using existing strategies."""
         # Try multiple detection strategies in order
         detection_strategies = [
             ('direct_pattern', self._try_direct_pattern_detection),
@@ -481,6 +561,147 @@ class IntentProcessor:
             self._update_context_with_result(conversation_context, best_result)
         
         return best_result
+
+    async def _apply_confidence_gating(self, result: Dict[str, Any], message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Apply confidence gating with clarifying questions for ambiguous intents."""
+        confidence = result.get("confidence", 0)
+        intent = result.get("intent", "general_question")
+        missing_slots = result.get("missing_slots", [])
+        
+        # Log telemetry data
+        self._log_intent_telemetry(result, message, conversation_context)
+        
+        # High confidence: execute directly
+        if confidence >= self.semantic_router.high_threshold:
+            logger.info(f"High confidence ({confidence:.2f}): executing {intent} directly")
+            return self._finalize_intent_result(result, message, conversation_context)
+        
+        # Medium confidence: execute with soft confirmation
+        elif confidence >= self.semantic_router.mid_threshold:
+            logger.info(f"Medium confidence ({confidence:.2f}): executing {intent} with soft confirmation")
+            result = self._add_soft_confirmation(result)
+            return self._finalize_intent_result(result, message, conversation_context)
+        
+        # Low confidence or missing required slots: ask clarifying questions
+        else:
+            logger.info(f"Low confidence ({confidence:.2f}) or missing slots {missing_slots}: requesting clarification")
+            
+            # Check if we have a pending clarification context
+            if conversation_context and conversation_context.get("pending_intent"):
+                # User is responding to a previous clarifying question
+                return await self._handle_clarification_response(result, message, conversation_context)
+            
+            # Generate clarifying question
+            if self.semantic_router and missing_slots:
+                clarifying_question = self.semantic_router.generate_clarifying_question(
+                    intent, missing_slots, result.get("entities", {})
+                )
+                
+                if clarifying_question:
+                    return self._create_clarification_response(result, clarifying_question, conversation_context)
+            
+            # Fallback to generic clarification
+            return self._generate_generic_clarification(result, message, conversation_context)
+
+    def _add_soft_confirmation(self, result: Dict[str, Any]) -> Dict[str, Any]:
+        """Add soft confirmation prompt to medium confidence results."""
+        result["soft_confirmation"] = True
+        result["confirmation_prompt"] = "Is this what you're looking for? Let me know if you need something different."
+        return result
+
+    def _create_clarification_response(self, result: Dict[str, Any], clarifying_question: Dict[str, Any], conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Create a response that asks for clarification."""
+        
+        # Store pending intent in conversation context
+        if conversation_context is not None:
+            conversation_context["pending_intent"] = result["intent"]
+            conversation_context["pending_entities"] = result.get("entities", {})
+            conversation_context["pending_slot"] = clarifying_question["slot_name"]
+        
+        question_text = clarifying_question["question"]
+        if clarifying_question.get("options"):
+            options_text = " Options: " + ", ".join(f"'{opt}'" for opt in clarifying_question["options"])
+            question_text += options_text
+        
+        return {
+            "intent": "clarification_needed",
+            "entities": result.get("entities", {}),
+            "confidence": 1.0,
+            "requires_clarification": True,
+            "clarification_question": question_text,
+            "clarifying_slot": clarifying_question["slot_name"],
+            "clarifying_options": clarifying_question.get("options"),
+            "context_updates": conversation_context or {}
+        }
+
+    async def _handle_clarification_response(self, result: Dict[str, Any], message: str, conversation_context: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle user response to a clarifying question."""
+        
+        pending_intent = conversation_context.get("pending_intent")
+        pending_entities = conversation_context.get("pending_entities", {})
+        pending_slot = conversation_context.get("pending_slot")
+        
+        if not pending_intent or not pending_slot:
+            # Clear pending state and treat as new query
+            conversation_context.pop("pending_intent", None)
+            conversation_context.pop("pending_entities", None)
+            conversation_context.pop("pending_slot", None)
+            return await self.detect_intent(message, conversation_context)
+        
+        # Fill the missing slot with user's response
+        pending_entities[pending_slot] = message.strip()
+        
+        # Clear pending state
+        conversation_context.pop("pending_intent", None)
+        conversation_context.pop("pending_entities", None)
+        conversation_context.pop("pending_slot", None)
+        
+        # Create final result with filled slot
+        final_result = {
+            "intent": pending_intent,
+            "entities": pending_entities,
+            "confidence": 0.9,  # High confidence after clarification
+            "method": "clarification_completed",
+            "missing_slots": []
+        }
+        
+        return self._finalize_intent_result(final_result, message, conversation_context)
+
+    def _generate_generic_clarification(self, result: Dict[str, Any], message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate a generic clarification response."""
+        return {
+            "intent": "clarification_needed",
+            "entities": result.get("entities", {}),
+            "confidence": 1.0,
+            "requires_clarification": True,
+            "clarification_question": "I'm not sure I understand what you're looking for. Could you please provide more details or rephrase your request?",
+            "context_updates": conversation_context or {}
+        }
+
+    def _finalize_intent_result(self, result: Dict[str, Any], message: str, conversation_context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        """Finalize the intent result with post-processing."""
+        result = self._post_process_intent_result(result, message, conversation_context)
+        
+        # Update conversation context
+        if conversation_context is not None:
+            self._update_context_with_result(conversation_context, result)
+        
+        return result
+
+    def _log_intent_telemetry(self, result: Dict[str, Any], message: str, conversation_context: Optional[Dict[str, Any]]):
+        """Log structured telemetry for intent detection metrics."""
+        telemetry_data = {
+            "detected_intent": result.get("intent"),
+            "confidence": result.get("confidence"),
+            "entities": list(result.get("entities", {}).keys()),
+            "missing_slots": result.get("missing_slots", []),
+            "method": result.get("method", "unknown"),
+            "message_length": len(message),
+            "has_context": bool(conversation_context),
+            "asked_clarification": result.get("requires_clarification", False)
+        }
+        
+        logger.info(f"Intent telemetry: {json.dumps(telemetry_data)}")
 
     def _empty_query_response(self) -> Dict[str, Any]:
         """Generate response for empty queries."""
@@ -793,36 +1014,60 @@ class IntentProcessor:
         """
         message_lower = message.lower()
         
-        # Common role patterns with case preservation
+        # Common role patterns with case preservation - ORDER MATTERS: Most specific first
         role_patterns = [
-            ("gen ai", r"gen ai"),
-            ("AI engineer", r"ai engineer"),
+            # Data-related roles (most specific first to avoid conflicts)
+            ("data engineer", r"data engineer"),
+            ("senior data engineer", r"senior data engineer"),
+            ("junior data engineer", r"junior data engineer"),
+            ("lead data engineer", r"lead data engineer"),
+            ("principal data engineer", r"principal data engineer"),
+            ("data engineering", r"data engineering"),
             ("data scientist", r"data scientist"),
+            ("senior data scientist", r"senior data scientist"),
+            ("data analyst", r"data analyst"),
+            
+            # AI/ML roles
+            ("gen ai", r"gen ai"),
+            ("generative ai", r"generative ai"),
+            ("AI engineer", r"ai engineer"),
+            ("machine learning engineer", r"machine learning engineer"),
+            ("ml engineer", r"ml engineer"),
+            
+            # Software roles
             ("software engineer", r"software engineer"),
-            ("marketing", r"marketing"),
-            ("sales", r"sales"),
-            ("product manager", r"product manager"),
-            ("devops engineer", r"devops engineer"),
+            ("senior software engineer", r"senior software engineer"),
             ("frontend developer", r"frontend developer"),
             ("backend developer", r"backend developer"),
             ("full stack developer", r"full stack developer"),
-            ("machine learning engineer", r"machine learning engineer"),
-            ("data analyst", r"data analyst"),
+            ("devops engineer", r"devops engineer"),
+            
+            # Business roles
+            ("product manager", r"product manager"),
+            ("project manager", r"project manager"),
             ("business analyst", r"business analyst"),
-            ("project manager", r"project manager")
+            ("marketing", r"marketing"),
+            ("sales", r"sales")
         ]
         
+        # Check patterns in order (most specific first)
         for role_name, pattern in role_patterns:
             if pattern in message_lower:
                 return role_name
         
-        # Fallback to common roles if no specific match
-        if "gen ai" in message_lower or "ai" in message_lower:
+        # Enhanced fallback logic - be more specific to avoid conflicts
+        if "gen ai" in message_lower or "generative ai" in message_lower:
             return "gen ai"
-        elif "software" in message_lower or "developer" in message.lower():
+        elif "ai engineer" in message_lower or ("ai" in message_lower and "engineer" in message_lower):
+            return "AI engineer"
+        elif "data engineer" in message_lower or ("data" in message_lower and "engineer" in message_lower):
+            return "data engineer"
+        elif "data scientist" in message_lower or ("data" in message_lower and "scientist" in message_lower):
+            return "data scientist"
+        elif "software" in message_lower or "developer" in message_lower:
             return "software engineer"
         elif "data" in message_lower:
-            return "data scientist"
+            return "data scientist"  # Only if no other data role matches
         elif "marketing" in message_lower:
             return "marketing"
         else:
@@ -831,6 +1076,7 @@ class IntentProcessor:
     def _match_patterns(self, message: str) -> Tuple[Optional[str], Dict[str, str]]:
         """
         Enhanced pattern matching with fuzzy matching and confidence scoring.
+{{ ... }}
         """
         message_lower = message.lower()
         logger.info(f"_match_patterns: Processing message: '{message_lower}'")
@@ -888,6 +1134,11 @@ class IntentProcessor:
         if potential_matches:
             best_match = max(potential_matches, key=lambda x: x['confidence'])
             if best_match['confidence'] > 0.5:  # Threshold for acceptance
+                # Disambiguate email direction if needed
+                disamb_intent = self._disambiguate_email_direction(message_lower, best_match['intent'])
+                if disamb_intent != best_match['intent']:
+                    logger.info(f"Disambiguated email intent from {best_match['intent']} to {disamb_intent} based on message direction")
+                    best_match['intent'] = disamb_intent
                 logger.info(f"Selected match: {best_match['intent']} with confidence {best_match['confidence']}")
                 return best_match['intent'], best_match['entities']
         
@@ -958,6 +1209,61 @@ class IntentProcessor:
         
         return found / len(required) if required else 0.8
 
+    def _disambiguate_email_direction(self, message_lower: str, intent: str) -> str:
+        """
+        Enhanced email direction disambiguation based on explicit direction cues.
+        - recruiter_outreach_email: FROM recruiter TO candidate(s) - recruiting/outreach perspective
+        - candidate_pitch_email: FROM candidate TO company/recruiter/hiring manager - job application perspective
+        """
+        if intent not in ["candidate_pitch_email", "recruiter_outreach_email"]:
+            return intent
+
+        # HIGHEST PRIORITY: Strong recruiter-to-candidate signals
+        strong_recruiter_signals = [
+            "candidate pitch", "candidate outreach", "outreach email to", "outreach to candidate",
+            "outreach to candidates", "reach out to candidate", "reach out to candidates", 
+            "contact candidate", "contact candidates", "message candidate", "message candidates",
+            "connect with candidate", "connect with candidates", "prospective candidate",
+            "potential candidate", "to a candidate", "to candidates", "email to candidate",
+            "email to candidates", "recruiting email", "recruitment email", "talent outreach"
+        ]
+        
+        # HIGHEST PRIORITY: Strong candidate-to-company signals  
+        strong_candidate_signals = [
+            "to a hiring manager", "to hiring manager", "to the hiring manager",
+            "to a company", "to the company", "to an employer", "to employer",
+            "job I want to apply", "position I want", "role I want", "why I'm a great fit",
+            "why I am a great fit", "why I'm qualified", "why I am qualified",
+            "I want to apply", "I'm applying", "I am applying", "application to",
+            "apply to", "applying for", "cover letter", "job application"
+        ]
+
+        # Check strong signals first
+        if any(sig in message_lower for sig in strong_recruiter_signals):
+            return "recruiter_outreach_email"
+        if any(sig in message_lower for sig in strong_candidate_signals):
+            return "candidate_pitch_email"
+
+        # MEDIUM PRIORITY: Context-based disambiguation
+        # Check for "about xyz role" patterns - need to determine direction
+        if "about" in message_lower and ("role" in message_lower or "position" in message_lower):
+            # If it mentions candidate/prospective in same context = recruiter outreach
+            if any(word in message_lower for word in ["candidate", "prospective", "potential", "talent"]):
+                return "recruiter_outreach_email"
+            # If it mentions company/employer context = candidate application
+            elif any(word in message_lower for word in ["company", "employer", "hiring", "organization"]):
+                return "candidate_pitch_email"
+
+        # LOWER PRIORITY: General keyword fallbacks
+        if ("outreach" in message_lower or "reach out" in message_lower) and "candidate" in message_lower:
+            return "recruiter_outreach_email"
+        
+        if ("pitch" in message_lower or "application" in message_lower) and any(word in message_lower for word in ["company", "hiring manager", "employer", "organization"]):
+            return "candidate_pitch_email"
+
+        # DEFAULT: If no clear signals, maintain original intent
+        return intent
+
     def _fuzzy_match_intents(self, message: str) -> Optional[Dict[str, Any]]:
         """
         Perform enhanced fuzzy matching using synonyms and keyword analysis when exact patterns fail.
@@ -1000,6 +1306,14 @@ class IntentProcessor:
         best_intents = sorted(intent_scores.items(), key=lambda x: x[1]['score'], reverse=True)[:3]
         
         for intent, score_data in best_intents:
+            # Guard: ensure applications_count only fires on true count questions about applications
+            if intent == 'applications_count':
+                count_terms = ["how many", "count", "number of"]
+                apply_terms = ["applied", "applications", "applicants"]
+                has_count = any(term in message_lower for term in count_terms)
+                has_apply = any(term in message_lower for term in apply_terms)
+                if not (has_count and has_apply):
+                    continue
             if score_data['score'] >= 0.3:  # Minimum threshold for consideration
                 entities = self._extract_entities_for_intent(intent, message)
                 
@@ -1201,7 +1515,7 @@ class IntentProcessor:
                     break
         
         # Always try to extract role if relevant
-        if intent in ['hiring_timeline', 'salary_info', 'skill_info']:
+        if intent in ['hiring_timeline', 'salary_info', 'skill_info', 'candidate_pitch_email', 'recruiter_outreach_email']:
             role = self._extract_role_from_message(message)
             if role:
                 entities['role'] = role
@@ -1651,17 +1965,58 @@ class IntentProcessor:
                         logger.info(f"Changing {result['intent']} to salary_info based on salary keywords")
                         result["intent"] = "salary_info"
                 
-                # Enhanced email intent disambiguation
-                if "email" in message.lower() and result["intent"] in ["candidate_pitch_email", "recruiter_outreach_email"]:
-                    # Check for specific keywords that indicate direction
-                    if any(term in message.lower() for term in ["recruiter", "recruitment", "hiring", "talent acquisition", "outreach", "sent to", "prospective", "potential"]):
-                        if result["intent"] != "recruiter_outreach_email":
-                            logger.info(f"Changing {result['intent']} to recruiter_outreach_email based on recruiter keywords")
+                # SIMPLE deterministic routing for email direction per user guidance
+                lower = message.lower()
+                if any(v in lower for v in ["draft", "create", "compose", "write"]) and "email" in lower:
+                    # Candidate-facing outreach
+                    if ("candidate" in lower or "prospective candidate" in lower) and not any(x in lower for x in ["hiring manager", "employer", "company"]):
+                        if result.get("intent") != "recruiter_outreach_email":
+                            logger.info(f"Forcing intent to recruiter_outreach_email based on simple candidate phrasing")
                             result["intent"] = "recruiter_outreach_email"
-                    elif any(term in message.lower() for term in ["candidate", "job seeker", "applicant", "pitch", "application", "cover letter", "from candidate", "by candidate"]):
-                        if result["intent"] != "candidate_pitch_email":
-                            logger.info(f"Changing {result['intent']} to candidate_pitch_email based on candidate keywords")
+                            # ensure role
+                            ents = result.get("entities", {})
+                            if not ents.get("role"):
+                                extracted = self._extract_role_from_message(message)
+                                if extracted:
+                                    ents["role"] = self._normalize_role_name(extracted, message)
+                            result["entities"] = ents
+                    # Hiring manager / application pitch
+                    elif any(x in lower for x in ["hiring manager", "apply", "application", "i'm a great fit", "im a great fit", "why i'm a great fit", "why im a great fit"]):
+                        if result.get("intent") != "candidate_pitch_email":
+                            logger.info(f"Forcing intent to candidate_pitch_email based on simple hiring manager/apply phrasing")
                             result["intent"] = "candidate_pitch_email"
+                            ents = result.get("entities", {})
+                            if not ents.get("role"):
+                                extracted = self._extract_role_from_message(message)
+                                if extracted:
+                                    ents["role"] = self._normalize_role_name(extracted, message)
+                            result["entities"] = ents
+
+                # Enhanced email intent disambiguation (apply regardless of 'email' keyword)
+                if result["intent"] in ["candidate_pitch_email", "recruiter_outreach_email"]:
+                    message_lower_local = message.lower()
+                    before_intent = result["intent"]
+                    # Existing heuristic tweaks
+                    if any(term in message_lower_local for term in [
+                        "recruiter", "recruitment", "hiring", "talent acquisition", "outreach", "sent to",
+                        "prospective", "potential", "reach out", "outbound", "cold outreach", "email to candidate",
+                        "outreach email to candidate", "outreach email to candidates"
+                    ]):
+                        if result["intent"] != "recruiter_outreach_email":
+                            logger.info(f"Changing {result['intent']} to recruiter_outreach_email based on recruiter/outreach keywords")
+                            result["intent"] = "recruiter_outreach_email"
+                    elif any(term in message_lower_local for term in [
+                        "candidate", "job seeker", "applicant", "pitch", "application", "cover letter",
+                        "from candidate", "by candidate", "apply to", "to hiring manager"
+                    ]):
+                        if result["intent"] != "candidate_pitch_email":
+                            logger.info(f"Changing {result['intent']} to candidate_pitch_email based on candidate/application keywords")
+                            result["intent"] = "candidate_pitch_email"
+
+                    # Final pass using shared disambiguator for consistency
+                    result["intent"] = self._disambiguate_email_direction(message_lower_local, result["intent"]) 
+                    if result["intent"] != before_intent:
+                        logger.info(f"Disambiguated email direction: {before_intent} -> {result['intent']}")
                 
                 return result
                 
@@ -1685,6 +2040,21 @@ class IntentProcessor:
         if not self._initialized:
             await self.initialize()
         
+        # Final guard: re-apply email direction disambiguation and ensure role extraction
+        try:
+            if intent in ["candidate_pitch_email", "recruiter_outreach_email"]:
+                before_intent = intent
+                intent = self._disambiguate_email_direction(message.lower(), intent)
+                if intent != before_intent:
+                    logger.info(f"Final guard disambiguated email direction: {before_intent} -> {intent}")
+                # Ensure role exists for email handlers
+                if not entities.get("role"):
+                    extracted_role = self._extract_role_from_message(message) or entities.get("role")
+                    if extracted_role:
+                        entities["role"] = self._normalize_role_name(extracted_role, message)
+        except Exception as e:
+            logger.warning(f"Email disambiguation guard skipped due to error: {e}")
+
         # Intent handlers mapping
         intent_handlers = {
             # Travel intents
@@ -2360,17 +2730,100 @@ class IntentProcessor:
                     "error": "Missing role information",
                     "suggestion": "Please specify the role you're recruiting for"
                 }
-            
+
+            # --- Dynamic Job Matching Logic ---
+            matched_job_obj = None
+            similarity_threshold = 0.55  # Lowered threshold for better matching
+            try:
+                import logging
+                debug_logger = logging.getLogger("recruiter_job_matching")
+                debug_logger.setLevel(logging.DEBUG)
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                if not debug_logger.hasHandlers():
+                    debug_logger.addHandler(handler)
+
+                # Obtain JobService and DB session from registry
+                job_service = getattr(self, 'job_service', None)
+                if not job_service and hasattr(self, 'service_registry'):
+                    job_service = getattr(self.service_registry, 'job_service', None)
+                db = getattr(self, 'db', None)
+                if not db and hasattr(self, 'service_registry'):
+                    db = getattr(self.service_registry, 'db', None)
+                if job_service and db:
+                    jobs = job_service.get_jobs(db, status="open")
+                    if jobs:
+                        # Prepare embedding model
+                        llm_service = getattr(job_service, 'llm_service', None)
+                        if llm_service:
+                            embedding_model = llm_service.get_embedding_model()
+                            # Generate embedding for role (query)
+                            import numpy as np
+                            from backend.utils.cache_utils import get_embedding_cached
+                            role_embedding = None
+                            try:
+                                role_embedding = get_embedding_cached(embedding_model, role)
+                                if hasattr(role_embedding, 'tolist'):
+                                    role_embedding = role_embedding.tolist()
+                                elif isinstance(role_embedding, np.ndarray):
+                                    role_embedding = role_embedding.tolist()
+                            except Exception:
+                                role_embedding = None
+                            if role_embedding:
+                                # For each job, compute similarity
+                                best_sim = -1.0
+                                best_job = None
+                                for job in jobs:
+                                    # Convert job to dict for embedding
+                                    job_data = {
+                                        "id": job.id,
+                                        "title": job.title,
+                                        "department": job.department,
+                                        "job_overview": getattr(job, 'job_overview', ''),
+                                        "required_qualifications": getattr(job, 'required_qualifications', ''),
+                                        "location": getattr(job, 'location', ''),
+                                        "location_type": getattr(job, 'location_type', ''),
+                                        "job_type": getattr(job, 'job_type', ''),
+                                        "experience_level": getattr(job, 'experience_level', ''),
+                                        "skills": job.skills.split(",") if isinstance(job.skills, str) and job.skills else []
+                                    }
+                                    job_embeds = job_service.create_embeddings(job_data)
+                                    job_desc_embed = job_embeds.get("description", [])
+                                    # Only compare if embedding exists
+                                    if job_desc_embed and len(job_desc_embed) == len(role_embedding):
+                                        # Cosine similarity
+                                        a = np.array(role_embedding)
+                                        b = np.array(job_desc_embed)
+                                        sim = float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
+                                        if sim > best_sim:
+                                            best_sim = sim
+                                            best_job = job_data
+                                print(f"[DEBUG] Best similarity: {best_sim:.4f} for job: {best_job['title'] if best_job else None} (ID: {best_job['id'] if best_job else None})")
+                                if best_sim >= similarity_threshold:
+                                    matched_job_obj = best_job
+            except Exception as match_exc:
+                logger.warning(f"Job matching failed: {match_exc}")
+            # --- End Dynamic Job Matching ---
+
             # Use communications service to generate recruiter email
             if self.communications_service:
-                email_content = await self.communications_service.generate_recruiter_outreach_email(role)
-                
+                result = await self.communications_service.generate_recruiter_outreach_email(
+                    role=role,
+                    job_data=matched_job_obj
+                )
+                email_body = result.get("body", "")
+                from backend.utils.text_sanitizer import clean_generated_text
+                email_body = clean_generated_text(email_body)
+                subject_lines = result.get("subject_lines", [])
                 return {
                     "intent_processed": True,
                     "response_type": "recruiter_outreach_email",
                     "role": role,
-                    "email_content": email_content,
-                    "message_type": "formatted_text"
+                    "email_body": email_body,
+                    "subject_lines": subject_lines,
+                    "email_content": email_body,
+                    "message_type": "formatted_text",
+                    "job_match": matched_job_obj
                 }
             else:
                 return {
@@ -2378,7 +2831,6 @@ class IntentProcessor:
                     "error": "Communications service not available",
                     "suggestion": "Please try again later"
                 }
-                
         except Exception as e:
             logger.error(f"Error generating recruiter outreach email: {e}")
             return {
@@ -2386,6 +2838,7 @@ class IntentProcessor:
                 "error": f"Could not generate recruiter email: {str(e)}",
                 "suggestion": "Please try again or specify a different role"
             }
+
 
     async def _handle_company_info(self, intent: str, entities: Dict[str, Any], message: str) -> Dict[str, Any]:
         """

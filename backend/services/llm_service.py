@@ -17,7 +17,7 @@ os.environ['SENTENCE_TRANSFORMERS_HOME'] = './models/sentence_transformers'
 class DirectNebiusAI:
     """Direct implementation of Nebius AI service to avoid circular imports."""
     
-    def __init__(self, api_key: str, model: str = "microsoft/phi-4", temperature: float = 0.1, max_tokens: int = 500):
+    def __init__(self, api_key: str, model: str = "microsoft/phi-4", temperature: float = 0.1, max_tokens: int = 1500):
         """Initialize the Nebius AI service with configuration."""
         self.api_key = api_key
         self.model = model
@@ -606,7 +606,7 @@ class LLMService:
                 logger.info("Sending prompt to Nebius AI model...")
                 response = await self.nebius_ai_service.generate_completion(
                     prompt, 
-                    max_tokens=max_tokens or 500,
+                    max_tokens=max_tokens or 1200,
                     temperature=0.1,
                     task_type=task_type
                 )
@@ -709,7 +709,7 @@ class LLMService:
                     api_key=nebius_api_key,
                     model="microsoft/phi-4",
                     temperature=0.1,
-                    max_tokens=500
+                    max_tokens=1500
                 )
                 self._nebius_ai_initialized = True
                 logger.info("Nebius AI service initialized successfully using direct implementation")

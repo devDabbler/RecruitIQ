@@ -686,6 +686,38 @@ def page():
         st.session_state.chat_history = [{"role": "assistant", "content": "Hello! I'm your recruiting assistant. How can I help you today?"}]
         st.session_state.conversation_context = {}
         st.rerun()
+    # Recruiter email style controls
+    st.sidebar.markdown("### ✉️ Recruiter Email Style")
+    tone_option = st.sidebar.selectbox(
+        "Tone",
+        options=["professional", "warm", "enthusiastic", "direct", "playful"],
+        index=0,
+        help="Controls the tone of generated recruiter outreach emails"
+    )
+    creativity_option = st.sidebar.select_slider(
+        "Creativity",
+        options=["low", "medium", "high"],
+        value="medium",
+        help="Higher creativity yields catchier phrasing; lower is more conservative"
+    )
+    subject_count = st.sidebar.slider(
+        "Subject line options",
+        min_value=1,
+        max_value=5,
+        value=3,
+        help="How many subject line options to generate"
+    )
+    # Persist into conversation_context so backend can consume immediately
+    ctx = st.session_state.get("conversation_context", {})
+    style_ctx = ctx.get("recruiter_email_style", {}) if isinstance(ctx, dict) else {}
+    style_ctx.update({
+        "tone": tone_option,
+        "creativity": creativity_option,
+        "subject_line_count": subject_count,
+    })
+    if isinstance(ctx, dict):
+        ctx["recruiter_email_style"] = style_ctx
+        st.session_state.conversation_context = ctx
     
     # Initialize chat history in session state if it doesn't exist
     if "chat_history" not in st.session_state:
@@ -709,6 +741,22 @@ def page():
                         if maybe_json.get("response_type") == "market_research":
                             report_payload = maybe_json.get("response") if isinstance(maybe_json.get("response"), dict) else maybe_json
                             display_market_research_report(report_payload)
+                        elif maybe_json.get("response_type") == "recruiter_outreach_email":
+                            # Display recruiter outreach email properly
+                            role = maybe_json.get("role", "the position")
+                            email_body = maybe_json.get("email_body") or maybe_json.get("email_content", "")
+                            subject_lines = maybe_json.get("subject_lines", [])
+                            st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                            if subject_lines:
+                                st.markdown("**Subject line options:**")
+                                for s in subject_lines:
+                                    st.markdown(f"- {s}")
+                            if email_body:
+                                st.markdown("```")
+                                st.markdown(email_body)
+                                st.markdown("```")
+                            else:
+                                st.error("Email content not generated properly")
                         elif maybe_json.get("report_type"):
                             display_market_research_report(maybe_json)
                         else:
@@ -727,6 +775,22 @@ def page():
                         if content.get("response_type") == "market_research" or content.get("report_type"):
                             payload = content.get("response") if isinstance(content.get("response"), dict) else content
                             display_market_research_report(payload)
+                        elif content.get("response_type") == "recruiter_outreach_email":
+                            # Display recruiter outreach email properly
+                            role = content.get("role", "the position")
+                            email_body = content.get("email_body") or content.get("email_content", "")
+                            subject_lines = content.get("subject_lines", [])
+                            st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                            if subject_lines:
+                                st.markdown("**Subject line options:**")
+                                for s in subject_lines:
+                                    st.markdown(f"- {s}")
+                            if email_body:
+                                st.markdown("```")
+                                st.markdown(email_body)
+                                st.markdown("```")
+                            else:
+                                st.error("Email content not generated properly")
                         else:
                             _render_dict_as_markdown(content)
                     else:
@@ -782,6 +846,29 @@ def page():
                         })
                         return
 
+                    # Recruiter outreach email flow
+                    if data.get("response_type") == "recruiter_outreach_email":
+                        role = data.get("role", "the position")
+                        email_body = data.get("email_body") or data.get("email_content", "")
+                        subject_lines = data.get("subject_lines", [])
+                        st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                        if subject_lines:
+                            st.markdown("**Subject line options:**")
+                            for s in subject_lines:
+                                st.markdown(f"- {s}")
+                        if email_body:
+                            st.markdown("```")
+                            st.markdown(email_body)
+                            st.markdown("```")
+                            # Save to chat history
+                            st.session_state.chat_history.append({
+                                "role": "assistant",
+                                "content": data  # Store the full structured response
+                            })
+                        else:
+                            st.error("Email content not generated properly")
+                        return
+
                     # Generic dict with text response
                     if "response" in data and isinstance(data["response"], str):
                         text = data["response"]
@@ -792,6 +879,22 @@ def page():
                                 if jd.get("report_type") or jd.get("response_type") == "market_research":
                                     report_payload = jd.get("response") if isinstance(jd.get("response"), dict) else jd
                                     display_market_research_report(report_payload)
+                                elif jd.get("response_type") == "recruiter_outreach_email":
+                                    # Handle recruiter outreach email in nested JSON
+                                    role = jd.get("role", "the position")
+                                    email_body = jd.get("email_body") or jd.get("email_content", "")
+                                    subject_lines = jd.get("subject_lines", [])
+                                    st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                                    if subject_lines:
+                                        st.markdown("**Subject line options:**")
+                                        for s in subject_lines:
+                                            st.markdown(f"- {s}")
+                                    if email_body:
+                                        st.markdown("```")
+                                        st.markdown(email_body)
+                                        st.markdown("```")
+                                    else:
+                                        st.error("Email content not generated properly")
                                 else:
                                     _render_dict_as_markdown(jd)
                             else:
@@ -832,6 +935,17 @@ def page():
                             if jd.get("report_type") or jd.get("response_type") == "market_research":
                                 report_payload = jd.get("response") if isinstance(jd.get("response"), dict) else jd
                                 display_market_research_report(report_payload)
+                            elif jd.get("response_type") == "recruiter_outreach_email":
+                                # Handle recruiter outreach email in string response
+                                role = jd.get("role", "the position")
+                                email_content = jd.get("email_content", "")
+                                st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                                if email_content:
+                                    st.markdown("```")
+                                    st.markdown(email_content)
+                                    st.markdown("```")
+                                else:
+                                    st.error("Email content not generated properly")
                             else:
                                 _render_dict_as_markdown(jd)
                         else:

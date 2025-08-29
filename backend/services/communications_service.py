@@ -7,12 +7,14 @@ import time
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 import json
+import re
 
 import httpx
 from pydantic import BaseModel, Field
 
 from backend.utils.config import Settings
 from backend.services.llm_service import LLMService
+from backend.utils.text_sanitizer import clean_generated_text
 
 
 logger = logging.getLogger(__name__)
@@ -239,69 +241,169 @@ class CommunicationsService:
         
         return meeting
 
-    async def generate_recruiter_outreach_email(self, role: str) -> str:
+    async def generate_recruiter_outreach_email(
+        self,
+        role: str,
+        tone: Optional[str] = None,
+        creativity: Optional[str] = None,
+        subject_line_count: int = 3,
+        job_data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
-        Generate a recruiter outreach email for a specific role.
-        
+        Generate a recruiter outreach email for a specific role with style controls.
+
         Args:
             role: The role/position being recruited for
-            
+            tone: Desired tone, e.g., "professional", "warm", "enthusiastic", "direct", "playful"
+            creativity: Creativity level, e.g., "low", "medium", "high"
+            subject_line_count: Number of subject line options to produce
+
         Returns:
-            str: The generated email content
+            Dict with keys: {"body": str, "subject_lines": List[str]}
         """
-        prompt = f"""
-        You are a professional recruiter reaching out to potential candidates for a {role} position.
-        
-        Please draft a compelling outreach email that includes:
-        1. A personalized greeting
-        2. Brief introduction of your company
-        3. Description of the {role} opportunity
-        4. Key requirements and benefits
-        5. Clear call-to-action
-        6. Professional closing
-        
-        The email should be:
-        - Professional but friendly in tone
-        - Concise (under 200 words)
-        - Specific to the {role} role
-        - Include a clear next step for the candidate
-        
-        Return only the email body text without any additional commentary or formatting.
-        """
-        
+        # Map tone/creativity into prompt guidance
+        tone = (tone or "professional, warm").strip()
+        creativity = (creativity or "medium").strip().lower()
+        creativity_map = {
+            "low": "focus on clarity and straightforward wording; avoid metaphors and marketing fluff",
+            "medium": "balanced creativity with professional tone; light persuasive language",
+            "high": "more expressive and catchy phrasing while staying professional",
+        }
+        creativity_hint = creativity_map.get(creativity, creativity_map["medium"])
+
+        # Build optional job context to ground the outreach copy
+        job_context = ""
         try:
-            email_content = await self.llm_service.generate_text_async(
+            if isinstance(job_data, dict) and job_data:
+                title = job_data.get("title") or role
+                department = job_data.get("department")
+                location = job_data.get("location") or job_data.get("location_city")
+                location_type = job_data.get("location_type")
+                job_type = job_data.get("job_type")
+                experience_level = job_data.get("experience_level")
+                overview = job_data.get("job_overview") or job_data.get("description")
+                reqs = job_data.get("required_qualifications") or job_data.get("requirements")
+                skills = job_data.get("skills")
+                if isinstance(skills, list):
+                    skills = ", ".join([str(s) for s in skills if str(s).strip()])
+
+                lines = [
+                    f"title: {title}" if title else "",
+                    f"department: {department}" if department else "",
+                    f"location: {location}" if location else "",
+                    f"location_type: {location_type}" if location_type else "",
+                    f"job_type: {job_type}" if job_type else "",
+                    f"experience_level: {experience_level}" if experience_level else "",
+                    f"overview: {overview}" if overview else "",
+                    f"required_qualifications: {reqs}" if reqs else "",
+                    f"skills: {skills}" if skills else "",
+                ]
+                job_context = "\n".join([ln for ln in lines if ln])
+        except Exception:
+            # Fail open: if anything goes wrong, just skip job context
+            job_context = ""
+
+        prompt_job_ctx = (
+            f"Ground the message in the following job context. Do not invent details not present here.\n\n"
+            f"JOB CONTEXT:\n{job_context}\n\n" if job_context else ""
+        )
+
+        prompt = f"""
+        You are a recruiter writing outreach to an individual candidate for a {role} role.
+
+        Requirements:
+        - Address the candidate directly (e.g., "Hi [Candidate Name],"). Do NOT write to a hiring manager.
+        - Style tone: {tone}.
+        - Creativity level: {creativity} ({creativity_hint})
+        - Length: under 180–200 words.
+        - Use candidate-centric language (you/your). No placeholders besides [Candidate Name] for greeting.
+
+        {prompt_job_ctx}
+
+        Produce a JSON object ONLY (no commentary, no markdown) with keys:
+        {{
+          "subject_lines": ["...", "..."],  // {subject_line_count} engaging options, <= 8 words each
+          "body": "..."  // complete email body ready to send
+        }}
+
+        The body should include:
+        - Brief intro of you/company/team
+        - Enticing description of the {role} opportunity
+        - 2–4 short bullet-like lines or sentences highlighting impact/requirements
+        - Clear call to action to chat or apply
+        - Professional closing with signature
+        """
+
+        try:
+            raw = await self.llm_service.generate_text_async(
                 prompt=prompt,
-                model="llama_70b",  # Use the larger model for better writing quality
-                max_tokens=400,
+                model="llama_70b",
+                max_tokens=500,
             )
-            
-            return email_content.strip()
-            
+
+            # Extract JSON from possible fencing
+            json_text = raw.strip()
+            fence_match = re.search(r"```(?:json)?\s*(.*?)```", json_text, re.DOTALL)
+            if fence_match:
+                json_text = fence_match.group(1).strip()
+
+            data: Dict[str, Any]
+            try:
+                data = json.loads(json_text)
+            except Exception:
+                # Fallback: try to heuristically split subject lines from body
+                lines = [ln.strip() for ln in json_text.splitlines() if ln.strip()]
+                subjects = []
+                body = "\n".join(lines)
+                data = {"subject_lines": subjects[:subject_line_count], "body": body}
+
+            # Validate structure
+            subject_lines = data.get("subject_lines") or []
+            if not isinstance(subject_lines, list):
+                subject_lines = []
+            subject_lines = [str(s).strip() for s in subject_lines if str(s).strip()][:subject_line_count]
+
+            body = data.get("body") or ""
+            body = str(body).strip()
+
+            # Post-generation guardrails: ensure candidate-facing greeting at top
+            lowered = body.lower()
+            if "dear hiring manager" in lowered or "hiring manager" in lowered:
+                body = re.sub(r"(?i)dear\s*hiring\s*manager\s*,?", "Hi [Candidate Name],", body)
+                body = body.replace("hiring manager", "candidate")
+            if not re.match(r"(?i)\s*(hi|hello|dear)\s*\[candidate name\]", body):
+                body = "Hi [Candidate Name],\n\n" + body
+
+            # Final sanitization to remove any trailing placeholder headings
+            body = clean_generated_text(body)
+
+            return {"body": body, "subject_lines": subject_lines}
+
         except Exception as e:
             logger.error(f"Error generating recruiter outreach email: {e}")
-            # Return a fallback email template
-            return f"""
-Dear [Candidate Name],
+            # Fallback template with simple subject lines
+            fallback_body = f"""
+Hi [Candidate Name],
 
-I hope this message finds you well. I'm reaching out because I came across your profile and was impressed by your background in {role}.
+I came across your background in {role} and think you could be a great fit for an opening on our team. We’re building impactful products and looking for someone who can contribute quickly.
 
-We're currently looking for a talented {role} to join our growing team. This is an exciting opportunity to work on cutting-edge projects and make a real impact.
+What you’ll do / bring:
+- Apply your {role} expertise to solve real customer problems
+- Collaborate with a supportive, high-ownership team
+- Grow in a role with visibility and impact
 
-Key requirements for this role include:
-- Strong experience in {role}
-- Excellent problem-solving skills
-- Team collaboration abilities
+If you’re open to a quick chat, I’d love to share more and learn about what you’re looking for next.
 
-We offer competitive compensation, great benefits, and a supportive work environment.
-
-Would you be interested in learning more about this opportunity? I'd love to schedule a brief call to discuss the role and see if it might be a good fit for your career goals.
-
-Please let me know if you're interested, and I'll be happy to share more details.
-
-Best regards,
+Best,
 [Your Name]
 [Your Title]
-[Company Name]
-[Contact Information]
+[Company]
             """.strip()
+            return {
+                "body": fallback_body,
+                "subject_lines": [
+                    f"Opportunity for {role}",
+                    f"Quick chat about a {role} role?",
+                    f"Your {role} experience stood out",
+                ],
+            }

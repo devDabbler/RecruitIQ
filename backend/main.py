@@ -82,7 +82,7 @@ app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 app.include_router(interviews.router, prefix="/api", tags=["interviews"])
 app.include_router(pitches.router, prefix="/api", tags=["pitches"])
 app.include_router(agent.router, tags=["agent"]) # Agent router
-app.include_router(intelligence.router)
+app.include_router(intelligence.router, prefix="/api", tags=["intelligence"])  # Mount under /api to match frontend
 app.include_router(performance.router, prefix="/api", tags=["performance"])
 app.include_router(cache.router, tags=["cache"]) # Cache management router
 

@@ -74,6 +74,9 @@ class Settings(BaseSettings):
     # Optional: allow merging LLM and regex experience when clean mode is off
     ENABLE_EXPERIENCE_FALLBACK_MERGE: bool = Field(default=os.getenv("ENABLE_EXPERIENCE_FALLBACK_MERGE", "false").lower() == "true")
     
+    # Intent detection settings
+    INTENT_ROUTER_MODE: str = Field(default=os.getenv("INTENT_ROUTER_MODE", "hybrid"))  # semantic|legacy|hybrid
+    
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         # `.env` files have lowest priority
         env_file=find_dotenv(),

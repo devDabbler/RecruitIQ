@@ -163,6 +163,38 @@ def sanitize_response(response_data: Dict[str, Any]) -> Dict[str, Any]:
     
     return sanitized
 
+def _clean_generated_text(text: str) -> str:
+    """Remove trailing placeholder or orphan headings/outlines from model output.
+    Examples removed at the end of the text: "Factors A", "A.", "### Notes", "1." with no content.
+    """
+    try:
+        if not isinstance(text, str):
+            return text
+        s = text.strip()
+        if not s:
+            return s
+        lines = s.splitlines()
+        heading_patterns = [
+            r"^\s{0,3}#{1,6}\s+.*$",                 # Markdown headings
+            r"^\s*(Factors?|Appendix|Notes?)\s*[A-Z]?:?\s*$",  # Placeholder section like 'Factors A'
+            r"^\s*[A-Z]\.\s*$",                     # Single-letter outline like 'A.'
+            r"^\s*\d+\.\s*$"                        # Numbered item with no content
+        ]
+        import re
+        # Trim consecutive orphan headings at the end
+        while lines:
+            last = lines[-1].strip()
+            if last == "":
+                lines.pop()
+                continue
+            if any(re.match(p, last, flags=re.IGNORECASE) for p in heading_patterns):
+                lines.pop()
+                continue
+            break
+        return "\n".join(lines).strip()
+    except Exception:
+        return text
+
 @router.post("/chat")
 async def chat_with_assistant(
     message: str = Body(..., embed=True),
@@ -211,7 +243,7 @@ async def chat_with_assistant(
         logger.info(f"ASSISTANT ROUTER: Conversation history length: {len(conversation_history)}")
         logger.info(f"ASSISTANT ROUTER: Conversation context: {conversation_context}")
         
-        # DIRECT HANDLER FOR SOURCING STRATEGY QUERIES - complete bypass of intent detection system
+        # REFINED SOURCING STRATEGY HANDLER with semantic confidence gating
         # Only trigger for explicit sourcing strategy requests, not for showing existing candidates
         sourcing_keywords = ["where to find", "how to find", "where can i find", "sourcing", "source", "recruit"]
         # Check for sourcing patterns - either with explicit candidate/talent keywords OR with role-specific terms
@@ -221,7 +253,29 @@ async def chat_with_assistant(
         # Don't trigger sourcing handler for "show me" queries - these should go to intent detection
         is_show_query = any(phrase in message.lower() for phrase in ["show me", "display", "list", "get me", "find me"])
         
+        # Enhanced confidence check: only bypass if we have high confidence this is sourcing advice
+        sourcing_confidence = 0.0
         if is_sourcing_query and has_candidate_terms and not is_show_query:
+            # Calculate confidence based on multiple factors
+            sourcing_confidence += 0.4  # Base confidence for matching pattern
+            
+            # Boost confidence for explicit sourcing terms
+            explicit_sourcing_terms = ["sourcing strategy", "where to source", "how to source", "recruiting strategy"]
+            if any(term in message.lower() for term in explicit_sourcing_terms):
+                sourcing_confidence += 0.3
+                
+            # Boost confidence for advice-seeking language
+            advice_terms = ["advice", "strategy", "best practices", "recommendations", "suggestions"]
+            if any(term in message.lower() for term in advice_terms):
+                sourcing_confidence += 0.2
+                
+            # Penalize if it looks like a data request
+            data_request_terms = ["count", "number", "how many", "list", "show", "display"]
+            if any(term in message.lower() for term in data_request_terms):
+                sourcing_confidence -= 0.3
+        
+        # Only bypass intent detection if confidence is high (>= 0.75)
+        if sourcing_confidence >= 0.75:
             logger.info("Detected direct candidate sourcing strategy query, COMPLETELY bypassing intent detection")
             # Extract role from the message using regex patterns
             role_patterns = [
@@ -428,12 +482,13 @@ async def chat_with_assistant(
                     intent_result = await process_call
                 else:
                     intent_result = process_call
-                
+
                 if intent_result.get("intent_processed", False):
                     # Use the formatted response from the travel service
                     formatted_response = intent_result.get("formatted_response", "")
-                    
+
                     if formatted_response:
+                        formatted_response = _clean_generated_text(formatted_response)
                         return {
                             "response": formatted_response,
                             "conversation_context": conversation_context
@@ -445,7 +500,6 @@ async def chat_with_assistant(
                             response = f"I found travel information for {travel_data.get('origin', '')} to {travel_data.get('destination', '')}, but couldn't format it properly."
                         else:
                             response = "I had trouble getting travel information. Please check your origin and destination and try again."
-                        
                         return {
                             "response": response,
                             "conversation_context": conversation_context
@@ -457,7 +511,7 @@ async def chat_with_assistant(
                         "response": f"I couldn't get travel information: {error_msg}. Please try rephrasing your question with clear origin and destination cities.",
                         "conversation_context": conversation_context
                     }
-                    
+
             except Exception as e:
                 logger.error(f"Error processing travel intent: {e}")
                 return {
@@ -537,7 +591,7 @@ async def chat_with_assistant(
                             summary_response = f"I searched for information about '{query}' but couldn't find specific results. You might want to try a more specific search or check directly with relevant sources."
                         
                         return {
-                            "response": summary_response,
+                            "response": _clean_generated_text(summary_response),
                             "conversation_context": conversation_context
                         }
                     
@@ -1763,6 +1817,107 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                 logger.error(f"Error generating pitch email: {e}")
                 return {
                     "response": "I'm sorry, I encountered an error while generating the pitch email. Please try again later.",
+                    "conversation_context": conversation_context
+                }
+        
+        # Handle recruiter outreach email generation
+        elif intent == "recruiter_outreach_email":
+            role = entities.get('role', '').strip()
+            logger.info(f"Generating recruiter outreach email for {role} role")
+            
+            try:
+                # Merge optional style settings from conversation_context into entities
+                try:
+                    style_ctx = conversation_context.get("recruiter_email_style", {}) if isinstance(conversation_context, dict) else {}
+                    # Also allow top-level convenience keys
+                    tone = style_ctx.get("tone") or conversation_context.get("tone") if isinstance(conversation_context, dict) else None
+                    creativity = style_ctx.get("creativity") or conversation_context.get("creativity") if isinstance(conversation_context, dict) else None
+                    subject_line_count = style_ctx.get("subject_line_count") or conversation_context.get("subject_line_count") if isinstance(conversation_context, dict) else None
+
+                    if tone:
+                        entities["tone"] = tone
+                    if creativity:
+                        entities["creativity"] = creativity
+                    if subject_line_count:
+                        entities["subject_line_count"] = subject_line_count
+                    # Forward optional ATS job context (either full object or just id)
+                    job_obj = conversation_context.get("job_data") or conversation_context.get("job") if isinstance(conversation_context, dict) else None
+                    job_id = conversation_context.get("job_id") if isinstance(conversation_context, dict) else None
+                    if job_obj and not entities.get("job_data"):
+                        entities["job_data"] = job_obj
+                    if job_id and not entities.get("job_id"):
+                        entities["job_id"] = job_id
+
+                    # If we only have a job_id, fetch full job details for richer prompt context
+                    try:
+                        if not entities.get("job_data") and entities.get("job_id") and db is not None:
+                            from ..models.models import Job
+                            jid = entities.get("job_id")
+                            job_rec = None
+                            try:
+                                # Ensure int conversion when possible
+                                jid_int = int(jid)
+                                job_rec = db.query(Job).filter(Job.id == jid_int).first()
+                            except Exception:
+                                # Fallback if ID is non-numeric or another key type
+                                job_rec = db.query(Job).filter(Job.external_id == jid).first() if hasattr(Job, 'external_id') else None
+                            if job_rec:
+                                skills_val = getattr(job_rec, 'skills', None)
+                                if isinstance(skills_val, str):
+                                    skills_list = [s.strip() for s in skills_val.split(',') if s.strip()]
+                                elif isinstance(skills_val, list):
+                                    skills_list = skills_val
+                                else:
+                                    skills_list = []
+                                entities["job_data"] = {
+                                    "id": getattr(job_rec, 'id', None),
+                                    "title": getattr(job_rec, 'title', None),
+                                    "department": getattr(job_rec, 'department', None),
+                                    "location": getattr(job_rec, 'location', None),
+                                    "location_type": getattr(job_rec, 'location_type', None),
+                                    "job_type": getattr(job_rec, 'job_type', None),
+                                    "experience_level": getattr(job_rec, 'experience_level', None),
+                                    "job_overview": getattr(job_rec, 'job_overview', None) or getattr(job_rec, 'description', None),
+                                    "required_qualifications": getattr(job_rec, 'required_qualifications', None),
+                                    "skills": skills_list,
+                                }
+                    except Exception as job_fetch_err:
+                        logger.warning(f"Failed to fetch job details for recruiter outreach enrichment: {job_fetch_err}")
+                except Exception as merge_err:
+                    logger.warning(f"Could not merge style settings into entities: {merge_err}")
+
+                # Use the intent processor to generate the recruiter outreach email
+                intent_result = await intent_processor.process_intent(intent, entities, message)
+                
+                if intent_result.get("intent_processed", False):
+                    # Return the structured response with response_type for frontend handling
+                    return {
+                        # Back-compat fields
+                        "response": intent_result.get("email_content", intent_result.get("email_body", "")),
+                        "response_type": intent_result.get("response_type", "recruiter_outreach_email"),
+                        "role": intent_result.get("role", role),
+                        "email_content": intent_result.get("email_content", intent_result.get("email_body", "")),
+                        "message_type": intent_result.get("message_type", "formatted_text"),
+                        # New fields for richer UI
+                        "email_body": intent_result.get("email_body"),
+                        "subject_lines": intent_result.get("subject_lines", []),
+                        "style": intent_result.get("style", {}),
+                        "conversation_context": conversation_context
+                    }
+                else:
+                    # Fallback if intent processor couldn't handle it
+                    error = intent_result.get("error", "Unable to generate recruiter outreach email")
+                    logger.error(f"Intent processor failed for recruiter outreach: {error}")
+                    
+                    return {
+                        "response": f"I'm sorry, I encountered an error while generating the recruiter outreach email: {error}",
+                        "conversation_context": conversation_context
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error generating recruiter outreach email: {e}")
+                return {
+                    "response": "I'm sorry, I encountered an error while generating the recruiter outreach email. Please try again later.",
                     "conversation_context": conversation_context
                 }
         elif intent == "company":

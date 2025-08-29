@@ -2,12 +2,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 import logging
+from pydantic import BaseModel
 
 from ..utils.database import get_db
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/intelligence")
+
+
+class SalaryBenchmarkRequest(BaseModel):
+    job_title: str
+    location: str
+    experience_level: Optional[str] = None
 
 
 @router.get("/salary-benchmark")
@@ -35,6 +42,30 @@ async def get_salary_benchmark(
 
     except Exception as e:
         logger.error(f"Error in salary benchmark endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/benchmark_salary")
+async def post_salary_benchmark(payload: SalaryBenchmarkRequest, db: Session = Depends(get_db)):
+    """POST endpoint to match frontend. Returns structure the UI expects."""
+    try:
+        from backend.services.service_registry import provide_market_research_service
+        market_research_service = provide_market_research_service()
+
+        result = await market_research_service.get_comprehensive_salary_benchmark(
+            job_title=payload.job_title,
+            location=payload.location,
+            experience_level=payload.experience_level,
+        )
+
+        if result.get("status") == "success":
+            return {"status": "completed", "benchmark": result.get("data")}
+        else:
+            # Keep consistent error handling
+            raise HTTPException(status_code=500, detail=result.get("message", "Failed to fetch salary benchmark"))
+
+    except Exception as e:
+        logger.error(f"Error in POST salary benchmark endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
