@@ -1,8 +1,5 @@
 # frontend/modules/candidates.py
 import streamlit as st
-import pandas as pd
-import httpx
-import asyncio
 import json
 import os
 import datetime
@@ -12,16 +9,13 @@ import time
 from typing import Dict, Any, List, Optional
 from functools import lru_cache
 from .resume_upload import fix_merged_text
-from utils.ui_helpers import display_skills_badges, format_skills_list, clean_display_text
+from frontend.utils.ui_helpers import display_skills_badges, format_skills_list, clean_display_text
 
-# Set up frontend logging
+# Set up frontend logging (don't add file handlers at import time)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler('frontend.log')
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
@@ -42,86 +36,55 @@ def page():
     with tab3:
         search_candidates()
 
-async def fetch_candidates_async(api_url: str) -> List[Dict]:
-    """Fetch candidates from the API asynchronously with caching"""
-    try:
-        logger.info(f"Attempting to fetch candidates. API URL: {api_url}")
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            # Standardize the API URL format
-            base_url = api_url.rstrip('/')
-            
-            # Try the primary endpoint first
-            endpoint = f"{base_url}/api/candidates/"
-            logger.debug(f"Trying primary endpoint: {endpoint}")
-            
-            try:
-                response = await client.get(endpoint, params={"page_size": 50}, timeout=30.0)
-                response.raise_for_status()
-                logger.info(f"Successfully fetched candidates from {endpoint}")
-                
-                try:
-                    data = response.json()
-                except Exception as e:
-                    logger.error(f"Failed to parse JSON from response: {str(e)}")
-                    raise Exception("Failed to parse JSON from response")
-
-                logger.debug(f"Received data with keys: {list(data.keys()) if isinstance(data, dict) else 'not a dict'}")
-
-                # Accept both paginated (dict with 'results') and plain list
-                if isinstance(data, dict) and 'results' in data:
-                    candidates = data['results']
-                elif isinstance(data, list):
-                    candidates = data
-                else:
-                    logger.warning(f"Unexpected data format received: {type(data)}")
-                    candidates = []
-
-                logger.info(f"Found {len(candidates)} candidates")
-
-                # Ensure all required fields exist to prevent UI errors
-                for c in candidates:
-                    c.setdefault("id", "-")
-                    c.setdefault("first_name", "")
-                    c.setdefault("last_name", "")
-                    c.setdefault("email", "-")
-                    c.setdefault("phone", "-")
-                    c.setdefault("location", "-")
-                    c.setdefault("position_applied", "-")
-                    c.setdefault("status", "-")
-                    c.setdefault("source", "-")
-                    c.setdefault("created_at", "-")
-
-                return candidates
-                
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error {e.response.status_code} when calling {endpoint}: {str(e)}")
-                if e.response.status_code == 500:
-                    raise Exception("Backend server error - check backend logs for details")
-                elif e.response.status_code == 404:
-                    raise Exception("Candidates endpoint not found - check if backend is running")
-                else:
-                    raise Exception(f"HTTP {e.response.status_code} error from backend")
-            except httpx.ConnectError:
-                logger.error(f"Connection failed to {endpoint}")
-                raise Exception("Cannot connect to backend - check if backend is running on the correct port")
-            except httpx.TimeoutException:
-                logger.error(f"Timeout when calling {endpoint}")
-                raise Exception("Backend request timed out - backend may be overloaded")
-            
-    except Exception as e:
-        logger.error(f"Error fetching candidates: {str(e)}", exc_info=True)
-        # Re-raise with more context for the user
-        if "Cannot connect" in str(e) or "Connection" in str(e):
-            raise Exception("Cannot connect to backend. Please ensure the backend is running.")
-        elif "timeout" in str(e).lower():
-            raise Exception("Backend request timed out. Please try again.")
-        else:
-            raise Exception(f"Error loading candidates: {str(e)}")
-
 @st.cache_data(ttl=60)  # Cache data for 1 minute only
 def fetch_candidates(api_url: str) -> List[Dict]:
-    """Synchronous wrapper for async candidate fetching (for Streamlit compatibility)"""
-    return asyncio.run(fetch_candidates_async(api_url))
+    """Fetch candidates synchronously using a cached httpx client where available."""
+    try:
+        logger.info(f"Fetching candidates synchronously. API URL: {api_url}")
+        base_url = api_url.rstrip('/')
+        endpoint = f"{base_url}/api/candidates/"
+
+        # Try to use cached sync client
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            # Fallback to requests
+            resp = requests.get(endpoint, params={"page_size": 50}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        else:
+            resp = client.get(endpoint, params={"page_size": 50}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
+
+        if isinstance(data, dict) and 'results' in data:
+            candidates = data['results']
+        elif isinstance(data, list):
+            candidates = data
+        else:
+            logger.warning(f"Unexpected data format received: {type(data)}")
+            candidates = []
+
+        for c in candidates:
+            c.setdefault("id", "-")
+            c.setdefault("first_name", "")
+            c.setdefault("last_name", "")
+            c.setdefault("email", "-")
+            c.setdefault("phone", "-")
+            c.setdefault("location", "-")
+            c.setdefault("position_applied", "-")
+            c.setdefault("status", "-")
+            c.setdefault("source", "-")
+            c.setdefault("created_at", "-")
+
+        return candidates
+    except Exception as e:
+        logger.error(f"Error fetching candidates: {e}")
+        raise
 
 # Function to clear the candidate cache when a new candidate is added
 def clear_candidate_cache():
@@ -426,21 +389,32 @@ def render_candidate_row(row):
 def delete_candidate_api(candidate_id):
     api_url = st.session_state.get("api_url", "http://localhost:8000")
     try:
-        response = requests.delete(f"{api_url}/api/candidates/{candidate_id}", timeout=30)
-        if response.status_code == 200:
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.delete(f"{api_url}/api/candidates/{candidate_id}", timeout=30)
+        else:
+            resp = client.delete(f"{api_url}/api/candidates/{candidate_id}", timeout=30.0)
+
+        status = getattr(resp, 'status_code', None) or (resp.status if hasattr(resp, 'status') else None)
+        if status == 200:
             return True
-        elif response.status_code == 404:
+        elif status == 404:
             st.error("Candidate not found - may have already been deleted")
             return False
-        elif response.status_code == 500:
+        elif status == 500:
             try:
-                error_detail = response.json().get('detail', 'Internal server error')
+                error_detail = resp.json().get('detail', 'Internal server error')
                 st.error(f"Server error deleting candidate: {error_detail}")
-            except:
-                st.error(f"Server error deleting candidate: {response.text}")
+            except Exception:
+                st.error(f"Server error deleting candidate: {getattr(resp, 'text', str(resp))}")
             return False
         else:
-            st.error(f"Failed to delete candidate (HTTP {response.status_code}): {response.text}")
+            st.error(f"Failed to delete candidate (HTTP {status}): {getattr(resp, 'text', str(resp))}")
             return False
     except requests.exceptions.Timeout:
         st.error("Request timed out - candidate deletion may still be in progress")
@@ -1118,23 +1092,42 @@ def search_candidates():
             params["skills"] = ",".join(skills)
         with st.spinner("Searching candidates..."):
             try:
-                response = requests.get(f"{api_url}/candidates", params=params, timeout=10)
-                response.raise_for_status()
-                data = response.json()
-                candidates = data.get("results") if isinstance(data, dict) else None
+                # Use cached sync client when available
+                try:
+                    from frontend.utils.http_client import get_sync_client
+                    client = get_sync_client()
+                except Exception:
+                    client = None
+
+                endpoint = f"{api_url.rstrip('/')}/candidates"
+                if client is None:
+                    resp = requests.get(endpoint, params=params, timeout=10)
+                    resp.raise_for_status()
+                    data = resp.json()
+                else:
+                    resp = client.get(endpoint, params=params, timeout=10.0)
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                candidates = data.get("results") if isinstance(data, dict) else data if isinstance(data, list) else None
                 if not isinstance(candidates, list):
                     st.error("Invalid data structure received from API.")
                     logger.error(f"Invalid candidates data: {data}")
                     return
+
                 st.write("### Search Results")
                 if len(candidates) == 0:
                     st.info("No candidates match the search criteria.")
                     return
+
                 for c in candidates:
                     c.setdefault("name", "-")
                     c.setdefault("position", "-")
                     c.setdefault("skills", "-")
                     c.setdefault("status", "-")
+
+                # Lazy import pandas only when needed
+                import pandas as pd
                 df = pd.DataFrame(candidates)
                 st.dataframe(
                     df,

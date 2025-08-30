@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -43,29 +42,28 @@ def get_status_color(status: str) -> str:
     return STATUS_COLORS.get(status.lower(), STATUS_COLORS["withdrawn"])
 
 
-async def fetch_candidate_async(
-    api_url: str, candidate_id: str, timeout: int = 15
-) -> Optional[Dict[str, Any]]:
-    """Asynchronously fetch candidate data from the API."""
+def fetch_candidate(api_url: str, candidate_id: str, timeout: int = 15) -> Optional[Dict[str, Any]]:
+    """Fetch candidate data synchronously using cached httpx client when available."""
     url = f"{api_url.rstrip('/')}/candidates/{candidate_id}"
     try:
         logger.info("Fetching candidate %s from %s", candidate_id, url)
-        if httpx:
-            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-                resp = await client.get(url)
-                resp.raise_for_status()
-                return resp.json()
-        resp = requests.get(url, timeout=timeout)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client and httpx:
+            resp = client.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()
+        else:
+            resp = requests.get(url, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()
     except Exception as e:
         logger.error("Error fetching candidate %s: %s", candidate_id, e)
         return None
-
-
-def fetch_candidate(api_url: str, candidate_id: str) -> Optional[Dict[str, Any]]:
-    """Synchronous wrapper for fetch_candidate_async, suitable for Streamlit."""
-    return asyncio.run(fetch_candidate_async(api_url, candidate_id))
 
 
 def render_nav() -> None:

@@ -1,10 +1,10 @@
 import streamlit as st
 from datetime import datetime, timedelta
-import asyncio
-import httpx
 import time
+import requests
 
-BACKEND_URL = "http://localhost:8000"
+def _get_backend_url():
+    return st.session_state.get('api_url', 'http://localhost:8000').rstrip('/')
 
 # Recruiter-centric interviews page with agentic backend integration
 def page():
@@ -30,23 +30,35 @@ def page():
 
 # Async fetch interviews from agentic backend
 def get_interviews_from_backend(filter_today=False, past=False):
-    async def fetch():
-        async with httpx.AsyncClient() as client:
-            params = {}
-            if filter_today:
-                today = datetime.now().date()
-                params['date_from'] = params['date_to'] = today.isoformat()
-            if past:
-                params['completed'] = True
-            else:
-                params['completed'] = False
-            try:
-                resp = await client.get(f"{BACKEND_URL}/api/interviews/", params=params, timeout=30)
-                resp.raise_for_status()
-                return resp.json()
-            except Exception as e:
-                return None
-    return asyncio.run(fetch())
+    params = {}
+    if filter_today:
+        today = datetime.now().date()
+        params['date_from'] = params['date_to'] = today.isoformat()
+    if past:
+        params['completed'] = True
+    else:
+        params['completed'] = False
+
+    api_url = _get_backend_url()
+    endpoint = f"{api_url}/api/interviews/"
+
+    try:
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.get(endpoint, params=params, timeout=30)
+            resp.raise_for_status()
+            return resp.json()
+        else:
+            resp = client.get(endpoint, params=params, timeout=30.0)
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        return None
 
 # Display interviews using agentic backend data
 def display_interview_list(filter_today=False, tab_context="default", past=False):
@@ -115,15 +127,25 @@ def schedule_new_interview():
             "notes": notes,
             "datetime": interview_datetime,
         }
-        async def post_interview():
-            async with httpx.AsyncClient() as client:
-                try:
-                    resp = await client.post(f"{BACKEND_URL}/api/interviews/", json=payload, timeout=30)
-                    resp.raise_for_status()
-                    return resp.json()
-                except Exception as e:
-                    return None
-        result = asyncio.run(post_interview())
+        api_url = _get_backend_url()
+        endpoint = f"{api_url}/api/interviews/"
+        try:
+            try:
+                from frontend.utils.http_client import get_sync_client
+                client = get_sync_client()
+            except Exception:
+                client = None
+
+            if client is None:
+                resp = requests.post(endpoint, json=payload, timeout=30)
+                resp.raise_for_status()
+                result = resp.json()
+            else:
+                resp = client.post(endpoint, json=payload, timeout=30.0)
+                resp.raise_for_status()
+                result = resp.json()
+        except Exception:
+            result = None
         if result:
             st.success(f"Interview with {candidate} scheduled successfully!")
         else:
@@ -143,15 +165,25 @@ def plan_interview_travel_section():
             "destination": destination,
             "interview_datetime": travel_datetime,
         }
-        async def post_travel():
-            async with httpx.AsyncClient() as client:
-                try:
-                    resp = await client.post(f"{BACKEND_URL}/api/travel/plan_interview_travel", json=payload, timeout=30)
-                    resp.raise_for_status()
-                    return resp.json()
-                except Exception as e:
-                    return None
-        result = asyncio.run(post_travel())
+        api_url = _get_backend_url()
+        endpoint = f"{api_url}/api/travel/plan_interview_travel"
+        try:
+            try:
+                from frontend.utils.http_client import get_sync_client
+                client = get_sync_client()
+            except Exception:
+                client = None
+
+            if client is None:
+                resp = requests.post(endpoint, json=payload, timeout=30)
+                resp.raise_for_status()
+                result = resp.json()
+            else:
+                resp = client.post(endpoint, json=payload, timeout=30.0)
+                resp.raise_for_status()
+                result = resp.json()
+        except Exception:
+            result = None
         if result and result.get("plan"):
             st.success("Travel plan generated!")
             # st.json(result["plan"])  # Commented out for production

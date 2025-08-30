@@ -5,6 +5,7 @@ Handles both Streamlit cache clearing and Redis cache management
 
 import streamlit as st
 import asyncio
+import requests
 import logging
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timedelta
@@ -96,7 +97,31 @@ class CacheManager:
     
     def clear_redis_cache_sync(self, cache_type: Optional[str] = None) -> Dict[str, Any]:
         """Synchronous wrapper for clear_redis_cache"""
-        return asyncio.run(self.clear_redis_cache(cache_type))
+        try:
+            # Prefer cached sync httpx client
+            try:
+                from frontend.utils.http_client import get_sync_client
+                client = get_sync_client()
+            except Exception:
+                client = None
+
+            if cache_type:
+                url = f"{self.api_base_url.rstrip('/')}/api/cache/clear/{cache_type}"
+            else:
+                url = f"{self.api_base_url.rstrip('/')}/api/cache/clear"
+
+            if client is None:
+                resp = requests.post(url, timeout=30)
+                resp.raise_for_status()
+                return resp.json()
+            else:
+                resp = client.post(url, timeout=30.0)
+                resp.raise_for_status()
+                return resp.json()
+
+        except Exception as e:
+            logger.error(f"Error clearing Redis cache (sync): {e}")
+            return {'error': str(e)}
     
     def get_cache_clear_time(self) -> Optional[datetime]:
         """Get the last time cache was cleared"""
@@ -140,7 +165,25 @@ class CacheManager:
     
     def get_cache_stats_sync(self) -> Dict[str, Any]:
         """Synchronous wrapper for get_cache_stats"""
-        return asyncio.run(self.get_cache_stats())
+        try:
+            try:
+                from frontend.utils.http_client import get_sync_client
+                client = get_sync_client()
+            except Exception:
+                client = None
+
+            url = f"{self.api_base_url.rstrip('/')}/api/cache/stats"
+            if client is None:
+                resp = requests.get(url, timeout=30)
+                resp.raise_for_status()
+                return resp.json()
+            else:
+                resp = client.get(url, timeout=30.0)
+                resp.raise_for_status()
+                return resp.json()
+        except Exception as e:
+            logger.error(f"Error getting cache stats (sync): {e}")
+            return {'error': str(e)}
     
     def render_cache_management_ui(self):
         """Render a cache management UI in Streamlit"""

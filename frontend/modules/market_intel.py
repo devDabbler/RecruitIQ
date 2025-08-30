@@ -1,9 +1,9 @@
 # frontend/modules/market_intel.py
 import streamlit as st
-import httpx
-import asyncio
 import pandas as pd
 import altair as alt
+import requests
+from frontend.utils.http_client import get_sync_client
 from frontend.utils.text_formatter import format_ui_text, format_salary, wrap_with_market_data_container
 
 def page():
@@ -27,13 +27,13 @@ def page():
     tab1, tab2, tab3 = st.tabs(["Salary Insights", "Skill Trends", "Location Analysis"])
 
     with tab1:
-        asyncio.run(salary_insights())
+        salary_insights()
     with tab2:
-        asyncio.run(skill_trends())
+        skill_trends()
     with tab3:
-        asyncio.run(location_analysis())
+        location_analysis()
 
-async def salary_insights():
+def salary_insights():
     """Display salary insights using agentic backend."""
     st.subheader("Salary Insights")
 
@@ -66,17 +66,21 @@ async def salary_insights():
             try:
                 base_api_url = st.session_state.get("api_url", "http://localhost:8000")
                 api_url = f"{base_api_url}/api/intelligence/benchmark_salary"
-                async def fetch_salary():
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        payload = {
-                            "job_title": role,
-                            "location": location,
-                            "experience_level": experience
-                        }
-                        resp = await client.post(api_url, json=payload)
-                        resp.raise_for_status()
-                        return resp.json()
-                result = await fetch_salary()
+                def fetch_salary():
+                    payload = {
+                        "job_title": role,
+                        "location": location,
+                        "experience_level": experience
+                    }
+                    client = get_sync_client()
+                    if client is None:
+                        resp = requests.post(api_url, json=payload, timeout=30)
+                    else:
+                        resp = client.post(api_url, json=payload, timeout=30.0)
+                    resp.raise_for_status()
+                    return resp.json()
+
+                result = fetch_salary()
                 if result.get("status") == "completed" and "benchmark" in result:
                     benchmark_data = result['benchmark']
                     
@@ -340,7 +344,7 @@ def display_salary_metric(title, value, subtitle):
     )
     st.markdown(formatted_html, unsafe_allow_html=True)
 
-async def skill_trends():
+def skill_trends():
     """Display skill trends using agentic backend."""
     st.subheader("Skill Trends")
 
@@ -358,16 +362,17 @@ async def skill_trends():
             try:
                 base_api_url = st.session_state.get("api_url", "http://localhost:8000")
                 api_url = f"{base_api_url}/api/intelligence/analyze_talent_pool"
-                async def fetch_skills():
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        payload = {
-                            "industry": industry,
-                            "region": region
-                        }
-                        resp = await client.post(api_url, json=payload)
-                        resp.raise_for_status()
-                        return resp.json()
-                result = await fetch_skills()
+                def fetch_skills():
+                    payload = {"industry": industry, "region": region}
+                    client = get_sync_client()
+                    if client is None:
+                        resp = requests.post(api_url, json=payload, timeout=30)
+                    else:
+                        resp = client.post(api_url, json=payload, timeout=30.0)
+                    resp.raise_for_status()
+                    return resp.json()
+
+                result = fetch_skills()
                 if result.get("status") == "completed" and "skills" in result:
                     # Process skill names to ensure proper spacing
                     if "skills" in result and isinstance(result["skills"], list):
@@ -406,7 +411,7 @@ async def skill_trends():
     else:
         st.info("Select industry and region, then click 'Analyze Talent Pool' to view recruiter-focused skill trends.")
 
-async def location_analysis():
+def location_analysis():
     """Display location-based job market analysis using agentic backend."""
     st.subheader("Location Analysis")
 
@@ -427,16 +432,17 @@ async def location_analysis():
             try:
                 base_api_url = st.session_state.get("api_url", "http://localhost:8000")
                 api_url = f"{base_api_url}/api/intelligence/analyze_location"
-                async def fetch_locations():
-                    async with httpx.AsyncClient(timeout=30.0) as client:
-                        payload = {
-                            "job_role": job_role,
-                            "work_arrangement": remote_filter
-                        }
-                        resp = await client.post(api_url, json=payload)
-                        resp.raise_for_status()
-                        return resp.json()
-                result = await fetch_locations()
+                def fetch_locations():
+                    payload = {"job_role": job_role, "work_arrangement": remote_filter}
+                    client = get_sync_client()
+                    if client is None:
+                        resp = requests.post(api_url, json=payload, timeout=30)
+                    else:
+                        resp = client.post(api_url, json=payload, timeout=30.0)
+                    resp.raise_for_status()
+                    return resp.json()
+
+                result = fetch_locations()
                 if result.get("status") == "completed" and "locations" in result:
                     # Fix any text spacing issues in location data
                     if "locations" in result and isinstance(result["locations"], list):

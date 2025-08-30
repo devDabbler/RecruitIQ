@@ -17,28 +17,40 @@ from typing import List, Dict, Any
 
 from frontend.utils.ui_helpers import fix_merged_text, sanitize_html
 
-# Configure logging
+# Configure logging (do not add file handlers at import time)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-BACKEND_URL = "http://localhost:8000"
+
+def get_backend_url() -> str:
+    """Resolve the backend URL dynamically from session state with a sensible default.
+
+    This keeps the frontend dynamic and avoids hardcoding backend endpoints.
+    """
+    try:
+        if 'api_url' in st.session_state and st.session_state['api_url']:
+            return st.session_state['api_url'].rstrip('/')
+    except Exception:
+        pass
+    return "http://localhost:8000"
 
 @st.cache_data(ttl=300)
 def fetch_active_jobs():
     """Fetch active jobs from the ATS for the dropdown"""
     try:
-        url = f"{BACKEND_URL}/api/jobs/"
+        backend = get_backend_url()
+        url = f"{backend}/api/jobs/"
         params = {
             "page_size": 100,  # Get up to 100 jobs
             "sort_by": "created_at",
             "sort_order": "desc"
         }
         logger.info(f"Fetching jobs from: {url} with params: {params}")
-        
+
         response = requests.get(url, params=params, timeout=10)
         logger.info(f"Response status: {response.status_code}")
         logger.info(f"Response headers: {dict(response.headers)}")
-        
+
         if response.status_code == 200:
             data = response.json()
             logger.info(f"Response data keys: {list(data.keys()) if isinstance(data, dict) else 'Not a dict'}")
@@ -341,8 +353,9 @@ def page():
                                 job_id = selected_job.get('id') if selected_job else None
                                 sync_response = None
                                 if job_id:
+                                    sync_url = f"{get_backend_url()}/api/jobs/sync-to-neo4j"
                                     sync_response = requests.post(
-                                        f"{BACKEND_URL}/api/jobs/sync-to-neo4j",
+                                        sync_url,
                                         json={"job_ids": [job_id]},
                                         timeout=30
                                     )
@@ -363,8 +376,9 @@ def page():
                             # Now process the resume with the agent
                             files = {"files": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
                             task_details = {"target_job_title": target_job_title, "job_data": selected_job}
+                            agent_task_url = f"{get_backend_url()}/api/assistant/agent-task"
                             response = requests.post(
-                                f"{BACKEND_URL}/api/assistant/agent-task",
+                                agent_task_url,
                                 files=files,
                                 data={
                                     "agent_name": "ResumeProcessingAgent",
@@ -394,46 +408,37 @@ def page():
                                 progress_bar = st.progress(0)
                                 status_text = st.empty()
                                 
-                                for attempt in range(max_attempts):
-                                    # Update progress
-                                    progress = (attempt + 1) / max_attempts
-                                    progress_bar.progress(progress)
-                                    status_text.text(f"🔄 Processing... ({attempt + 1}/{max_attempts})")
-                                    
-                                    time.sleep(5)  # Wait 5 seconds between polls
-                                    
-                                    # Check task status
+                                # Start a non-blocking background poller to monitor task status
+                                status_url = f"{get_backend_url()}/api/assistant/task-status/{task_id}"
+                                try:
+                                    from frontend.utils.assistant_poller import start_task_poller
+                                    # The poller will populate `st.session_state['assistant_parsed_data']` when done
+                                    start_task_poller(task_id=task_id, status_url=status_url, result_key="assistant_parsed_data", interval=5.0, max_attempts=max_attempts)
+                                    st.info("🔄 Background processing started. This page will update when processing completes.")
+                                    # Show a lightweight status area that reflects the current known status
+                                    polling_status = st.session_state.get(f"assistant_task_status_{task_id}", "processing")
+                                    st.write(f"Task status: {polling_status}")
+                                    # Keep an indeterminate progress bar to indicate background work
+                                    progress_bar.progress(0.5)
+                                    # Don't block — let Streamlit rerun update UI when session_state changes
+                                except Exception as e:
+                                    logger.exception("Failed to start background poller")
+                                    st.error("Failed to start background poller. Falling back to direct polling.")
+                                    # Fallback: small blocking loop (short) to check once or twice
                                     try:
-                                        status_response = requests.get(
-                                            f"{BACKEND_URL}/api/assistant/task-status/{task_id}",
-                                            timeout=30
-                                        )
-                                        
+                                        status_response = requests.get(status_url, timeout=30)
                                         if status_response.status_code == 200:
                                             task_result = status_response.json()
-                                            logger.info(f"Task status check {attempt + 1}: {task_result}")
-                                            
                                             if task_result.get("status") == "completed":
                                                 result = task_result.get("result", {})
-                                                logger.info(f"Task completed successfully: {result}")
-                                                progress_bar.progress(1.0)
-                                                status_text.text("✅ Processing completed!")
-                                                break
-                                            elif task_result.get("status") == "failed":
-                                                error_msg = task_result.get("error", "Task failed")
-                                                logger.error(f"Task failed: {error_msg}")
-                                                st.error(f"Task failed: {error_msg}")
-                                                return
+                                                st.session_state.assistant_parsed_data = result
+                                                st.success("✅ Processing completed!")
+                                            else:
+                                                st.info(f"Task status: {task_result.get('status')}")
                                         else:
-                                            logger.warning(f"Failed to check task status: {status_response.status_code}")
+                                            st.warning("Could not retrieve task status from backend")
                                     except Exception as e:
-                                        logger.warning(f"Error checking task status: {e}")
-                                        # Continue polling even if there's an error
-                                
-                                else:
-                                    # Timeout
-                                    st.error("Task processing timed out after 5 minutes")
-                                    return
+                                        logger.warning(f"Fallback status check failed: {e}")
                             
                             if result.get("status") == "success":
                                 # Store the complete agent response so that all analysis fields (job fit score, 
@@ -582,7 +587,8 @@ def page():
                                     "resume_data": parsed_data,
                                     "settings": {"save_to_database": False, "create_candidate": False, "filename": original_filename}
                                 }
-                                response = requests.post(f"{BACKEND_URL}/api/resume/confirm", json=payload, timeout=180)
+                                confirm_url = f"{get_backend_url()}/api/resume/confirm"
+                                response = requests.post(confirm_url, json=payload, timeout=180)
                                 response.raise_for_status()
                                 save_response = response.json()
                                 if save_response.get("success"):

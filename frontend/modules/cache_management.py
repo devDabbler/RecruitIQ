@@ -130,15 +130,16 @@ def page():
     if st.button("Check Cache Health"):
         with st.spinner("Checking cache health..."):
             try:
-                import httpx
-                import asyncio
-                
-                async def check_health():
-                    async with httpx.AsyncClient() as client:
-                        response = await client.get("http://localhost:8000/api/cache/health", timeout=10.0)
-                        return response.json()
-                
-                health_result = asyncio.run(check_health())
+                from frontend.utils.http_client import get_sync_client
+                client = get_sync_client()
+                url = "http://localhost:8000/api/cache/health"
+                if client is None:
+                    import requests as _requests
+                    resp = _requests.get(url, timeout=10)
+                else:
+                    resp = client.get(url, timeout=10.0)
+                resp.raise_for_status()
+                health_result = resp.json()
                 
                 if health_result.get('status') == 'healthy':
                     st.success("✅ Cache system is healthy")

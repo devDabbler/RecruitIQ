@@ -1,57 +1,60 @@
 import streamlit as st
-import httpx
-import asyncio
 import logging
 from typing import Dict, Any, List, Optional
 import requests
-from utils.ui_helpers import format_skills_list
-import pandas as pd
+from frontend.utils.ui_helpers import format_skills_list
+# pandas will be lazy-imported where needed
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def fetch_job_async(api_url: str, job_id: int) -> Optional[Dict[str, Any]]:
-    """Fetch a job by ID from the API asynchronously"""
+def fetch_job(api_url: str, job_id: int) -> Optional[Dict[str, Any]]:
+    """Fetch a job by ID from the API synchronously using cached client when available."""
     try:
-        # Ensure api_url has the correct format - remove trailing slash
         api_url = api_url.rstrip('/')
-        
-        # Construct the endpoint properly
         endpoint = f"{api_url}/api/jobs/{job_id}"
         logger.info(f"Fetching job {job_id} from {endpoint}")
-        
-        async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
-            response = await client.get(endpoint)
-            response.raise_for_status()
-            job = response.json()
-            logger.info(f"Successfully fetched job {job_id}")
-            return job
+
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.get(endpoint, timeout=15)
+            resp.raise_for_status()
+            return resp.json()
+        else:
+            resp = client.get(endpoint, timeout=15.0)
+            resp.raise_for_status()
+            return resp.json()
     except Exception as e:
         logger.error(f"Error fetching job {job_id}: {str(e)}")
         return None
 
-def fetch_job(api_url: str, job_id: int) -> Optional[Dict[str, Any]]:
-    """Synchronous wrapper for async job fetching (for Streamlit compatibility)"""
-    return asyncio.run(fetch_job_async(api_url, job_id))
-
-async def fetch_matching_candidates_async(api_url: str, job_id: int) -> List[Dict[str, Any]]:
+def fetch_matching_candidates(api_url: str, job_id: int) -> List[Dict[str, Any]]:
     """Fetch candidates that match a job using the robust /search/match_candidates endpoint."""
     try:
-        # Ensure api_url has the correct format - remove trailing slash
         api_url = api_url.rstrip('/')
-        
-        # Construct the endpoint properly
         endpoint = f"{api_url}/api/search/match_candidates"
         logger.info(f"Fetching matching candidates for job {job_id} via {endpoint}")
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                endpoint,
-                json={"job_ids": [int(job_id)], "min_score": 30.0}
-            )
-            response.raise_for_status()
-            data = response.json()
+
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.post(endpoint, json={"job_ids": [int(job_id)], "min_score": 30.0}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        else:
+            resp = client.post(endpoint, json={"job_ids": [int(job_id)], "min_score": 30.0}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
             
             # Debug: Log the raw response
             logger.info(f"Raw match_candidates response type: {type(data)}, data: {str(data)[:200]}...")
@@ -147,27 +150,29 @@ async def fetch_matching_candidates_async(api_url: str, job_id: int) -> List[Dic
         logger.exception("Exception details:")
         return []
 
-def fetch_matching_candidates(api_url: str, job_id: int) -> List[Dict[str, Any]]:
-    """Synchronous wrapper for async matching candidates fetching"""
-    return asyncio.run(fetch_matching_candidates_async(api_url, job_id))
+# fetch_matching_candidates implemented above synchronously
 
-async def fetch_enhanced_matching_candidates_async(api_url: str, job_id: int, min_score: float = 20.0) -> List[Dict[str, Any]]:
+def fetch_enhanced_matching_candidates(api_url: str, job_id: int, min_score: float = 20.0) -> List[Dict[str, Any]]:
     """Fetch candidates that match a job using the enhanced matching endpoint."""
     try:
-        # Ensure api_url has the correct format - remove trailing slash
         api_url = api_url.rstrip('/')
-        
-        # Construct the enhanced matching endpoint
         endpoint = f"{api_url}/api/enhanced-matching/match-candidates"
         logger.info(f"Fetching enhanced matching candidates for job {job_id} via {endpoint}")
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                endpoint,
-                json={"job_ids": [int(job_id)], "min_score": min_score}
-            )
-            response.raise_for_status()
-            data = response.json()
+
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.post(endpoint, json={"job_ids": [int(job_id)], "min_score": min_score}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        else:
+            resp = client.post(endpoint, json={"job_ids": [int(job_id)], "min_score": min_score}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
             
             # Debug: Log the raw response
             logger.info(f"Enhanced match_candidates response type: {type(data)}, data: {str(data)[:200]}...")
@@ -218,27 +223,29 @@ async def fetch_enhanced_matching_candidates_async(api_url: str, job_id: int, mi
         logger.exception("Exception details:")
         return []
 
-def fetch_enhanced_matching_candidates(api_url: str, job_id: int, min_score: float = 20.0) -> List[Dict[str, Any]]:
-    """Synchronous wrapper for enhanced matching candidates."""
-    return asyncio.run(fetch_enhanced_matching_candidates_async(api_url, job_id, min_score))
+# fetch_enhanced_matching_candidates implemented above synchronously
 
-async def fetch_similar_jobs_async(api_url: str, job_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+def fetch_similar_jobs(api_url: str, job_id: int, limit: int = 5) -> List[Dict[str, Any]]:
     """Fetch similar jobs using the enhanced matching endpoint."""
     try:
-        # Ensure api_url has the correct format - remove trailing slash
         api_url = api_url.rstrip('/')
-        
-        # Construct the similar jobs endpoint
         endpoint = f"{api_url}/api/enhanced-matching/similar-jobs"
         logger.info(f"Fetching similar jobs for job {job_id} via {endpoint}")
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                endpoint,
-                json={"job_id": int(job_id), "limit": limit}
-            )
-            response.raise_for_status()
-            data = response.json()
+
+        try:
+            from frontend.utils.http_client import get_sync_client
+            client = get_sync_client()
+        except Exception:
+            client = None
+
+        if client is None:
+            resp = requests.post(endpoint, json={"job_id": int(job_id), "limit": limit}, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+        else:
+            resp = client.post(endpoint, json={"job_id": int(job_id), "limit": limit}, timeout=30.0)
+            resp.raise_for_status()
+            data = resp.json()
             
             # Debug: Log the raw response
             logger.info(f"Similar jobs response type: {type(data)}, data: {str(data)[:200]}...")
@@ -286,9 +293,7 @@ async def fetch_similar_jobs_async(api_url: str, job_id: int, limit: int = 5) ->
         logger.exception("Exception details:")
         return []
 
-def fetch_similar_jobs(api_url: str, job_id: int, limit: int = 5) -> List[Dict[str, Any]]:
-    """Synchronous wrapper for similar jobs."""
-    return asyncio.run(fetch_similar_jobs_async(api_url, job_id, limit))
+# fetch_similar_jobs implemented above synchronously
 
 def get_status_color(status: str) -> str:
     """Return a color based on job status"""
@@ -621,7 +626,11 @@ def page():
     logger.info("="*80)
     logger.info("JOB DETAIL PAGE CALLED")
     logger.info("="*80)
-    logger.info(f"Timestamp: {pd.Timestamp.now()}")
+    try:
+        import pandas as pd
+        logger.info(f"Timestamp: {pd.Timestamp.now()}")
+    except Exception:
+        logger.info("Timestamp: (pandas unavailable)")
     
     # Log all relevant session state
     logger.info("Session State at Job Detail Entry:")

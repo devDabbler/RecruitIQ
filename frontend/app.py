@@ -7,9 +7,9 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Enable hot reloading
-st.cache_data.clear()
-st.cache_resource.clear()
+# Enable hot reloading (dev only). Do not clear caches in normal runs; uncomment only when debugging.
+# st.cache_data.clear()
+# st.cache_resource.clear()
 
 # Configure Streamlit to watch for file changes
 # Configuration moved to .streamlit/config.toml
