@@ -8,7 +8,7 @@ import requests
 import pandas as pd
 import plotly.express as px
 import json
-from utils.ui_helpers import display_skills_badges, format_skills_list
+from frontend.utils.ui_helpers import display_skills_badges, format_skills_list
 
 def page():
     """Display the enhanced matching page in the Streamlit application."""

@@ -16,13 +16,21 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default=os.getenv("GOOGLE_GEMINI_API_KEY", ""))
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     openrouter_api_key: str = Field(default=os.getenv("OPENROUTER_API_KEY", ""))
-    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3-8b-instruct:free"))
+    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.3-8b-instruct:free"))
+    openrouter_base_url: str = Field(default=os.getenv("OPENROUTER_BASE_URL", "https://api.openrouter.ai/v1"))
+    openrouter_timeout: float = Field(default=float(os.getenv("OPENROUTER_TIMEOUT", "60.0")))
+    openrouter_max_retries: int = Field(default=int(os.getenv("OPENROUTER_MAX_RETRIES", "3")))
+    openrouter_backoff_factor: float = Field(default=float(os.getenv("OPENROUTER_BACKOFF_FACTOR", "0.8")))
+    # Toggle to enable OpenRouter usage for assistant queries (keeps behavior dynamic)
+    openrouter_enabled: bool = Field(default=os.getenv("OPENROUTER_ENABLED", "false").lower() == "true")
     
     # Travel API Keys
     google_api_key: str = Field(default=os.getenv("GOOGLE_API_KEY", ""))
     google_cse_id: str = Field(default=os.getenv("GOOGLE_CSE_ID", ""))
     traveltime_api_key: str = Field(default=os.getenv("TRAVELTIME_API_KEY", ""))
     mapbox_access_token: str = Field(default=os.getenv("MAPBOX_ACCESS_TOKEN", ""))
+    # Dedicated OpenRouteService routing API key (separate from LLM OpenRouter key)
+    openrouteservice_api_key: str = Field(default=os.getenv("OPENROUTESERVICE_API_KEY", ""))
     
     # Meta Llama Configuration
     meta_llama_enabled: bool = Field(default=os.getenv("META_LLAMA_ENABLED", "false").lower() == "true")
@@ -76,6 +84,8 @@ class Settings(BaseSettings):
     
     # Intent detection settings
     INTENT_ROUTER_MODE: str = Field(default=os.getenv("INTENT_ROUTER_MODE", "hybrid"))  # semantic|legacy|hybrid
+    # Comma-separated list of intents that should prefer the Meta Llama model when generating assistant responses
+    ASSISTANT_META_LLAMA_INTENTS: str = Field(default=os.getenv("ASSISTANT_META_LLAMA_INTENTS", "travel_time,transportation_options"))
     
     model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         # `.env` files have lowest priority

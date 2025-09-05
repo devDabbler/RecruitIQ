@@ -2,7 +2,7 @@
 import streamlit as st
 from datetime import datetime
 import asyncio
-from utils.session_utils import get_user_tier
+from frontend.utils.session_utils import get_user_tier
 
 def page():
     """Display tasks page with detailed task information and management features"""

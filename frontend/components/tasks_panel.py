@@ -1,7 +1,7 @@
 import streamlit as st
 from datetime import datetime
 
-from utils.session_utils import get_user_tier
+from frontend.utils.session_utils import get_user_tier
 import asyncio
 
 def tasks_panel():

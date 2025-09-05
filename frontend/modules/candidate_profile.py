@@ -4,7 +4,7 @@ import logging
 import webbrowser
 from streamlit import switch_page
 from .resume_upload import fix_merged_text
-from utils.ui_helpers import format_skills_list
+from frontend.utils.ui_helpers import format_skills_list
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

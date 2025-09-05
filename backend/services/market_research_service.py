@@ -20,6 +20,16 @@ class MarketResearchService:
     def __init__(self, web_search_service: WebSearchService, llm_service: LLMService):
         self.web_search_service = web_search_service
         self.llm_service = llm_service
+        
+        # Initialize Meta Llama model override
+        self._model_override = None
+        try:
+            from backend.utils.config import Settings
+            settings = Settings()
+            if getattr(settings, 'openrouter_enabled', False):
+                self._model_override = getattr(settings, 'openrouter_default_model', None)
+        except Exception:
+            pass
 
         # Experience level mappings
         self.experience_levels = {
@@ -102,7 +112,8 @@ class MarketResearchService:
             analysis = await self.llm_service.generate_text_async(
                 prompt=prompt,
                 max_tokens=1500,
-                task_type="market_research"
+                task_type="market_research",
+                model=self._model_override
             )
 
             return {
@@ -175,7 +186,8 @@ class MarketResearchService:
             comparison = await self.llm_service.generate_text_async(
                 prompt=prompt,
                 max_tokens=1500,
-                task_type="market_research"
+                task_type="market_research",
+                model=self._model_override
             )
 
             return {

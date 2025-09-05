@@ -12,7 +12,7 @@ def log_parsing_errors(error: Exception, resume_text: str, metadata: Dict[str, A
         "resume_preview": resume_text[:200] if resume_text else "",
         "metadata": metadata or {}
     }
-    logger.error(f"Resume parsing failed: {error_info})
+    logger.error(f"Resume parsing failed: {error_info}")
 
 
 def setup_logging():

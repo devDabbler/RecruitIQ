@@ -6,9 +6,11 @@ import asyncio
 import logging
 import os
 import httpx
+import random
 from functools import lru_cache
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
+import urllib.parse
 
 # Set cache directory for sentence transformers to avoid re-downloading
 os.environ['SENTENCE_TRANSFORMERS_HOME'] = './models/sentence_transformers'
@@ -600,6 +602,34 @@ class LLMService:
         """
         logger.info(f"Generate text called for prompt: '{prompt[:min(len(prompt), 80)]}...'")
         
+        # If a specific model override is provided and looks like an OpenRouter/Meta Llama slug,
+        # prefer calling OpenRouter directly (non-invasive - requires OPENROUTER_API_KEY in settings).
+        try:
+            openrouter_key = getattr(self.settings, 'openrouter_api_key', '') or os.environ.get('OPENROUTER_API_KEY', '')
+        except Exception:
+            openrouter_key = os.environ.get('OPENROUTER_API_KEY', '')
+
+        if model and isinstance(model, str):
+            model_lower = model.lower()
+            # Accept a broader set of model indicators so configuration remains dynamic.
+            looks_like_meta_llama = (
+                model_lower.startswith('meta-llama/') or
+                'meta-llama' in model_lower or
+                model_lower.startswith('llama-') or
+                'maverick' in model_lower or
+                'llama' in model_lower or
+                'openrouter' in model_lower
+            )
+            openrouter_enabled = getattr(self.settings, 'openrouter_enabled', False)
+            if looks_like_meta_llama and openrouter_key and openrouter_enabled:
+                try:
+                    logger.info(f"Using OpenRouter/OpenAI-compatible provider for model override: {model}")
+                    openrouter_resp = await self._call_openrouter_async(prompt=prompt, model=model, system_message=system_message, max_tokens=max_tokens, api_key=openrouter_key)
+                    if openrouter_resp is not None:
+                        return openrouter_resp
+                except Exception as e:
+                    logger.error(f"OpenRouter call failed for model {model}: {e}")
+
         # Use Nebius AI as the primary model for most tasks (except resume parsing which has its own flow)
         if self.nebius_ai_service and task_type != "resume_parsing":
             try:
@@ -719,6 +749,203 @@ class LLMService:
             logger.error(f"Failed to initialize Nebius AI service: {str(e)}")
             
         self._nebius_ai_initialized = True
+
+    async def _call_openrouter_async(self, prompt: str, model: str, system_message: Optional[str] = None, max_tokens: Optional[int] = None, api_key: str = None) -> Optional[str]:
+        """
+        Minimal OpenRouter call that posts a chat completion request to OpenRouter-compatible API.
+        This keeps the change small and avoids pulling in new heavy dependencies.
+        Returns the text response or None on non-fatal failures.
+        """
+        if not api_key:
+            logger.warning("OpenRouter API key not provided - skipping OpenRouter call")
+            return None
+
+        # Normalize OpenRouter endpoint; allow settings override
+        openrouter_base = getattr(self.settings, 'openrouter_base_url', '') or os.environ.get('OPENROUTER_BASE_URL', '')
+        if not openrouter_base:
+            # Default OpenRouter endpoint
+            openrouter_base = 'https://api.openrouter.ai/v1'
+        
+        # Build the complete URL - if base_url doesn't end with /chat/completions, append it
+        if openrouter_base.endswith('/chat/completions'):
+            url = openrouter_base
+        elif openrouter_base.endswith('/v1'):
+            url = f"{openrouter_base}/chat/completions"
+        elif openrouter_base.endswith('/v1/'):
+            url = f"{openrouter_base}chat/completions"
+        elif '/api/v1/chat/completions' in openrouter_base:
+            # Handle full OpenRouter API URL format
+            url = openrouter_base
+        else:
+            # Assume it's a base URL and append the path
+            url = f"{openrouter_base.rstrip('/')}/chat/completions"
+
+        headers = {
+            'Authorization': f'Bearer {api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        # Construct messages payload if the API expects it (OpenRouter uses messages similar to OpenAI)
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+
+        payload = {
+            "model": model,
+            "messages": messages
+        }
+        if max_tokens:
+            payload["max_tokens"] = int(max_tokens)
+
+        # Configure retries and timeout from settings or environment variables
+        max_retries = getattr(self.settings, 'openrouter_max_retries', 3) or int(os.environ.get('OPENROUTER_MAX_RETRIES', '3'))
+        backoff_factor = getattr(self.settings, 'openrouter_backoff_factor', 0.8) or float(os.environ.get('OPENROUTER_BACKOFF_FACTOR', '0.8'))
+        per_request_timeout = getattr(self.settings, 'openrouter_timeout', 60.0) or float(os.environ.get('OPENROUTER_REQUEST_TIMEOUT', '60.0'))
+
+        # Enhanced DNS resolution and fallback handling
+        try:
+            import socket as _socket
+            parsed = urllib.parse.urlparse(url)
+            host = parsed.netloc.split(':')[0]
+
+            # Skip DNS pre-check if a proxy is configured or if user explicitly requests skipping.
+            proxy_env_keys = ['HTTP_PROXY', 'http_proxy', 'HTTPS_PROXY', 'https_proxy']
+            proxy_present = any(os.environ.get(k) for k in proxy_env_keys)
+            skip_flag = str(os.environ.get('OPENROUTER_SKIP_DNS_CHECK', '')).lower() in ('1', 'true', 'yes')
+
+            # Also skip DNS check if the host is already an IP address
+            is_ip = False
+            try:
+                import ipaddress as _ipaddress
+                _ipaddress.ip_address(host)
+                is_ip = True
+            except Exception:
+                is_ip = False
+
+            if proxy_present or skip_flag or is_ip:
+                logger.debug("Skipping DNS resolution pre-check for OpenRouter (proxy_present=%s, skip_flag=%s, is_ip=%s)", proxy_present, skip_flag, is_ip)
+            else:
+                # Try multiple DNS resolution strategies
+                dns_resolved = False
+                fallback_urls = []
+                
+                # Strategy 1: Direct host resolution
+                try:
+                    _socket.getaddrinfo(host, 443)
+                    logger.debug("DNS resolution for OpenRouter host succeeded (%s)", host)
+                    dns_resolved = True
+                except Exception as _dns_e:
+                    logger.warning(f"Primary DNS resolution failed for {host}: {_dns_e}")
+                    
+                    # Strategy 2: Try alternate hosts from environment
+                    alt_hosts = os.environ.get('OPENROUTER_ALTERNATE_HOSTS', '')
+                    if alt_hosts:
+                        for candidate in [h.strip() for h in alt_hosts.split(',') if h.strip()]:
+                            try:
+                                _socket.getaddrinfo(candidate, 443)
+                                fallback_urls.append(f"https://{candidate}/chat/completions")
+                                logger.info("Alternate OpenRouter host resolved: %s", candidate)
+                            except Exception:
+                                logger.debug("Alternate host failed to resolve: %s", candidate)
+                    
+                    # Strategy 3: Try common fallback patterns
+                    fallback_patterns = [
+                        f"https://api.{host}/chat/completions",
+                        f"https://{host.replace('api.', '')}/chat/completions",
+                        f"https://{host.replace('openrouter', 'api.openrouter')}/chat/completions"
+                    ]
+                    
+                    for fallback_url in fallback_patterns:
+                        try:
+                            fallback_host = urllib.parse.urlparse(fallback_url).netloc.split(':')[0]
+                            _socket.getaddrinfo(fallback_host, 443)
+                            fallback_urls.append(fallback_url)
+                            logger.info("Fallback pattern resolved: %s", fallback_url)
+                        except Exception:
+                            logger.debug("Fallback pattern failed: %s", fallback_url)
+                
+                # If primary DNS failed but we have fallbacks, use the first working one
+                if not dns_resolved and fallback_urls:
+                    url = fallback_urls[0]
+                    logger.info("Using fallback OpenRouter URL: %s", url)
+                    
+        except Exception as e:
+            # If socket isn't available for some reason, continue but note it
+            logger.debug("Socket module unavailable for DNS checks: %s", e)
+
+        last_exc = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Use trust_env=True so httpx will honor HTTP(S)_PROXY if present in environment
+                async with httpx.AsyncClient(timeout=per_request_timeout, trust_env=True) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+
+                if resp.status_code in (200, 201):
+                    try:
+                        data = resp.json()
+                        # Support multiple response shapes: choices[0].message.content or output[0].content
+                        if isinstance(data, dict):
+                            if 'choices' in data and len(data['choices']) > 0:
+                                choice = data['choices'][0]
+                                # OpenRouter/OpenAI style
+                                if isinstance(choice, dict) and 'message' in choice and isinstance(choice['message'], dict):
+                                    return choice['message'].get('content', '')
+                                # older style
+                                if isinstance(choice, dict) and 'text' in choice:
+                                    return choice.get('text', '')
+                            # alternative: output list
+                            if 'output' in data and isinstance(data['output'], list) and len(data['output']) > 0:
+                                first = data['output'][0]
+                                if isinstance(first, dict) and 'content' in first:
+                                    # content can be a string or a list
+                                    content = first['content']
+                                    if isinstance(content, list):
+                                        # join string parts
+                                        return '\n'.join([str(c) for c in content])
+                                    return str(content)
+                        # Fallback to text body
+                        return resp.text
+                    except Exception as parse_e:
+                        logger.error(f"Failed to parse OpenRouter response JSON: {parse_e}")
+                        return resp.text
+                else:
+                    logger.warning(f"OpenRouter request failed: status={resp.status_code} body={resp.text}")
+                    if resp.status_code in (401, 403):
+                        logger.critical("OpenRouter authentication failed - check OPENROUTER_API_KEY in .env/settings")
+                    # For 5xx errors, retry; for 4xx, don't retry
+                    if 500 <= resp.status_code < 600 and attempt < max_retries:
+                        sleep_sec = backoff_factor * (2 ** (attempt - 1)) + random.random() * 0.1
+                        logger.info(f"Retrying OpenRouter request after {sleep_sec:.2f}s backoff (attempt {attempt}/{max_retries})")
+                        await asyncio.sleep(sleep_sec)
+                        continue
+                    return None
+            except Exception as e:
+                last_exc = e
+                # Provide more explicit guidance in logs without exposing secrets
+                logger.error(f"Exception calling OpenRouter (attempt {attempt}/{max_retries}): {type(e).__name__}: {e}")
+                # Common DNS/connectivity guidance
+                if isinstance(e, Exception) and 'getaddrinfo' in str(e):
+                    logger.error("Detected DNS resolution failure when contacting OpenRouter. Check network/DNS or set OPENROUTER_BASE_URL to a reachable endpoint or configure HTTP(S)_PROXY.")
+                    logger.error("You can also try setting OPENROUTER_SKIP_DNS_CHECK=1 to bypass DNS checks, or set OPENROUTER_ALTERNATE_HOSTS with comma-separated alternative endpoints.")
+                elif isinstance(e, Exception) and 'timeout' in str(e).lower():
+                    logger.error("OpenRouter request timed out. Consider increasing OPENROUTER_REQUEST_TIMEOUT or checking network connectivity.")
+                elif isinstance(e, Exception) and 'connection' in str(e).lower():
+                    logger.error("OpenRouter connection failed. Check if the service is accessible from your network.")
+                
+                if attempt < max_retries:
+                    sleep_sec = backoff_factor * (2 ** (attempt - 1)) + random.random() * 0.2
+                    logger.info(f"Retrying after exception (sleep {sleep_sec:.2f}s)")
+                    await asyncio.sleep(sleep_sec)
+                    continue
+                else:
+                    logger.error("OpenRouter call failed after max retries")
+                    return None
+
+        # If we exhausted retries, log final exception if any
+        if last_exc:
+            logger.error(f"OpenRouter final exception: {last_exc}")
+        return None
 
 def verify_llm_connections(llm_service: LLMService) -> Dict[str, bool]:
     """

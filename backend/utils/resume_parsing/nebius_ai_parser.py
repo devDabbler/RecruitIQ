@@ -248,4 +248,9 @@ class NebiusAIParser:
         }
         return legacy_dict
 
+# Backwards-compatible alias expected by tests and older modules
+class NebiusAIResumeParser(NebiusAIParser):
+    """Compatibility alias for older symbol name."""
+    pass
     
+

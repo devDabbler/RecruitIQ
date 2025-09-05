@@ -454,10 +454,19 @@ class RAGService:
             ])
             prompt += f"\n\nConversation history:\n{history_text}"
         
-        # Use Mixtral for classification (fast, efficient)
+        # Use Meta Llama for classification when available
+        model_override = None
+        try:
+            from backend.utils.config import Settings
+            settings = Settings()
+            if getattr(settings, 'openrouter_enabled', False):
+                model_override = getattr(settings, 'openrouter_default_model', None)
+        except Exception:
+            pass
+        
         intent = await self.llm_service.generate_text_async(
             prompt=prompt, 
-            model="gpt-4",
+            model=model_override,
             max_tokens=10,
         )
         
@@ -486,10 +495,10 @@ class RAGService:
         Return only the expanded query text.
         """
         
-        # Use Mixtral for query expansion (fast, efficient)
+        # Use Meta Llama for query expansion when available
         expanded_query = await self.llm_service.generate_text_async(
             prompt=prompt, 
-            model="mixtral",
+            model=model_override,
             max_tokens=100,
         )
         
@@ -571,9 +580,11 @@ class RAGService:
                     f"Documents: {json.dumps([doc.page_content for doc in documents])}\n"
                     f"Rate relevance of each document to the query on a scale of 0-10 as a JSON list."
                 )
+                # Use Meta Llama for reranking when available
+                rerank_model = model_override if 'model_override' in locals() else groq_model
                 score_text = await self.llm_service.generate_text_async(
                     prompt=prompt,
-                    model=groq_model,
+                    model=rerank_model,
                     max_tokens=100,
                 )
                 scores = json.loads(score_text.strip())

@@ -17,12 +17,24 @@ class AgentRegistry:
         agent_name = getattr(agent_class, "name", agent_class.__name__)
         if agent_name in self._agents:
             # Check if it's the same class being registered again
-            if self._agents[agent_name] == agent_class:
-                # Same class, just ignore the duplicate registration
+            existing = self._agents[agent_name]
+            if existing == agent_class:
+                # Same class object, ignore duplicate
                 return
-            else:
-                # Different class with same name, raise error
-                raise ValueError(f"Agent with name '{agent_name}' is already registered with a different class.")
+            # If classes are different objects but come from the same source file
+            # it is likely an import aliasing issue (module imported under two names).
+            try:
+                import inspect
+                existing_file = inspect.getsourcefile(existing) or inspect.getfile(existing)
+                new_file = inspect.getsourcefile(agent_class) or inspect.getfile(agent_class)
+                if existing_file == new_file:
+                    # Same origin file; treat as duplicate registration and ignore
+                    return
+            except Exception:
+                # If we can't determine file origin, fall through to error
+                pass
+            # Different class with same name from different source: raise error
+            raise ValueError(f"Agent with name '{agent_name}' is already registered with a different class.")
         self._agents[agent_name] = agent_class
         print(f"Agent '{agent_name}' registered.")
 

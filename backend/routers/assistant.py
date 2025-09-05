@@ -242,6 +242,42 @@ async def chat_with_assistant(
         logger.info(f"ASSISTANT ROUTER: Processing chat query: '{message}'")
         logger.info(f"ASSISTANT ROUTER: Conversation history length: {len(conversation_history)}")
         logger.info(f"ASSISTANT ROUTER: Conversation context: {conversation_context}")
+        # Parse assistant-specific intents that should prefer Meta Llama / OpenRouter
+        try:
+            raw_assistant_intents = settings.ASSISTANT_META_LLAMA_INTENTS or ""
+            assistant_intents = [s.strip() for s in raw_assistant_intents.split(',') if s.strip()]
+        except Exception:
+            assistant_intents = ["travel_time", "transportation_options"]
+
+        # Compute per-request model_override when intent matches assistant intents
+        model_override = None
+        try:
+            # Use intent processor to detect intent when available; fall back to simple keyword checks
+            detected_intent = None
+            try:
+                # Handle both sync and async detect_intent methods
+                intent_call = intent_processor.detect_intent(message)
+                if inspect.isawaitable(intent_call):
+                    intent_result = await intent_call
+                else:
+                    intent_result = intent_call
+                detected_intent = getattr(intent_result, 'intent', None) if intent_result is not None else None
+            except Exception:
+                detected_intent = None
+
+            # If detected intent matches configured assistant intents, set model override
+            # but only if OpenRouter usage is enabled in settings to avoid changing
+            # behavior when OpenRouter is intentionally disabled.
+            if detected_intent and detected_intent in assistant_intents:
+                if getattr(settings, 'openrouter_enabled', False):
+                    model_override = getattr(settings, 'openrouter_default_model', None)
+                else:
+                    model_override = None
+        except Exception:
+            model_override = None
+
+        if model_override:
+            logger.info(f"ASSISTANT ROUTER: Using model_override={model_override} for detected_intent={detected_intent}")
         
         # REFINED SOURCING STRATEGY HANDLER with semantic confidence gating
         # Only trigger for explicit sourcing strategy requests, not for showing existing candidates
@@ -394,10 +430,27 @@ async def chat_with_assistant(
             try:
                 logger.info(f"DIRECT HANDLER: Generating sourcing strategies for {role} candidates")
                 # Generate the response directly
+                # If this direct handler should prefer Meta Llama, pass the configured model
+                model_override = None
+                try:
+                    raw = settings.ASSISTANT_META_LLAMA_INTENTS or ""
+                    assistant_intents = [s.strip() for s in raw.split(',') if s.strip()]
+                except Exception:
+                    assistant_intents = ["travel_time", "transportation_options"]
+
+                if "travel_time" in assistant_intents or "transportation_options" in assistant_intents:
+                    # Only force model override for the chat handler when OpenRouter is enabled
+                    if getattr(settings, 'openrouter_enabled', False):
+                        model_override = settings.openrouter_default_model
+                        logger.info(f"Assistant router: forcing model override for chat handler: {model_override}")
+                    else:
+                        model_override = None
+
                 response = await llm_service.generate_text_async(
                     prompt=prompt,
                     task_type="chat",
-                    system_message="You are a recruiting expert who provides practical advice on sourcing and finding qualified candidates. Your guidance is specific, actionable, and based on industry best practices."
+                    system_message="You are a recruiting expert who provides practical advice on sourcing and finding qualified candidates. Your guidance is specific, actionable, and based on industry best practices.",
+                    model=model_override
                 )
                 
                 # Format the response
@@ -463,6 +516,12 @@ async def chat_with_assistant(
         # Log the detected intent for debugging
         logger.info(f"ASSISTANT ROUTER: Final detected intent: '{intent}', entities: {entities}")
 
+        # Determine per-call model override for assistant intents (use OpenRouter Meta Llama slug)
+        try:
+            model_override = settings.openrouter_default_model if (intent in assistant_intents and getattr(settings, 'openrouter_enabled', False)) else None
+        except Exception:
+            model_override = None
+
         # EARLY REDIRECTION: If database is unavailable and intent requires database, redirect to web search
         if conversation_context.get("db_available") is False and intent in ["candidate_count", "job_count", "search_candidates", "candidate_breakdown", "view_profile"]:
             logger.warning(f"Database unavailable but intent {intent} requires database - redirecting to web search")
@@ -486,7 +545,6 @@ async def chat_with_assistant(
                 if intent_result.get("intent_processed", False):
                     # Use the formatted response from the travel service
                     formatted_response = intent_result.get("formatted_response", "")
-
                     if formatted_response:
                         formatted_response = _clean_generated_text(formatted_response)
                         return {
@@ -494,16 +552,45 @@ async def chat_with_assistant(
                             "conversation_context": conversation_context
                         }
                     else:
-                        # Fallback if no formatted response
+                        # Fallback: if the travel service returned structured travel_data but didn't format it,
+                        # ask the LLM to produce a user-friendly summary. Use model_override when configured.
                         travel_data = intent_result.get("travel_data") or intent_result.get("options_data")
                         if travel_data:
-                            response = f"I found travel information for {travel_data.get('origin', '')} to {travel_data.get('destination', '')}, but couldn't format it properly."
+                            try:
+                                # Build a neutral prompt that asks the LLM to format structured travel info
+                                prompt = (
+                                    f"The user asked: {message}\n\n"
+                                    f"Format the following travel information into a concise, user-friendly reply.\n\n"
+                                    f"Travel data:\n{json.dumps(travel_data, indent=2)}\n\n"
+                                    "Include duration, options, and cost estimates when available. Keep it practical and actionable."
+                                )
+
+                                logger.info(f"ASSISTANT ROUTER: Formatting travel_data with model_override={model_override}")
+                                formatted = await llm_service.generate_text_async(
+                                    prompt=prompt,
+                                    task_type="chat",
+                                    model=model_override,
+                                    system_message="You are a travel assistant that formats raw travel data into clear, actionable guidance for users."
+                                )
+                                formatted = _clean_generated_text(formatted)
+                                return {
+                                    "response": formatted,
+                                    "conversation_context": conversation_context
+                                }
+                            except Exception as e:
+                                logger.error(f"Error formatting travel data with LLM: {e}")
+                                # Fallback textual message if LLM formatting fails
+                                response = f"I found travel information for {travel_data.get('origin', '')} to {travel_data.get('destination', '')}, but couldn't format it properly."
+                                return {
+                                    "response": response,
+                                    "conversation_context": conversation_context
+                                }
                         else:
                             response = "I had trouble getting travel information. Please check your origin and destination and try again."
-                        return {
-                            "response": response,
-                            "conversation_context": conversation_context
-                        }
+                            return {
+                                "response": response,
+                                "conversation_context": conversation_context
+                            }
                 else:
                     # Handle errors from the travel service
                     error_msg = intent_result.get("error", "Travel service unavailable")
@@ -581,10 +668,11 @@ async def chat_with_assistant(
                             
                             Generate a natural, informative response that directly answers the user's question.
                             """
-                            
+
                             summary_response = await llm_service.generate_text_async(
                                 prompt=prompt,
                                 task_type="chat",
+                                model=model_override,
                                 system_message="You are a helpful assistant that provides comprehensive answers based on search results. Focus on giving practical, actionable information."
                             )
                         else:
@@ -607,7 +695,12 @@ async def chat_with_assistant(
                         Provide insights about this job posting, including key requirements, qualifications, and any notable aspects.
                         """
                         
-                        analysis_response = await llm_service.generate_text(prompt)
+                        analysis_response = await llm_service.generate_text_async(
+                            prompt=prompt,
+                            task_type="chat",
+                            model=model_override,
+                            system_message="You are a helpful assistant that provides analysis of job postings."
+                        )
                         
                         return {
                             "response": analysis_response,
@@ -626,7 +719,12 @@ async def chat_with_assistant(
                         Provide insights about this company, including industry, size, and any notable aspects.
                         """
                         
-                        analysis_response = await llm_service.generate_text(prompt)
+                        analysis_response = await llm_service.generate_text_async(
+                            prompt=prompt,
+                            task_type="chat",
+                            model=model_override,
+                            system_message="You are a helpful assistant that provides analysis of company information."
+                        )
                         
                         return {
                             "response": analysis_response,
@@ -1059,6 +1157,7 @@ async def chat_with_assistant(
                 response = await llm_service.generate_text_async(
                     prompt=prompt,
                     task_type="chat",
+                    model=model_override,
                     system_message="You are a recruiting expert who provides practical advice on sourcing and finding qualified candidates. Your guidance is specific, actionable, and based on industry best practices."
                 )
                 
@@ -1270,13 +1369,100 @@ async def chat_with_assistant(
                 else:
                     # Fallback to a simple count if no specific breakdown is available
                     response_text = f"We have {db.query(Candidate).count()} candidates with various experience levels in the database."
+            elif attribute in ['status', 'stage', 'phase']:
+                # Get candidates grouped by status/stage
+                try:
+                    status_counts = db.query(
+                        Candidate.status, 
+                        func.count(Candidate.id).label('count')
+                    ).group_by(Candidate.status).all()
+                    
+                    if status_counts:
+                        response_text = "Here's a breakdown of candidates by status:\n\n"
+                        total_candidates = sum(count for _, count in status_counts)
+                        
+                        for status, count in sorted(status_counts, key=lambda x: x[1], reverse=True):
+                            percentage = round((count / total_candidates) * 100, 1)
+                            status_name = status if status else "Unspecified status"
+                            response_text += f"- {status_name}: {count} candidates ({percentage}%)\n"
+                        
+                        # Add pipeline insights
+                        active_candidates = sum(count for status, count in status_counts if status and status.lower() in ['active', 'screening', 'interviewing'])
+                        if active_candidates > 0:
+                            active_percentage = round((active_candidates / total_candidates) * 100, 1)
+                            response_text += f"\n📊 Pipeline Summary:\n"
+                            response_text += f"- Active candidates: {active_candidates} ({active_percentage}%)\n"
+                            response_text += f"- Total candidates: {total_candidates}\n"
+                    else:
+                        response_text = f"We have {db.query(Candidate).count()} candidates in the database, but no status information is available."
+                except Exception as e:
+                    logger.warning(f"Error analyzing candidate status: {e}")
+                    response_text = f"We have {db.query(Candidate).count()} candidates in the database."
+            elif attribute in ['company', 'companies', 'employer']:
+                # Get candidates grouped by current company
+                try:
+                    company_counts = db.query(
+                        Candidate.current_company, 
+                        func.count(Candidate.id).label('count')
+                    ).group_by(Candidate.current_company).all()
+                    
+                    if company_counts:
+                        # Filter out None/empty values and sort by count
+                        valid_companies = [(company, count) for company, count in company_counts if company and company.strip()]
+                        valid_companies.sort(key=lambda x: x[1], reverse=True)
+                        
+                        if valid_companies:
+                            response_text = "Here's a breakdown of candidates by current company:\n\n"
+                            for company, count in valid_companies[:15]:  # Show top 15 companies
+                                response_text += f"- {company}: {count} candidates\n"
+                            
+                            if len(valid_companies) > 15:
+                                response_text += f"\n... and {len(valid_companies) - 15} more companies"
+                        else:
+                            response_text = "Most candidates don't have company information specified."
+                    else:
+                        response_text = f"We have {db.query(Candidate).count()} candidates in the database, but no company information is available."
+                except Exception as e:
+                    logger.warning(f"Error analyzing candidate companies: {e}")
+                    response_text = f"We have {db.query(Candidate).count()} candidates in the database."
+            elif attribute in ['source', 'sources', 'origin']:
+                # Get candidates grouped by source
+                try:
+                    source_counts = db.query(
+                        Candidate.source, 
+                        func.count(Candidate.id).label('count')
+                    ).group_by(Candidate.source).all()
+                    
+                    if source_counts:
+                        response_text = "Here's a breakdown of candidates by source:\n\n"
+                        total_candidates = sum(count for _, count in source_counts)
+                        
+                        for source, count in sorted(source_counts, key=lambda x: x[1], reverse=True):
+                            percentage = round((count / total_candidates) * 100, 1)
+                            source_name = source if source else "Unspecified source"
+                            response_text += f"- {source_name}: {count} candidates ({percentage}%)\n"
+                    else:
+                        response_text = f"We have {db.query(Candidate).count()} candidates in the database, but no source information is available."
+                except Exception as e:
+                    logger.warning(f"Error analyzing candidate sources: {e}")
+                    response_text = f"We have {db.query(Candidate).count()} candidates in the database."
             else:
                 # For other or unrecognized attributes, give a general breakdown
                 candidate_count = db.query(Candidate).count()
                 resume_count = db.query(Resume).count()
                 
-                response_text = "I couldn't find specific information about candidates broken down by that attribute. Would you like to know about the total number of candidates or another breakdown instead?"
-                
+                response_text = f"I couldn't find specific information about candidates broken down by '{attribute}'. Here are some available breakdowns:\n\n"
+                response_text += "Available breakdowns:\n"
+                response_text += "- Skills and technologies\n"
+                response_text += "- Experience levels and seniority\n"
+                response_text += "- Location and geographic distribution\n"
+                response_text += "- Current status and pipeline stage\n"
+                response_text += "- Company and employer analysis\n"
+                response_text += "- Source and origin tracking\n"
+                response_text += f"\nTotal candidates: {candidate_count}\n"
+                response_text += f"Total resumes: {resume_count}\n\n"
+                response_text += "Try asking for a breakdown by one of these attributes!"
+            
             return {
                 "response": response_text,
                 "conversation_context": conversation_context
@@ -1365,6 +1551,7 @@ Candidate 2: {comparison_data['candidate2']['name']}
             comparison_response = await llm_service.generate_text_async(
                 prompt=prompt,
                 task_type="chat",
+                model=model_override,
                 system_message="You are a professional recruiter's assistant. Provide balanced, objective evaluations of candidates based on their profiles."
             )
             
@@ -1419,12 +1606,14 @@ Identify specific skills or qualifications the candidate lacks for this job. Sug
             analysis_response = await llm_service.generate_text_async(
                 prompt=prompt,
                 task_type="chat",
+                model=model_override,
                 system_message="You are a professional career advisor and recruitment expert who helps candidates improve their qualifications for specific roles."
             )
             
             return {"response": analysis_response}
         elif intent == "hiring_timeline":
             # Provide insights on typical hiring timelines for specific roles
+            from datetime import datetime
             role = entities.get('role', '').strip()
             
             if not role:
@@ -1468,10 +1657,122 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
             timeline_response = await llm_service.generate_text_async(
                 prompt=prompt,
                 task_type="chat",
+                model=model_override,
                 system_message="You are an experienced recruitment operations specialist with deep knowledge of hiring timelines across various industries and roles."
             )
             
             return {"response": timeline_response}
+        elif intent == "job_skills_analysis":
+            # Analyze skills required across all jobs or specific job categories
+            from ..models.models import Job
+            from sqlalchemy import func
+            
+            job_category = entities.get('category', '').strip()
+            department = entities.get('department', '').strip()
+            
+            if job_category or department:
+                # Analyze specific category or department
+                query = db.query(Job)
+                if job_category:
+                    query = query.filter(Job.title.ilike(f"%{job_category}%"))
+                if department:
+                    query = query.filter(Job.department.ilike(f"%{department}%"))
+                
+                jobs = query.all()
+                
+                if jobs:
+                    # Analyze skills across these jobs
+                    all_skills = []
+                    for job in jobs:
+                        if job.skills:
+                            if isinstance(job.skills, str):
+                                job_skills = [s.strip() for s in job.skills.split(',') if s.strip()]
+                            else:
+                                job_skills = job.skills
+                            all_skills.extend(job_skills)
+                    
+                    if all_skills:
+                        # Count skill frequency
+                        skill_counts = {}
+                        for skill in all_skills:
+                            skill_counts[skill.lower()] = skill_counts.get(skill.lower(), 0) + 1
+                        
+                        # Sort by frequency
+                        sorted_skills = sorted(skill_counts.items(), key=lambda x: x[1], reverse=True)
+                        
+                        response_text = f"Skills analysis for {len(jobs)} {job_category or department} jobs:\n\n"
+                        response_text += "Most required skills:\n"
+                        for i, (skill, count) in enumerate(sorted_skills[:15], 1):
+                            percentage = round((count / len(jobs)) * 100, 1)
+                            response_text += f"{i}. {skill.title()}: {count} jobs ({percentage}%)\n"
+                        
+                        if len(sorted_skills) > 15:
+                            response_text += f"\n... and {len(sorted_skills) - 15} more skills"
+                    else:
+                        response_text = f"Found {len(jobs)} {job_category or department} jobs, but no skill information is available."
+                else:
+                    response_text = f"No {job_category or department} jobs found in the database."
+            else:
+                # Analyze all jobs
+                all_jobs = db.query(Job).all()
+                
+                if all_jobs:
+                    # Get skills breakdown
+                    all_skills = []
+                    departments = {}
+                    locations = {}
+                    
+                    for job in all_jobs:
+                        # Count departments
+                        dept = job.department or "Unspecified"
+                        departments[dept] = departments.get(dept, 0) + 1
+                        
+                        # Count locations
+                        loc = job.location or "Unspecified"
+                        locations[loc] = locations.get(loc, 0) + 1
+                        
+                        # Collect skills
+                        if job.skills:
+                            if isinstance(job.skills, str):
+                                job_skills = [s.strip() for s in job.skills.split(',') if s.strip()]
+                            else:
+                                job_skills = job.skills
+                            all_skills.extend(job_skills)
+                    
+                    response_text = f"Job database analysis ({len(all_jobs)} total jobs):\n\n"
+                    
+                    # Department breakdown
+                    if departments:
+                        response_text += "Departments:\n"
+                        for dept, count in sorted(departments.items(), key=lambda x: x[1], reverse=True):
+                            percentage = round((count / len(all_jobs)) * 100, 1)
+                            response_text += f"- {dept}: {count} jobs ({percentage}%)\n"
+                    
+                    # Location breakdown
+                    if locations:
+                        response_text += "\nLocations:\n"
+                        for loc, count in sorted(locations.items(), key=lambda x: x[1], reverse=True):
+                            percentage = round((count / len(all_jobs)) * 100, 1)
+                            response_text += f"- {loc}: {count} jobs ({percentage}%)\n"
+                    
+                    # Skills breakdown
+                    if all_skills:
+                        skill_counts = {}
+                        for skill in all_skills:
+                            skill_counts[skill.lower()] = skill_counts.get(skill.lower(), 0) + 1
+                        
+                        sorted_skills = sorted(skill_counts.items(), key=lambda x: x[1], reverse=True)
+                        response_text += "\nMost required skills across all jobs:\n"
+                        for i, (skill, count) in enumerate(sorted_skills[:10], 1):
+                            percentage = round((count / len(all_jobs)) * 100, 1)
+                            response_text += f"{i}. {skill.title()}: {count} jobs ({percentage}%)\n"
+                else:
+                    response_text = "No jobs found in the database."
+            
+            return {
+                "response": response_text,
+                "conversation_context": conversation_context
+            }
         elif intent == "market_trends":
             # Handle market trends query either with web search or database if available
             domain = entities.get('domain', '').replace('?', '')
@@ -1551,7 +1852,12 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                             Provide a helpful, informative response based on this data. Focus on hiring/recruitment trends.
                             """
                             
-                            response = await llm_service.generate_text(prompt)
+                            response = await llm_service.generate_text_async(
+                                prompt=prompt,
+                                task_type="chat",
+                                model=model_override,
+                                system_message="You are an assistant that summarizes market trend search results into a helpful response."
+                            )
                             return {
                                 "response": response,
                                 "conversation_context": conversation_context
@@ -1690,7 +1996,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
             )
             llm_response = await llm_service.generate_text_async(
                 prompt=llm_prompt,
-                model=None,
+                model=model_override,
                 task_type="chat",
                 system_message="You are a compliance and labor law expert."
             )
@@ -1749,7 +2055,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                 try:
                     salary_response = await llm_service.generate_text_async(
                         prompt=llm_prompt,
-                        model=None,
+                        model=model_override,
                         task_type="chat",
                         system_message="You are a compensation and benefits expert with knowledge of market salary ranges across industries and locations."
                     )
@@ -1807,7 +2113,12 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                     Format as a complete email with subject line, greeting, body, and signature.
                     """
                     
-                    pitch_email = await llm_service.generate_text(prompt)
+                    pitch_email = await llm_service.generate_text_async(
+                        prompt=prompt,
+                        task_type="chat",
+                        model=model_override,
+                        system_message="You are a professional email writer specializing in recruitment outreach."
+                    )
                     return {
                         "response": pitch_email,
                         "conversation_context": conversation_context
@@ -1980,7 +2291,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                 try:
                     company_response = await llm_service.generate_text_async(
                         prompt=llm_prompt,
-                        model=None,
+                        model=model_override,
                         task_type="chat",
                         system_message="You are a corporate research specialist who provides balanced, informative company profiles."
                     )
@@ -2005,23 +2316,332 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                     "conversation_context": conversation_context
                 }
 
-        # Salary info (static or LLM-based)
+        # Enhanced salary info using MarketResearchService for real-time data
         elif intent == "salary_info":
-            llm_prompt = (
-                f"A user asked about salary: '{message}'. "
-                f"Entities: {entities}. "
-                f"If possible, provide recent salary data and include a source."
-            )
-            llm_response = await llm_service.generate_text_async(
-                prompt=llm_prompt,
-                model=None,
-                task_type="chat",
-                system_message="You are a compensation and salary expert."
-            )
-            return {
-                "response": llm_response,
-                "conversation_context": conversation_context
-            }
+            try:
+                # Use MarketResearchService for comprehensive salary analysis
+                from ..services.service_registry import provide_market_research_service
+                market_service = provide_market_research_service()
+                
+                role = entities.get('role', '')
+                location = entities.get('location', '')
+                
+                if not role:
+                    return {
+                        "response": "I need to know what role you're asking about salary information for. Please specify the job title or role.",
+                        "conversation_context": conversation_context
+                    }
+                
+                # Get comprehensive salary benchmark
+                salary_data = await market_service.get_comprehensive_salary_benchmark(
+                    job_title=role,
+                    location=location or "United States",
+                    experience_level=None
+                )
+                
+                # Extract and format the salary data for display
+                if salary_data.get('status') == 'success' and 'data' in salary_data:
+                    analysis_data = salary_data['data']
+                    
+                    # Format the salary benchmark data into a readable response
+                    if isinstance(analysis_data, dict):
+                        response_parts = [f"**Salary Benchmark for {role} in {location or 'United States'}**\n"]
+                        
+                        # Add salary benchmarks by experience level
+                        if 'salary_benchmarks' in analysis_data:
+                            benchmarks = analysis_data['salary_benchmarks']
+                            for level, data in benchmarks.items():
+                                if isinstance(data, dict) and 'range' in data:
+                                    level_name = data.get('description', level.replace('_', ' ').title())
+                                    salary_range = data.get('range', 'N/A')
+                                    average = data.get('average', 'N/A')
+                                    response_parts.append(f"• **{level_name}**: {salary_range} (Average: {average})")
+                        
+                        # Add market insights if available
+                        if 'market_insights' in analysis_data:
+                            insights = analysis_data['market_insights']
+                            if isinstance(insights, dict):
+                                response_parts.append(f"\n**Market Insights:**")
+                                if 'demand_level' in insights:
+                                    response_parts.append(f"• Demand Level: {insights['demand_level']}")
+                                if 'growth_trend' in insights:
+                                    response_parts.append(f"• Growth Trend: {insights['growth_trend']}")
+                        
+                        response_text = "\n".join(response_parts)
+                    else:
+                        response_text = f"Salary benchmark data retrieved for {role} in {location or 'United States'}."
+                else:
+                    response_text = salary_data.get('message', 'Salary information retrieved successfully.')
+                
+                return {
+                    "response": response_text,
+                    "conversation_context": conversation_context,
+                    "salary_data": salary_data
+                }
+                
+            except Exception as e:
+                logger.error(f"Error in salary_info handler: {e}")
+                # Fallback to LLM-based response
+                llm_prompt = (
+                    f"A user asked about salary: '{message}'. "
+                    f"Entities: {entities}. "
+                    f"If possible, provide recent salary data and include a source."
+                )
+                llm_response = await llm_service.generate_text_async(
+                    prompt=llm_prompt,
+                    model=model_override,
+                    task_type="chat",
+                    system_message="You are a compensation and salary expert."
+                )
+                return {
+                    "response": llm_response,
+                    "conversation_context": conversation_context
+                }
+        
+        # Cost of living information
+        elif intent == "cost_of_living":
+            try:
+                # Use intent processor's specialized handler
+                intent_result = await intent_processor.process_intent(message, conversation_context)
+                
+                if intent_result.get("intent_processed"):
+                    return {
+                        "response": intent_result.get("response", "Cost of living information retrieved."),
+                        "conversation_context": conversation_context,
+                        "cost_of_living_data": intent_result
+                    }
+                else:
+                    return {
+                        "response": intent_result.get("error", "Unable to retrieve cost of living information."),
+                        "conversation_context": conversation_context
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error in cost_of_living handler: {e}")
+                return {
+                    "response": "I'm having trouble retrieving cost of living information at the moment. Please try again later.",
+                    "conversation_context": conversation_context
+                }
+        
+        # Price information
+        elif intent == "price_info":
+            try:
+                # Use intent processor's specialized handler
+                intent_result = await intent_processor.process_intent(message, conversation_context)
+                
+                if intent_result.get("intent_processed"):
+                    return {
+                        "response": intent_result.get("response", "Price information retrieved."),
+                        "conversation_context": conversation_context,
+                        "price_data": intent_result
+                    }
+                else:
+                    return {
+                        "response": intent_result.get("error", "Unable to retrieve price information."),
+                        "conversation_context": conversation_context
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error in price_info handler: {e}")
+                return {
+                    "response": "I'm having trouble retrieving price information at the moment. Please try again later.",
+                    "conversation_context": conversation_context
+                }
+        
+        # Schedule information
+        elif intent == "schedule_info":
+            try:
+                # Use intent processor's specialized handler
+                intent_result = await intent_processor.process_intent(message, conversation_context)
+                
+                if intent_result.get("intent_processed"):
+                    return {
+                        "response": intent_result.get("response", "Schedule information retrieved."),
+                        "conversation_context": conversation_context,
+                        "schedule_data": intent_result
+                    }
+                else:
+                    return {
+                        "response": intent_result.get("error", "Unable to retrieve schedule information."),
+                        "conversation_context": conversation_context
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error in schedule_info handler: {e}")
+                return {
+                    "response": "I'm having trouble retrieving schedule information at the moment. Please try again later.",
+                    "conversation_context": conversation_context
+                }
+        
+        # Recent data information
+        elif intent == "recent_data":
+            try:
+                # Use intent processor's specialized handler
+                intent_result = await intent_processor.process_intent(message, conversation_context)
+                
+                if intent_result.get("intent_processed"):
+                    return {
+                        "response": intent_result.get("response", "Recent information retrieved."),
+                        "conversation_context": conversation_context,
+                        "recent_data": intent_result
+                    }
+                else:
+                    return {
+                        "response": intent_result.get("error", "Unable to retrieve recent information."),
+                        "conversation_context": conversation_context
+                    }
+                    
+            except Exception as e:
+                logger.error(f"Error in recent_data handler: {e}")
+                return {
+                    "response": "I'm having trouble retrieving recent information at the moment. Please try again later.",
+                    "conversation_context": conversation_context
+                }
+        
+        # Enhanced candidate outreach for specific jobs
+        elif intent == "candidate_outreach_for_job":
+            job_id = entities.get('job_id', '').strip()
+            job_title = entities.get('job_title', '').strip()
+            candidate_count = entities.get('candidate_count', 5)
+            
+            if not job_id and not job_title:
+                return {
+                    "response": "I need either a job ID or job title to generate candidate outreach emails. Please specify which job you'd like me to create outreach for.",
+                    "conversation_context": conversation_context
+                }
+            
+            try:
+                from ..models.models import Job, Candidate, Resume
+                
+                # Find the job
+                job = None
+                if job_id:
+                    try:
+                        job_id_int = int(job_id)
+                        job = db.query(Job).filter(Job.id == job_id_int).first()
+                    except ValueError:
+                        job = db.query(Job).filter(Job.external_id == job_id).first()
+                
+                if not job and job_title:
+                    job = db.query(Job).filter(Job.title.ilike(f"%{job_title}%")).first()
+                
+                if not job:
+                    return {
+                        "response": f"I couldn't find a job with ID '{job_id}' or title '{job_title}' in the database. Please check the details and try again.",
+                        "conversation_context": conversation_context
+                    }
+                
+                # Find matching candidates for this job
+                matching_candidates = []
+                
+                # Use the existing matching service if available
+                try:
+                    from ..services.matching_integrator import MatchingIntegrator
+                    matching_service = MatchingIntegrator()
+                    matches = await matching_service.enhanced_candidate_job_matching(
+                        job_id=job.id, 
+                        db=db, 
+                        min_score=30.0, 
+                        limit=int(candidate_count)
+                    )
+                    matching_candidates = matches
+                except Exception as e:
+                    logger.warning(f"Enhanced matching failed, using basic search: {e}")
+                    # Fallback to basic search
+                    if job.skills:
+                        skill_list = job.skills.split(',') if isinstance(job.skills, str) else job.skills
+                        for skill in skill_list[:3]:  # Use top 3 skills
+                            candidates = db.query(Candidate).join(
+                                Resume, Resume.candidate_id == Candidate.id
+                            ).filter(
+                                Resume.parsed_content.ilike(f"%{skill.strip()}%")
+                            ).limit(5).all()
+                            matching_candidates.extend(candidates)
+                
+                if not matching_candidates:
+                    return {
+                        "response": f"I found the job '{job.title}', but couldn't find any matching candidates in the database. You may need to add more candidates or adjust the search criteria.",
+                        "conversation_context": conversation_context
+                    }
+                
+                # Generate outreach emails for each candidate
+                outreach_emails = []
+                for i, candidate in enumerate(matching_candidates[:int(candidate_count)]):
+                    # Get candidate details
+                    candidate_name = f"{candidate.first_name} {candidate.last_name}" if candidate.first_name and candidate.last_name else f"Candidate {candidate.id}"
+                    candidate_position = candidate.current_position or "Professional"
+                    candidate_company = candidate.current_company or "their current company"
+                    
+                    # Generate personalized email
+                    prompt = f"""
+                    Generate a personalized outreach email to {candidate_name}, a {candidate_position} at {candidate_company}.
+                    
+                    Job Details:
+                    - Title: {job.title}
+                    - Department: {job.department or 'Not specified'}
+                    - Location: {job.location or 'Not specified'}
+                    - Type: {job.job_type or 'Not specified'}
+                    - Experience Level: {job.experience_level or 'Not specified'}
+                    
+                    Job Overview: {job.job_overview or 'Not provided'}
+                    Required Skills: {', '.join(job.skills.split(',') if isinstance(job.skills, str) else job.skills) if job.skills else 'Not specified'}
+                    
+                    Create a compelling, personalized email that:
+                    1. Addresses the candidate by name
+                    2. Mentions their current role and company
+                    3. Explains why they'd be a great fit for this specific job
+                    4. Highlights key benefits and opportunities
+                    5. Includes a clear call to action
+                    6. Has a professional but warm tone
+                    
+                    Format as a complete email with subject line, greeting, body, and signature.
+                    """
+                    
+                    email_content = await llm_service.generate_text_async(
+                        prompt=prompt,
+                        task_type="chat",
+                        model=model_override,
+                        system_message="You are a professional recruiter who writes compelling, personalized outreach emails."
+                    )
+                    
+                    outreach_emails.append({
+                        "candidate_id": candidate.id,
+                        "candidate_name": candidate_name,
+                        "candidate_position": candidate_position,
+                        "candidate_company": candidate_company,
+                        "email_content": email_content,
+                        "match_score": getattr(candidate, 'match_score', 'N/A')
+                    })
+                
+                # Create response
+                response_text = f"I've generated {len(outreach_emails)} personalized outreach emails for the '{job.title}' position:\n\n"
+                
+                for i, email in enumerate(outreach_emails, 1):
+                    response_text += f"📧 Email {i}: {email['candidate_name']} - {email['candidate_position']} at {email['candidate_company']}\n"
+                    if email['match_score'] != 'N/A':
+                        response_text += f"   Match Score: {email['match_score']}%\n"
+                    response_text += "\n"
+                
+                response_text += "Each email is personalized and ready to send. You can copy and paste them into your email client."
+                
+                return {
+                    "response": response_text,
+                    "outreach_emails": outreach_emails,
+                    "job_details": {
+                        "id": job.id,
+                        "title": job.title,
+                        "department": job.department,
+                        "location": job.location
+                    },
+                    "conversation_context": conversation_context
+                }
+                
+            except Exception as e:
+                logger.error(f"Error generating candidate outreach emails: {e}")
+                return {
+                    "response": f"I encountered an error while generating candidate outreach emails: {str(e)}. Please try again later.",
+                    "conversation_context": conversation_context
+                }
 
         # Web search intent
         elif intent == "web_search":
@@ -2047,7 +2667,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
             )
             llm_response = await llm_service.generate_text_async(
                 prompt=llm_prompt,
-                model=None,
+                model=model_override,
                 task_type="chat",
                 system_message="You are a compliance and labor law expert."
             )
@@ -2072,6 +2692,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
         else:
             response = await llm_service.generate_text_async(
                 prompt=message,
+                model=model_override,
                 task_type="chat",
                 system_message="You are a helpful recruiter assistant. Answer the user's question as best as you can."
             )

@@ -1,12 +1,16 @@
 """RecruitIQ Travel Service - Specialized travel service for recruiting scenarios."""
 import logging
+import os
 import json
 import asyncio
 import time
 import re
 from typing import Dict, Any, Optional, Tuple, List, Union
+from ..utils.config import get_settings
 import httpx
+import math
 from datetime import datetime, timedelta
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +21,59 @@ class RecruitIQTravelService:
         """Initialize the RecruitIQ travel service."""
         logger.info("Initializing RecruitIQTravelService for recruiting-focused travel intelligence")
         
+        # Load configured API keys from settings (if available)
+        settings = None
+        try:
+            settings = get_settings()
+        except Exception:
+            settings = None
+
+        # Distinguish between OpenRouter (LLM) API key and OpenRouteService (routing) API key.
+        # OPENROUTER_API_KEY is used elsewhere for LLMs; the routing service expects a separate
+        # OPENROUTESERVICE_API_KEY environment variable. Prefer the dedicated routing key.
+        self.openroute_llm_key = ''
+        if settings is not None:
+            try:
+                self.openroute_llm_key = getattr(settings, 'openrouter_api_key', '') or ''
+            except Exception:
+                self.openroute_llm_key = ''
+
+        # Check for dedicated routing key in Settings (preferred) and fallback to environment
+        self.openrouteservice_api_key = ''
+        if settings is not None:
+            try:
+                self.openrouteservice_api_key = getattr(settings, 'openrouteservice_api_key', '') or ''
+            except Exception:
+                self.openrouteservice_api_key = os.getenv('OPENROUTESERVICE_API_KEY', '')
+        else:
+            self.openrouteservice_api_key = os.getenv('OPENROUTESERVICE_API_KEY', '')
+
+        if not self.openrouteservice_api_key and self.openroute_llm_key:
+            # If only the LLM key is present, log a helpful hint — it will not work for routing
+            logger.info("OpenRouteService routing key not found in OPENROUTESERVICE_API_KEY. "
+                        "Found OPENROUTER_API_KEY which is likely an LLM key and won't work for routing APIs.")
+        
+        # Log API key status for debugging (without exposing the actual key)
+        if self.openrouteservice_api_key:
+            logger.info(f"OpenRouteService API key configured (length: {len(self.openrouteservice_api_key)})")
+        else:
+            logger.warning("OpenRouteService API key not configured - routing features will be limited")
+
+        # Prepare default headers and include authorization header (routing key) if present
+        default_headers = {
+            "User-Agent": "RecruitIQ Travel Assistant/1.0",
+            "Accept": "application/json"
+        }
+
+        if self.openrouteservice_api_key:
+            # OpenRouteService expects the API key in the Authorization header
+            # Format: "Authorization: <api_key>" (no "Bearer" prefix)
+            default_headers["Authorization"] = self.openrouteservice_api_key
+
         self.http_client = httpx.AsyncClient(
             timeout=30.0,
             follow_redirects=True,
-            headers={
-                "User-Agent": "RecruitIQ Travel Assistant/1.0",
-                "Accept": "application/json"
-            }
+            headers=default_headers
         )
         
         # Free API endpoints
@@ -63,6 +113,12 @@ class RecruitIQTravelService:
         }
         
         logger.info("RecruitIQTravelService initialized with recruiting-specific patterns")
+
+        # Start a non-blocking startup check for routing API authentication.
+        try:
+            threading.Thread(target=self._run_startup_check, daemon=True).start()
+        except Exception as e:
+            logger.debug(f"Could not start routing startup check thread: {e}")
     
     # Intent Classification Methods
     
@@ -230,7 +286,7 @@ class RecruitIQTravelService:
     # Travel Data Gathering Methods
     
     async def gather_recruiting_travel_data(self, origin: str, destination: str, 
-                                           intent_type: str, travel_date: Optional[str] = None) -> Dict[str, Any]:
+                                           intent_type: str, travel_date: Optional[str] = None, query: str = "") -> Dict[str, Any]:
         """
         Gather comprehensive travel data for recruiting scenarios.
         
@@ -252,7 +308,7 @@ class RecruitIQTravelService:
             "intent_type": intent_type,
             "travel_date": travel_date,
             "timestamp": datetime.now().isoformat(),
-            "travel_mode": self._detect_travel_mode(f"from {origin} to {destination}")
+            "travel_mode": self._detect_travel_mode(query or f"from {origin} to {destination}")
         }
         
         try:
@@ -265,9 +321,9 @@ class RecruitIQTravelService:
                 result["origin_coords"] = origin_coords
                 result["destination_coords"] = dest_coords
                 
-                # Step 2: Get weather at destination
+                # Step 2: Get enhanced weather at destination
                 logger.info("Fetching weather conditions at destination")
-                weather_data = await self._get_weather_conditions(dest_coords[0], dest_coords[1], travel_date)
+                weather_data = await self._get_enhanced_weather_conditions(dest_coords[0], dest_coords[1], travel_date)
                 if weather_data:
                     result["weather"] = weather_data
                 
@@ -312,14 +368,42 @@ class RecruitIQTravelService:
                     elif travel_mode == "cycling":
                         profile = "cycling-regular"
                     elif travel_mode == "transit":
-                        # OpenRoute doesn't support transit directly, use driving as approximation
-                        profile = "driving-car"
+                        # Check if this is a train schedule request
+                        query_lower = query.lower() if query else f"from {origin} to {destination}".lower()
+                        if any(word in query_lower for word in ['train', 'schedule', 'amtrak', 'rail']):
+                            # Get train schedule information
+                            logger.info("Fetching train schedule information")
+                            train_data = await self._get_train_schedule_info(origin, destination)
+                            if train_data:
+                                result["train_schedule"] = train_data
+                        else:
+                            # OpenRoute doesn't support transit directly, use driving as approximation
+                            profile = "driving-car"
                         
-                    directions = await self._get_openroute_directions(origin_coords, dest_coords, profile)
-                    if directions:
-                        result["directions"] = directions
+                    if profile != "transit":  # Only get directions if not handling train schedules
+                        directions = await self._get_openroute_directions(origin_coords, dest_coords, profile)
+                        if directions:
+                            result["directions"] = directions
                 
-            # Step 4: Get recruiting-specific advice
+            # Step 4: Generate comprehensive cost analysis
+            logger.info("Generating comprehensive cost analysis")
+            cost_analysis = await self._generate_cost_analysis(result, intent_type)
+            if cost_analysis:
+                result["cost_analysis"] = cost_analysis
+            
+            # Step 5: Get local area intelligence
+            logger.info("Gathering local area intelligence")
+            local_area = await self._get_local_area_intelligence(destination, dest_coords)
+            if local_area:
+                result["local_area"] = local_area
+            
+            # Step 6: Generate transportation comparison
+            logger.info("Generating transportation comparison")
+            transport_comparison = await self._generate_transportation_comparison(result)
+            if transport_comparison:
+                result["transportation_comparison"] = transport_comparison
+            
+            # Step 7: Get recruiting-specific advice
             logger.info("Generating recruiting-specific travel advice")
             advice = await self._get_recruiting_specific_advice(origin, destination, intent_type, result)
             if advice:
@@ -531,7 +615,27 @@ class RecruitIQTravelService:
             
             # Make the request
             logger.info(f"Fetching directions from {origin_coords} to {dest_coords} via {profile}")
-            response = await self.http_client.post(url, json=data)
+            request_headers = {}
+            # Prefer the dedicated routing key, fallback to llm-style key only if necessary
+            if getattr(self, 'openrouteservice_api_key', ''):
+                request_headers['Authorization'] = getattr(self, 'openrouteservice_api_key')
+            elif getattr(self, 'openroute_llm_key', ''):
+                request_headers['Authorization'] = getattr(self, 'openroute_llm_key')
+
+            response = await self.http_client.post(url, json=data, headers=request_headers)
+            
+            # Handle API access issues gracefully
+            if response.status_code in (401, 403):
+                error_msg = "OpenRouteService API access denied"
+                try:
+                    error_data = response.json()
+                    if "Access to this API has been disallowed" in str(error_data):
+                        error_msg = "OpenRouteService API access has been disallowed - check API key permissions"
+                except:
+                    pass
+                logger.warning(f"{error_msg}. Falling back to distance estimation.")
+                return self._estimate_driving_option(origin_coords, dest_coords)
+            
             response.raise_for_status()
             
             route_data = response.json()
@@ -578,6 +682,60 @@ class RecruitIQTravelService:
                 logger.warning("No routes found in the response")
                 return None
                 
+        except httpx.HTTPStatusError as e:
+            status = None
+            try:
+                status = e.response.status_code
+            except Exception:
+                status = None
+
+            # If auth failed (401/403) and we have a key, try a single retry using 'Bearer <key>'
+            if status in (401, 403) and getattr(self, 'openrouteservice_api_key', ''):
+                try:
+                    masked = 'set' if self.openrouteservice_api_key else 'not-set'
+                    logger.warning(f"OpenRouteService returned {status}. Attempting one retry using 'Bearer' auth if key is present (key {masked}).")
+                    # Try with Bearer prefix
+                    bearer_headers = {'Authorization': f"Bearer {self.openrouteservice_api_key}"}
+                    response2 = await self.http_client.post(url, json=data, headers=bearer_headers)
+                    response2.raise_for_status()
+                    route_data = response2.json()
+                    if "routes" in route_data and route_data["routes"]:
+                        route = route_data["routes"][0]
+                        # reuse the same processing as above
+                        result = {
+                            "distance": route.get("summary", {}).get("distance", 0),
+                            "duration": route.get("summary", {}).get("duration", 0),
+                            "formatted_duration": self._format_duration(route.get("summary", {}).get("duration", 0) / 60),
+                            "bounds": route.get("bbox", []),
+                            "steps": []
+                        }
+                        if "segments" in route:
+                            for segment in route["segments"]:
+                                for step in segment.get("steps", []):
+                                    instruction = {
+                                        "instruction": step.get("instruction", ""),
+                                        "distance": step.get("distance", 0),
+                                        "duration": step.get("duration", 0),
+                                        "name": step.get("name", "")
+                                    }
+                                    result["steps"].append(instruction)
+
+                        result["recruiting_assessment"] = {
+                            "is_convenient": result["duration"] < 3600,
+                            "travel_impact": "low" if result["duration"] < 1800 else 
+                                            "moderate" if result["duration"] < 3600 else "high",
+                            "recommended_departure_buffer": 15 if result["duration"] < 1200 else 
+                                                         30 if result["duration"] < 2400 else 45
+                        }
+
+                        # Cache and return
+                        self.directions_cache[cache_key] = result
+                        return result
+                except Exception as ex:
+                    logger.error(f"Retry with 'Bearer' auth failed: {ex}")
+
+            logger.error(f"Error fetching directions: {e}")
+            return None
         except Exception as e:
             logger.error(f"Error fetching directions: {e}")
             return None
@@ -753,6 +911,274 @@ class RecruitIQTravelService:
             logger.error(f"Error simulating flight data: {e}")
             return {"flights": [], "error": "Failed to generate flight options"}
     
+    async def _get_enhanced_weather_conditions(self, lat: float, lon: float, 
+                                             date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get enhanced weather information with detailed forecasts and travel impact assessment.
+        
+        Args:
+            lat: Latitude
+            lon: Longitude
+            date: Optional date for forecast
+            
+        Returns:
+            Dict containing enhanced weather data if successful, None otherwise
+        """
+        # Get basic weather data first
+        basic_weather = await self._get_weather_conditions(lat, lon, date)
+        if not basic_weather:
+            return None
+        
+        # Enhance with additional information
+        enhanced_weather = basic_weather.copy()
+        
+        # Add travel impact assessment
+        enhanced_weather["travel_impact"] = self._assess_weather_impact(enhanced_weather)
+        
+        # Add packing recommendations
+        enhanced_weather["packing_recommendations"] = self._generate_packing_recommendations(enhanced_weather)
+        
+        # Add weather summary for quick reference
+        current = enhanced_weather.get("current", {})
+        if current:
+            temp = current.get('temperature', 'N/A')
+            desc = current.get('weather_description', 'Unknown')
+            enhanced_weather["summary"] = f"{desc}, {temp}°C"
+        
+        return enhanced_weather
+
+    async def _generate_cost_analysis(self, travel_data: Dict[str, Any], intent_type: str) -> Dict[str, Any]:
+        """
+        Generate comprehensive cost analysis for travel.
+        
+        Args:
+            travel_data: Travel data containing routes, schedules, etc.
+            intent_type: Type of travel intent (interview, relocation, etc.)
+            
+        Returns:
+            Dict containing detailed cost breakdown
+        """
+        cost_analysis = {
+            "transportation_costs": {},
+            "additional_costs": {},
+            "total_estimate": None
+        }
+        
+        # Analyze transportation costs
+        if travel_data.get("directions"):
+            directions = travel_data["directions"]
+            distance = directions.get("distance", 0)
+            if distance:
+                # Estimate gas costs (assuming 25 mpg, $3.50/gallon)
+                gas_cost = (distance / 25) * 3.50
+                cost_analysis["transportation_costs"]["driving"] = {
+                    "cost": f"${gas_cost:.2f}",
+                    "notes": "Gas only, excludes tolls and parking"
+                }
+        
+        if travel_data.get("train_schedule"):
+            train_info = travel_data["train_schedule"]
+            if train_info.get("booking_info", {}).get("pricing"):
+                cost_analysis["transportation_costs"]["train"] = train_info["booking_info"]["pricing"]
+        
+        if travel_data.get("flights"):
+            flights = travel_data["flights"]
+            if flights.get("best_option"):
+                best = flights["best_option"]
+                cost_analysis["transportation_costs"]["flight"] = {
+                    "cost": best.get("price", "Varies"),
+                    "notes": "One-way fare"
+                }
+        
+        # Add additional costs based on intent type
+        if intent_type == "interview_travel":
+            cost_analysis["additional_costs"] = {
+                "parking": "$10-25/day",
+                "meals": "$15-40/day",
+                "incidentals": "$10-20"
+            }
+        elif intent_type == "relocation":
+            cost_analysis["additional_costs"] = {
+                "moving_truck": "$50-150/day",
+                "hotel_overnight": "$80-200/night",
+                "meals": "$30-60/day"
+            }
+        else:
+            cost_analysis["additional_costs"] = {
+                "parking": "$5-20/day",
+                "meals": "$10-30/day"
+            }
+        
+        # Calculate total estimate
+        total_cost = 0
+        for mode, cost_info in cost_analysis["transportation_costs"].items():
+            if isinstance(cost_info, dict) and cost_info.get("cost"):
+                cost_str = cost_info["cost"]
+                if cost_str.startswith("$"):
+                    try:
+                        total_cost += float(cost_str[1:])
+                    except ValueError:
+                        pass
+        
+        if total_cost > 0:
+            cost_analysis["total_estimate"] = f"${total_cost:.2f} (transportation only)"
+        
+        return cost_analysis
+
+    async def _get_local_area_intelligence(self, destination: str, coords: Optional[Tuple[float, float]]) -> Dict[str, Any]:
+        """
+        Get local area information including restaurants, hotels, and parking.
+        
+        Args:
+            destination: Destination city/area
+            coords: Optional coordinates for more precise results
+            
+        Returns:
+            Dict containing local area information
+        """
+        local_area = {
+            "restaurants": [],
+            "hotels": [],
+            "parking": "Check local parking apps and city websites for rates"
+        }
+        
+        # Generate sample restaurant recommendations based on destination
+        if "boston" in destination.lower():
+            local_area["restaurants"] = [
+                {"name": "Legal Sea Foods", "rating": "4.2", "price_range": "$$$"},
+                {"name": "Union Oyster House", "rating": "4.0", "price_range": "$$"},
+                {"name": "Mike's Pastry", "rating": "4.1", "price_range": "$"}
+            ]
+        elif "new york" in destination.lower() or "nyc" in destination.lower():
+            local_area["restaurants"] = [
+                {"name": "Joe's Pizza", "rating": "4.3", "price_range": "$"},
+                {"name": "Katz's Delicatessen", "rating": "4.2", "price_range": "$$"},
+                {"name": "Peter Luger Steak House", "rating": "4.4", "price_range": "$$$$"}
+            ]
+        else:
+            # Generic recommendations
+            local_area["restaurants"] = [
+                {"name": "Local Cafe", "rating": "4.0", "price_range": "$"},
+                {"name": "Business District Restaurant", "rating": "4.1", "price_range": "$$"},
+                {"name": "Fine Dining", "rating": "4.3", "price_range": "$$$"}
+            ]
+        
+        # Generate hotel recommendations
+        if "boston" in destination.lower():
+            local_area["hotels"] = [
+                {"name": "The Ritz-Carlton Boston", "rating": "4.5", "price_range": "$$$$"},
+                {"name": "Boston Marriott Copley Place", "rating": "4.2", "price_range": "$$$"},
+                {"name": "Hampton Inn Boston", "rating": "4.0", "price_range": "$$"}
+            ]
+        elif "new york" in destination.lower() or "nyc" in destination.lower():
+            local_area["hotels"] = [
+                {"name": "The Plaza", "rating": "4.4", "price_range": "$$$$"},
+                {"name": "Marriott Marquis", "rating": "4.1", "price_range": "$$$"},
+                {"name": "Holiday Inn Express", "rating": "3.9", "price_range": "$$"}
+            ]
+        else:
+            local_area["hotels"] = [
+                {"name": "Business Hotel", "rating": "4.0", "price_range": "$$$"},
+                {"name": "Mid-Range Hotel", "rating": "3.8", "price_range": "$$"},
+                {"name": "Budget Hotel", "rating": "3.5", "price_range": "$"}
+            ]
+        
+        return local_area
+
+    async def _generate_transportation_comparison(self, travel_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate comprehensive transportation options comparison.
+        
+        Args:
+            travel_data: Travel data containing various transportation options
+            
+        Returns:
+            Dict containing transportation comparison
+        """
+        comparison = {"options": []}
+        
+        # Add driving option
+        if travel_data.get("directions"):
+            directions = travel_data["directions"]
+            comparison["options"].append({
+                "mode": "Driving",
+                "duration": directions.get("formatted_duration", "Unknown"),
+                "cost": "Gas + tolls + parking",
+                "pros": ["Flexible timing", "Direct route", "Can carry luggage"],
+                "cons": ["Traffic delays", "Parking costs", "Weather dependent"]
+            })
+        
+        # Add train option
+        if travel_data.get("train_schedule"):
+            train_info = travel_data["train_schedule"]
+            comparison["options"].append({
+                "mode": "Train",
+                "duration": "4h 30m average",
+                "cost": train_info.get("booking_info", {}).get("pricing", "Varies"),
+                "pros": ["Reliable schedule", "WiFi available", "Scenic route"],
+                "cons": ["Limited flexibility", "Station locations", "Weather delays possible"]
+            })
+        
+        # Add flight option
+        if travel_data.get("flights"):
+            flights = travel_data["flights"]
+            if flights.get("best_option"):
+                best = flights["best_option"]
+                comparison["options"].append({
+                    "mode": "Flight",
+                    "duration": best.get("duration", "1-2 hours"),
+                    "cost": best.get("price", "Varies"),
+                    "pros": ["Fastest option", "Weather independent", "Comfortable"],
+                    "cons": ["Airport security", "Baggage fees", "Flight delays"]
+                })
+        
+        return comparison
+
+    def _generate_packing_recommendations(self, weather_data: Dict[str, Any]) -> List[str]:
+        """
+        Generate packing recommendations based on weather data.
+        
+        Args:
+            weather_data: Weather information
+            
+        Returns:
+            List of packing recommendations
+        """
+        recommendations = []
+        
+        current = weather_data.get("current", {})
+        temp = current.get("temperature", 20)  # Default to 20°C if unknown
+        
+        if temp < 10:
+            recommendations.extend([
+                "Warm coat and layers",
+                "Hat and gloves",
+                "Waterproof shoes"
+            ])
+        elif temp < 20:
+            recommendations.extend([
+                "Light jacket or sweater",
+                "Long pants",
+                "Comfortable walking shoes"
+            ])
+        else:
+            recommendations.extend([
+                "Light clothing",
+                "Sunscreen",
+                "Comfortable shoes"
+            ])
+        
+        # Add weather-specific recommendations
+        forecast = weather_data.get("forecast", [])
+        if forecast:
+            for day in forecast[:2]:  # Check next 2 days
+                precip_prob = day.get("precipitation_probability", 0)
+                if precip_prob > 50:
+                    recommendations.append("Umbrella or rain jacket")
+                    break
+        
+        return recommendations
+
     async def _get_weather_conditions(self, lat: float, lon: float, 
                                      date: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
@@ -838,7 +1264,7 @@ class RecruitIQTravelService:
     
     async def _get_recruiting_specific_advice(self, origin: str, destination: str, 
                                              intent_type: str, 
-                                             travel_data: Dict[str, Any]) -> str:
+                                             travel_data: Dict[str, Any]) -> List[str]:
         """
         Generate recruiting-specific travel advice.
         
@@ -849,7 +1275,7 @@ class RecruitIQTravelService:
             travel_data: Travel data collected
             
         Returns:
-            String containing recruiting-specific advice
+            List of recruiting-specific advice items
         """
         try:
             # Get the travel mode from the data
@@ -939,14 +1365,11 @@ class RecruitIQTravelService:
             # General advice for all recruiting-related travel
             advice.append("🔹 Research the company's neighborhood for options to spend additional time if you arrive early.")
             
-            # Combine all advice into a comprehensive string
-            formatted_advice = "\n".join(advice)
-            
-            return formatted_advice
+            return advice
             
         except Exception as e:
             logger.error(f"Error generating recruiting travel advice: {e}")
-            return "Unable to generate recruiting-specific travel advice at this time."
+            return ["Unable to generate recruiting-specific travel advice at this time."]
     
     # Response Generation Methods
     
@@ -1427,6 +1850,664 @@ class RecruitIQTravelService:
             
         # Default to neutral impact
         return "neutral"
+
+    def _run_startup_check(self):
+        """
+        Run a small asynchronous startup check in a background thread to validate
+        routing API access and log actionable messages if authentication fails.
+        """
+        try:
+            import asyncio
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(self._startup_check_async())
+            loop.close()
+        except Exception as e:
+            logger.debug(f"Routing startup check failed to run: {e}")
+
+    async def _startup_check_async(self):
+        """
+        Async helper that performs a minimal directions request between two nearby
+        points to check authentication/permission for the routing API.
+        """
+        # Skip check if no routing key configured at all
+        if not getattr(self, 'openrouteservice_api_key', ''):
+            logger.info("Routing startup check skipped: OPENROUTESERVICE_API_KEY not configured.")
+            return
+
+        # Use two close coordinates (small request) to minimize usage and latency
+        origin = (40.7128, -74.0060)  # NYC
+        dest = (40.7138, -74.0060)    # very close in NYC
+        try:
+            # Use internal request path but avoid caching and heavy processing
+            url = f"{self.openroute_base_url}/v2/directions/driving-car/json"
+            data = {"coordinates": [[origin[1], origin[0]], [dest[1], dest[0]]], "instructions": False}
+
+            headers = {"Authorization": self.openrouteservice_api_key}
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(url, json=data, headers=headers)
+
+            if resp.status_code == 200:
+                logger.info("Routing API startup check passed: OpenRouteService directions are reachable.")
+                return
+            elif resp.status_code in (401, 403):
+                logger.error("Routing API authentication failed (401/403). Please verify OPENROUTESERVICE_API_KEY in your environment or .env. "
+                             "Ensure the key is active and has permissions for the directions endpoint.")
+                # Log additional debugging info
+                logger.error(f"API key length: {len(self.openrouteservice_api_key)}, starts with: {self.openrouteservice_api_key[:10]}...")
+                try:
+                    error_response = resp.json()
+                    logger.error(f"API error response: {error_response}")
+                    
+                    # Check if this looks like an OpenRouter key being used for OpenRouteService
+                    if self.openrouteservice_api_key.startswith("sk-or-v1-"):
+                        logger.error("WARNING: The API key appears to be an OpenRouter key (starts with 'sk-or-v1-'). "
+                                   "OpenRouteService requires a different API key. Please get a proper OpenRouteService API key from https://openrouteservice.org/")
+                    
+                except:
+                    logger.error(f"API error response (text): {resp.text}")
+            else:
+                logger.warning(f"Routing API returned status {resp.status_code} during startup check. Response may indicate permissions or quota issues.")
+                try:
+                    error_response = resp.json()
+                    logger.warning(f"API response: {error_response}")
+                except:
+                    logger.warning(f"API response (text): {resp.text}")
+
+        except Exception as e:
+            logger.warning(f"Routing API startup check could not be completed: {e}")
+
+    def _estimate_driving_option(self, origin_coords: Tuple[float, float], dest_coords: Tuple[float, float]) -> Dict[str, Any]:
+        """
+        Estimate driving distance and duration between two coordinate pairs using the Haversine formula.
+        This is a lightweight fallback when routing APIs are unavailable.
+        Returns a dict matching the option schema used by get_transportation_options.
+        """
+        try:
+            lat1, lon1 = origin_coords
+            lat2, lon2 = dest_coords
+
+            # Haversine formula
+            R = 3958.8  # Earth radius in miles
+            phi1 = math.radians(lat1)
+            phi2 = math.radians(lat2)
+            dphi = math.radians(lat2 - lat1)
+            dlambda = math.radians(lon2 - lon1)
+
+            a = math.sin(dphi/2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+            distance_miles = R * c
+
+            # Assume average driving speed of 50 mph for estimation
+            avg_speed_mph = 50.0
+            duration_hours = distance_miles / avg_speed_mph if avg_speed_mph > 0 else 0
+            duration_minutes = duration_hours * 60
+            duration_seconds = int(duration_hours * 3600)
+
+            return {
+                "mode": "Driving (estimated)",
+                "duration": self._format_duration(duration_minutes),
+                "duration_seconds": duration_seconds,
+                "distance_miles": round(distance_miles, 1),
+                "cost": None,
+                "note": "Estimated using great-circle distance as routing API was unavailable"
+            }
+        except Exception as e:
+            logger.error(f"Error estimating driving option: {e}")
+            return {
+                "mode": "Driving (estimated)",
+                "duration": "Unknown",
+                "duration_seconds": None,
+                "distance_miles": None,
+                "cost": None
+            }
+
+    async def _get_train_schedule_info(self, origin: str, destination: str) -> Dict[str, Any]:
+        """
+        Get train schedule information for the given route.
+        
+        Args:
+            origin: Origin location
+            destination: Destination location
+            
+        Returns:
+            Dict containing train schedule information
+        """
+        logger.info(f"Getting train schedule info from {origin} to {destination}")
+        
+        # For now, provide comprehensive train schedule information based on common routes
+        # In a production system, this would integrate with Amtrak API or other train APIs
+        
+        train_info = {
+            "route": f"{origin} → {destination}",
+            "service_type": "Amtrak",
+            "schedule": [],
+            "general_info": {},
+            "booking_info": {}
+        }
+        
+        # Boston to NYC route information
+        if "boston" in origin.lower() and "new york" in destination.lower():
+            train_info.update({
+                "route_name": "Northeast Regional",
+                "service_type": "Amtrak",
+                "schedule": [
+                    {
+                        "departure": "06:00 AM",
+                        "arrival": "10:30 AM",
+                        "duration": "4h 30m",
+                        "train_number": "94",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "08:00 AM", 
+                        "arrival": "12:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "96",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "10:00 AM",
+                        "arrival": "2:30 PM", 
+                        "duration": "4h 30m",
+                        "train_number": "98",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "12:00 PM",
+                        "arrival": "4:30 PM",
+                        "duration": "4h 30m", 
+                        "train_number": "100",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "2:00 PM",
+                        "arrival": "6:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "102", 
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "4:00 PM",
+                        "arrival": "8:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "104",
+                        "service": "Northeast Regional"
+                    }
+                ],
+                "general_info": {
+                    "frequency": "Multiple daily departures",
+                    "stations": {
+                        "origin": "South Station, Boston",
+                        "destination": "Penn Station, New York"
+                    },
+                    "amenities": ["WiFi", "Power outlets", "Café car", "Quiet car"],
+                    "baggage": "2 carry-on bags, 2 checked bags (fees may apply)"
+                },
+                "booking_info": {
+                    "website": "amtrak.com",
+                    "phone": "1-800-USA-RAIL",
+                    "advance_booking": "Recommended, especially for peak times",
+                    "pricing": "Varies by date and time, typically $25-150"
+                }
+            })
+        
+        # NYC to Boston route information  
+        elif "new york" in origin.lower() and "boston" in destination.lower():
+            train_info.update({
+                "route_name": "Northeast Regional",
+                "service_type": "Amtrak", 
+                "schedule": [
+                    {
+                        "departure": "7:00 AM",
+                        "arrival": "11:30 AM",
+                        "duration": "4h 30m",
+                        "train_number": "93",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "9:00 AM",
+                        "arrival": "1:30 PM", 
+                        "duration": "4h 30m",
+                        "train_number": "95",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "11:00 AM",
+                        "arrival": "3:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "97", 
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "1:00 PM",
+                        "arrival": "5:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "99",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "3:00 PM",
+                        "arrival": "7:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "101",
+                        "service": "Northeast Regional"
+                    },
+                    {
+                        "departure": "5:00 PM", 
+                        "arrival": "9:30 PM",
+                        "duration": "4h 30m",
+                        "train_number": "103",
+                        "service": "Northeast Regional"
+                    }
+                ],
+                "general_info": {
+                    "frequency": "Multiple daily departures",
+                    "stations": {
+                        "origin": "Penn Station, New York",
+                        "destination": "South Station, Boston"
+                    },
+                    "amenities": ["WiFi", "Power outlets", "Café car", "Quiet car"],
+                    "baggage": "2 carry-on bags, 2 checked bags (fees may apply)"
+                },
+                "booking_info": {
+                    "website": "amtrak.com",
+                    "phone": "1-800-USA-RAIL", 
+                    "advance_booking": "Recommended, especially for peak times",
+                    "pricing": "Varies by date and time, typically $25-150"
+                }
+            })
+        
+        # Generic train information for other routes
+        else:
+            train_info.update({
+                "route_name": "Regional Service",
+                "service_type": "Amtrak",
+                "schedule": [
+                    {
+                        "departure": "Multiple daily departures",
+                        "arrival": "Check schedule",
+                        "duration": "Varies by route",
+                        "train_number": "Various",
+                        "service": "Regional"
+                    }
+                ],
+                "general_info": {
+                    "frequency": "Check Amtrak schedule",
+                    "stations": {
+                        "origin": f"Check Amtrak station in {origin}",
+                        "destination": f"Check Amtrak station in {destination}"
+                    },
+                    "amenities": ["WiFi", "Power outlets", "Café car"],
+                    "baggage": "2 carry-on bags, checked bags available"
+                },
+                "booking_info": {
+                    "website": "amtrak.com",
+                    "phone": "1-800-USA-RAIL",
+                    "advance_booking": "Recommended",
+                    "pricing": "Varies by route and date"
+                }
+            })
+        
+        return train_info
+
+    async def get_travel_info(self, origin: str, destination: str, mode: str = None, query: str = "") -> Dict[str, Any]:
+        """
+        Get comprehensive travel information for recruiting scenarios.
+        
+        Args:
+            origin: Starting location
+            destination: Destination location  
+            mode: Transportation mode (optional)
+            query: Original query for context
+            
+        Returns:
+            Dict containing travel information and recruiting-specific advice
+        """
+        logger.info(f"Getting recruiting travel info: {origin} -> {destination}")
+        
+        try:
+            # Use the existing comprehensive data gathering method
+            # Determine intent type from the query or use a default
+            intent_type = "general_travel"
+            if query:
+                query_lower = query.lower()
+                if any(word in query_lower for word in ["interview", "interviews", "interviewing"]):
+                    intent_type = "interview_travel"
+                elif any(word in query_lower for word in ["relocation", "relocate", "moving"]):
+                    intent_type = "relocation"
+                elif any(word in query_lower for word in ["visit", "visiting", "office"]):
+                    intent_type = "office_visit"
+                elif any(word in query_lower for word in ["candidate", "applicant"]):
+                    intent_type = "candidate_travel"
+            
+            travel_data = await self.gather_recruiting_travel_data(origin, destination, intent_type, query=query)
+            
+            # Add standard interface fields for compatibility
+            travel_data.update({
+                "origin": origin,
+                "destination": destination,
+                "mode": mode or "mixed",
+                "query": query,
+                "has_results": bool(travel_data.get("directions") or travel_data.get("flights") or travel_data.get("transportation_options") or travel_data.get("train_schedule"))
+            })
+            
+            return travel_data
+            
+        except Exception as e:
+            logger.error(f"Error getting travel info: {e}")
+            return {
+                "origin": origin,
+                "destination": destination,
+                "mode": mode or "mixed",
+                "query": query,
+                "has_results": False,
+                "error": str(e)
+            }
+
+    def format_travel_response(self, travel_data: Dict[str, Any], query: str) -> str:
+        """
+        Format travel information into a comprehensive, detailed response with recruiting focus.
+        
+        Args:
+            travel_data: Travel data from get_travel_info
+            query: Original user query
+            
+        Returns:
+            Formatted response string with enhanced details
+        """
+        if not travel_data.get("has_results"):
+            return f"I couldn't find travel information between {travel_data.get('origin', 'the origin')} and {travel_data.get('destination', 'the destination')}. Please check the location names and try again."
+        
+        origin = travel_data.get("origin", "")
+        destination = travel_data.get("destination", "")
+        
+        response = f"**Travel Information:**\n"
+        response += f"**Route:** {origin} → {destination}\n\n"
+        
+        # Enhanced driving route information
+        if travel_data.get("directions"):
+            directions = travel_data["directions"]
+            response += f"🚗 **Driving Route:** {directions.get('duration', 'Unknown time')}"
+            if directions.get('distance'):
+                response += f" ({directions['distance']})"
+            if directions.get('traffic_conditions'):
+                response += f"\n   • Traffic: {directions['traffic_conditions']}"
+            if directions.get('toll_costs'):
+                response += f"\n   • Estimated tolls: {directions['toll_costs']}"
+            response += "\n\n"
+        
+        # Enhanced train schedule with detailed information
+        if travel_data.get("train_schedule"):
+            train_info = travel_data["train_schedule"]
+            response += f"🚂 **Train Schedule:** {train_info.get('route_name', 'Northeast Regional')}\n"
+            
+            # Add detailed schedule
+            if train_info.get("schedule"):
+                response += "\n**Departure Times:**\n"
+                for i, train in enumerate(train_info["schedule"][:5]):  # Show first 5 trains
+                    departure = train.get('departure', 'N/A')
+                    arrival = train.get('arrival', 'N/A')
+                    duration = train.get('duration', 'N/A')
+                    train_num = train.get('train_number', 'N/A')
+                    response += f"• {departure} - {arrival} ({duration}) - Train #{train_num}\n"
+                
+                if len(train_info["schedule"]) > 5:
+                    response += f"• ... and {len(train_info['schedule']) - 5} more departures\n"
+            
+            # Enhanced station and amenity information
+            if train_info.get("general_info"):
+                general = train_info["general_info"]
+                if general.get("stations"):
+                    response += f"\n**Stations:** {general['stations'].get('origin', 'N/A')} → {general['stations'].get('destination', 'N/A')}\n"
+                if general.get("amenities"):
+                    amenities = general['amenities']
+                    response += f"**Amenities:** {', '.join(amenities)}\n"
+            
+            # Enhanced booking and pricing information
+            if train_info.get("booking_info"):
+                booking = train_info["booking_info"]
+                response += f"**Booking:** {booking.get('website', 'amtrak.com')} | {booking.get('phone', '1-800-USA-RAIL')}\n"
+                if booking.get("pricing"):
+                    response += f"**Pricing:** {booking['pricing']}\n"
+            
+            response += "\n"
+        
+        # Enhanced flight information
+        if travel_data.get("flights"):
+            flights = travel_data["flights"]
+            if flights.get("options"):
+                response += f"✈️ **Flight Options:** {flights.get('summary', 'Available')}\n"
+                if flights.get("best_option"):
+                    best = flights["best_option"]
+                    response += f"   • Best option: {best.get('airline', 'N/A')} - {best.get('price', 'N/A')} ({best.get('duration', 'N/A')})\n"
+                response += "\n"
+        
+        # Enhanced cost analysis
+        if travel_data.get("cost_analysis"):
+            cost_data = travel_data["cost_analysis"]
+            response += f"💰 **Cost Analysis:**\n"
+            
+            if cost_data.get("transportation_costs"):
+                trans_costs = cost_data["transportation_costs"]
+                response += f"**Transportation:**\n"
+                for mode, cost_info in trans_costs.items():
+                    if isinstance(cost_info, dict):
+                        response += f"   • {mode.title()}: {cost_info.get('cost', 'N/A')} ({cost_info.get('notes', '')})\n"
+                    else:
+                        response += f"   • {mode.title()}: {cost_info}\n"
+            
+            if cost_data.get("additional_costs"):
+                add_costs = cost_data["additional_costs"]
+                response += f"**Additional Costs:**\n"
+                for item, cost in add_costs.items():
+                    response += f"   • {item.title()}: {cost}\n"
+            
+            if cost_data.get("total_estimate"):
+                response += f"**Total Estimated Cost:** {cost_data['total_estimate']}\n"
+            
+            response += "\n"
+        
+        # Enhanced weather information
+        if travel_data.get("weather"):
+            weather = travel_data["weather"]
+            response += f"🌤️ **Weather:**\n"
+            
+            current = weather.get("current", {})
+            if current:
+                temp = current.get('temperature', 'N/A')
+                desc = current.get('weather_description', 'Unknown conditions')
+                response += f"**Current:** {desc}, {temp}°C\n"
+                
+                if current.get('wind_speed'):
+                    response += f"   • Wind: {current['wind_speed']} km/h\n"
+            
+            # Enhanced forecast information
+            forecast = weather.get("forecast", [])
+            if forecast:
+                response += f"**3-Day Forecast:**\n"
+                for i, day in enumerate(forecast[:3]):
+                    date = day.get('date', f'Day {i+1}')
+                    high = day.get('max_temperature', 'N/A')
+                    low = day.get('min_temperature', 'N/A')
+                    desc = day.get('weather_description', 'Unknown')
+                    precip = day.get('precipitation_probability', 0)
+                    response += f"   • {date}: {desc}, {high}°C/{low}°C (Rain: {precip}%)\n"
+            
+            # Weather impact assessment
+            if weather.get("travel_impact"):
+                impact = weather["travel_impact"]
+                response += f"**Travel Impact:** {impact}\n"
+            
+            response += "\n"
+        
+        # Enhanced recruiting-specific advice
+        if travel_data.get("recruiting_advice"):
+            advice = travel_data["recruiting_advice"]
+            response += f"💼 **Recruiting Tips:**\n"
+            
+            if isinstance(advice, list):
+                for tip in advice:
+                    response += f"• {tip}\n"
+            else:
+                response += f"• {advice}\n"
+            
+            response += "\n"
+        
+        # Local area intelligence
+        if travel_data.get("local_area"):
+            local = travel_data["local_area"]
+            response += f"🏢 **Local Area Information:**\n"
+            
+            if local.get("restaurants"):
+                restaurants = local["restaurants"]
+                response += f"**Nearby Restaurants:**\n"
+                for restaurant in restaurants[:3]:  # Show top 3
+                    name = restaurant.get('name', 'N/A')
+                    rating = restaurant.get('rating', 'N/A')
+                    price = restaurant.get('price_range', 'N/A')
+                    response += f"   • {name} ({rating}/5, {price})\n"
+            
+            if local.get("hotels"):
+                hotels = local["hotels"]
+                response += f"**Nearby Hotels:**\n"
+                for hotel in hotels[:3]:  # Show top 3
+                    name = hotel.get('name', 'N/A')
+                    rating = hotel.get('rating', 'N/A')
+                    price = hotel.get('price_range', 'N/A')
+                    response += f"   • {name} ({rating}/5, {price})\n"
+            
+            if local.get("parking"):
+                parking = local["parking"]
+                response += f"**Parking Options:** {parking}\n"
+            
+            response += "\n"
+        
+        # Alternative transportation comparison
+        if travel_data.get("transportation_comparison"):
+            comparison = travel_data["transportation_comparison"]
+            response += f"🚌 **Transportation Comparison:**\n"
+            
+            for option in comparison.get("options", []):
+                mode = option.get('mode', 'N/A')
+                duration = option.get('duration', 'N/A')
+                cost = option.get('cost', 'N/A')
+                pros = option.get('pros', [])
+                cons = option.get('cons', [])
+                
+                response += f"**{mode}:** {duration}"
+                if cost and cost != 'N/A':
+                    response += f" - {cost}"
+                response += "\n"
+                
+                if pros:
+                    response += f"   • Pros: {', '.join(pros[:2])}\n"  # Show top 2 pros
+                if cons:
+                    response += f"   • Cons: {', '.join(cons[:2])}\n"  # Show top 2 cons
+                response += "\n"
+        
+        return response.strip()
+
+    async def get_transportation_options(self, origin: str, destination: str) -> Dict[str, Any]:
+        """
+        Public API: Get summarized transportation options between origin and destination.
+
+        This method is intentionally lightweight and composes results from existing
+        internal helpers (geocoding, directions, flights) so it remains dynamic
+        and does not hardcode any external specifics.
+
+        Returns a dict with an 'options' list where each option contains mode,
+        duration (human-friendly), duration_seconds (when available), and cost
+        if estimable.
+        """
+        try:
+            options = []
+
+            # Geocode locations (best-effort)
+            origin_coords = await self._geocode_nominatim(origin) if origin else None
+            dest_coords = await self._geocode_nominatim(destination) if destination else None
+
+            # 1) Driving / car option (if we have coordinates)
+            driving = None
+            if origin_coords and dest_coords:
+                driving = await self._get_openroute_directions(origin_coords, dest_coords, profile="driving-car")
+                if driving:
+                    options.append({
+                        "mode": "Driving",
+                        "duration": driving.get("formatted_duration", "Unknown"),
+                        "duration_seconds": driving.get("duration", None),
+                        "distance_miles": driving.get("distance", None),
+                        "cost": None
+                    })
+                else:
+                    # Fallback estimate using haversine when routing API is not available
+                    estimate = self._estimate_driving_option(origin_coords, dest_coords)
+                    options.append(estimate)
+
+                # 2) Walking (only if short distance)
+                if driving and driving.get("distance", 0) and driving.get("distance", 0) < 3:
+                    walking = await self._get_openroute_directions(origin_coords, dest_coords, profile="foot-walking")
+                    if walking:
+                        options.append({
+                            "mode": "Walking",
+                            "duration": walking.get("formatted_duration", "Unknown"),
+                            "duration_seconds": walking.get("duration", None),
+                            "distance_miles": walking.get("distance", None),
+                            "cost": 0
+                        })
+
+                # 3) Cycling (if reasonable distance)
+                if driving and driving.get("distance", 0) and driving.get("distance", 0) < 15:
+                    cycling = await self._get_openroute_directions(origin_coords, dest_coords, profile="cycling-regular")
+                    if cycling:
+                        options.append({
+                            "mode": "Cycling",
+                            "duration": cycling.get("formatted_duration", "Unknown"),
+                            "duration_seconds": cycling.get("duration", None),
+                            "distance_miles": cycling.get("distance", None),
+                            "cost": 0
+                        })
+
+            # 4) Transit / public transport - approximate via driving profile as fallback
+            if origin_coords and dest_coords:
+                transit_est = await self._get_openroute_directions(origin_coords, dest_coords, profile="driving-car")
+                if transit_est:
+                    # Use the driving duration to provide a transit estimate with a disclaimer
+                    options.append({
+                        "mode": "Public transit (estimate)",
+                        "duration": transit_est.get("formatted_duration", "Unknown"),
+                        "duration_seconds": transit_est.get("duration", None),
+                        "distance_miles": transit_est.get("distance", None),
+                        "cost": None,
+                        "note": "Transit estimate approximated using driving data; ask for more precise transit info if needed"
+                    })
+
+            # 5) Flying - only if locations likely represent cities far apart or include airport codes
+            # Do a conservative check: if either value is short (<=3) treat as possible airport code
+            if (origin and len(origin.strip()) <= 3) or (destination and len(destination.strip()) <= 3) or (
+                origin_coords and dest_coords and driving and driving.get("distance", 0) and driving.get("distance", 0) > 200):
+                flights = await self._get_kiwi_flights(origin, destination)
+                if flights and flights.get("flights"):
+                    # Summarize first flight option
+                    first = flights["flights"][0]
+                    options.append({
+                        "mode": "Flight",
+                        "duration": first.get("flight_duration", "Unknown"),
+                        "duration_seconds": None,
+                        "price_estimate": first.get("price", None),
+                        "details": first
+                    })
+
+            # Add a default fallback if no options were generated
+            if not options:
+                # Provide a minimal response so callers can handle gracefully
+                return {"options": [], "note": "No transportation options could be determined with available data."}
+
+            return {"options": options}
+
+        except Exception as e:
+            logger.error(f"Error in get_transportation_options: {e}")
+            return {"options": [], "error": str(e)}
 
 
 # Singleton instance
