@@ -611,22 +611,50 @@ Neo4j authentication failed. Please check:
                     logger.warning(f"Error creating resume profile embedding index: {str(e)}")
             
             try:
-                if 'job_description_embedding' not in existing_indexes:
-                    session.run(
-                        """
-                        CALL db.index.vector.createNodeIndex(
-                            'job_description_embedding',
-                            'Job',
-                            'description_embedding',
-                            384,
-                            'cosine'
+                job_desc_index_exists = any(idx in existing_indexes for idx in [
+                    'job_description_embedding', 'job_description_embeddings'
+                ])
+                if not job_desc_index_exists:
+                    created = False
+                    # Prefer procedure-based creation when available
+                    try:
+                        session.run(
+                            """
+                            CALL db.index.vector.createNodeIndex(
+                                'job_description_embedding',
+                                'Job',
+                                'description_embedding',
+                                384,
+                                'cosine'
+                            )
+                            """
                         )
-                        """
-                    )
-                    logger.info("Created vector index for job description embeddings")
+                        logger.info("Created vector index for job description embeddings via procedure API")
+                        created = True
+                    except Exception as proc_err:
+                        # Fallback to DDL syntax available in newer Neo4j versions
+                        logger.warning(f"Procedure-based vector index creation not available: {proc_err}. Falling back to DDL syntax.")
+                        try:
+                            session.run(
+                                """
+                                CREATE VECTOR INDEX job_description_embedding IF NOT EXISTS
+                                FOR (j:Job)
+                                ON (j.description_embedding)
+                                OPTIONS { indexConfig: {
+                                    `vector.dimensions`: 384,
+                                    `vector.similarity_function`: 'cosine'
+                                }}
+                                """
+                            )
+                            logger.info("Created vector index for job description embeddings via DDL syntax")
+                            created = True
+                        except Exception as ddl_err:
+                            logger.warning(f"DDL-based vector index creation failed: {ddl_err}")
+                    if not created:
+                        logger.warning("Unable to create job description vector index. Vector search will gracefully fallback.")
             except Exception as e:
                 if "AlreadyIndexedException" not in str(e):
-                    logger.warning(f"Error creating job description embedding index: {str(e)}")
+                    logger.warning(f"Error ensuring job description embedding index: {str(e)}")
                 
             try:
                 if 'job_requirements_embedding' not in existing_indexes:
@@ -712,16 +740,27 @@ Neo4j authentication failed. Please check:
                 except Exception as count_err:
                     logger.error(f"Error checking job counts: {count_err}")
                 
-                # Verify that the vector index exists
+                # Resolve an available job vector index name dynamically
                 index_exists = False
+                job_index_name = None
                 try:
-                    index_result = session.run("SHOW INDEXES WHERE name = 'job_description_embedding'")
-                    indexes = list(index_result)
-                    index_exists = len(indexes) > 0
-                    if index_exists:
-                        logger.info(f"Vector index exists: {indexes}")
+                    index_result = session.run("SHOW INDEXES")
+                    available_indexes = [record.get('name') for record in index_result]
+                    # Prefer the canonical name
+                    if 'job_description_embedding' in available_indexes:
+                        job_index_name = 'job_description_embedding'
+                    elif 'job_description_embeddings' in available_indexes:
+                        job_index_name = 'job_description_embeddings'
                     else:
-                        logger.error("Vector index 'job_description_embedding' does not exist!")
+                        # Pick any job vector index that looks appropriate
+                        candidates = [idx for idx in available_indexes if idx and idx.startswith('job_') and 'embedding' in idx.lower()]
+                        if candidates:
+                            job_index_name = candidates[0]
+                    index_exists = job_index_name is not None
+                    if index_exists:
+                        logger.info(f"Using job vector index: {job_index_name}")
+                    else:
+                        logger.warning("No suitable job vector index found. Will use fallback query.")
                 except Exception as idx_err:
                     logger.error(f"Error checking vector index existence: {idx_err}")
                     index_exists = False
@@ -766,13 +805,14 @@ Neo4j authentication failed. Please check:
                     # Now try the vector search since index exists
                     result = session.run(
                         """
-                        CALL db.index.vector.queryNodes('job_description_embedding', $limit, $embedding) YIELD node AS j, score
+                        CALL db.index.vector.queryNodes($index_name, $limit, $embedding) YIELD node AS j, score
                         WHERE j.status = 'open' OR j.status = 'active'  
                         OPTIONAL MATCH (j)-[:REQUIRES]->(s:Skill)
                         RETURN j.id AS id, j.title AS title, j.department AS department, 
                                collect(DISTINCT s.name) AS skills, score AS similarity_score
                         LIMIT $limit
                         """,
+                        index_name=job_index_name,
                         limit=limit,
                         embedding=title_embedding
                     )

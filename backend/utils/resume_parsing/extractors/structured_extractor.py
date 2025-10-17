@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 import re
-from typing import Type, Dict, Any, Union
+from typing import Type, Dict, Any, Union, Optional
 
 from pydantic import BaseModel, ValidationError
 
@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 from backend.utils.resume_parsing.contracts.resume_contract import ResumeV2
 from backend.utils.resume_parsing.extractors.base_extractor import BaseExtractor
-from backend.services.llm_service import LLMService, DirectNebiusAI  # Use DirectNebiusAI instead to avoid circular import
+from backend.services.llm_service import LLMService, get_llm_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -23,67 +23,13 @@ class StructuredExtractor(BaseExtractor):
     It relies on a Pydantic model (contract) to define the desired output schema.
     """
 
-    def __init__(self, llm_service: Union[LLMService, DirectNebiusAI] = None):
-        # Create a new instance of DirectNebiusAI if no service provided
+    def __init__(self, llm_service: Optional[LLMService] = None):
+        # Prefer the unified LLMService (OpenRouter primary) and override model per call
         if llm_service is None:
-            # Try multiple sources for the API key
-            nebius_api_key = None
-            
-            # 1. Try from environment variables (both naming conventions)
-            nebius_api_key = os.environ.get('NEBIUS_API_KEY', '') or os.environ.get('NEBIUS_API_TOKEN', '')
-            
-            # 2. Try from settings if available
-            if not nebius_api_key:
-                try:
-                    # Import here to avoid circular imports
-                    from backend.utils.config import get_settings
-                    settings = get_settings()
-                    if hasattr(settings, 'nebius_api_key') and settings.nebius_api_key:
-                        logger.info("Loading Nebius API key from settings")
-                        nebius_api_key = settings.nebius_api_key
-                except Exception as e:
-                    logger.warning(f"Could not load settings: {e}")
-            
-            # 3. Try from config.json if exists
-            if not nebius_api_key:
-                config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'config.json')
-                if os.path.exists(config_path):
-                    try:
-                        import json
-                        with open(config_path, 'r') as f:
-                            config = json.load(f)
-                            if 'nebius_api_key' in config and config['nebius_api_key']:
-                                logger.info("Loading Nebius API key from config.json")
-                                nebius_api_key = config['nebius_api_key']
-                    except Exception as e:
-                        logger.warning(f"Error reading config.json: {e}")
-            
-            # Final check
-            if not nebius_api_key:
-                logger.critical("No Nebius API key found in any configuration source")
-                raise RuntimeError("StructuredExtractor requires NEBIUS_API_KEY from environment, settings, or config.json!")
-                
-            # Create direct Nebius AI instance
-            logger.info("Initializing DirectNebiusAI with API key")
-            self.llm_service = DirectNebiusAI(
-                api_key=nebius_api_key,
-                model="microsoft/phi-4",
-                temperature=0.1,
-                max_tokens=8192
-            )
+            self.llm_service = get_llm_service()
         else:
             self.llm_service = llm_service
-            
-        # Enforce DirectNebiusAI or compatible interface and msft phi-4
-        if not (isinstance(self.llm_service, DirectNebiusAI) or hasattr(self.llm_service, 'generate_completion')):
-            logger.critical(f"StructuredExtractor must use DirectNebiusAI or compatible service, got {type(self.llm_service)}")
-            raise RuntimeError("StructuredExtractor must use DirectNebiusAI or compatible service!")
-            
-        if getattr(self.llm_service, 'model', None) != 'microsoft/phi-4':
-            logger.critical(f"Nebius model is not 'microsoft/phi-4', got {getattr(self.llm_service, 'model', None)}")
-            raise RuntimeError("Nebius AI must be configured for model 'microsoft/phi-4'!")
-            
-        logger.info(f"StructuredExtractor initialized with Nebius AI, model: {self.llm_service.model}")
+        logger.info("StructuredExtractor initialized with LLMService (OpenRouter primary)")
 
     @property
     def name(self) -> str:
@@ -113,8 +59,12 @@ class StructuredExtractor(BaseExtractor):
         try:
             # Call the LLM service to get the structured data (explicit resume task type)
             # Use a more reasonable token limit to avoid hitting model limits
-            response_text = await self.llm_service.generate_text(
-                prompt, max_tokens=8192, temperature=0.1, task_type="resume"
+            # Route strictly via Nebius by signaling task_type; model override removed
+            response_text = await self.llm_service.generate_text_async(
+                prompt,
+                system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
+                max_tokens=8192,
+                task_type="resume_parsing"
             )
 
             # Parse the LLM's response

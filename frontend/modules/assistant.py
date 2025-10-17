@@ -490,19 +490,31 @@ def page():
             # Display job fit analysis components
             if 'hiring_recommendation' in parsed_data or 'quality_assessment' in parsed_data or 'market_alignment' in parsed_data or 'skill_suggestions' in parsed_data:
                 # Display enhanced job fit analysis
-                display_hiring_recommendation(parsed_data)
+                try:
+                    display_hiring_recommendation(parsed_data)
+                except Exception:
+                    pass
                 
                 # Display market alignment analysis
                 if 'market_alignment' in parsed_data and parsed_data.get('market_alignment') is not None:
-                    display_market_alignment_analysis(parsed_data.get('market_alignment', {}))
+                    try:
+                        display_market_alignment_analysis(parsed_data.get('market_alignment', {}))
+                    except Exception:
+                        st.json(parsed_data.get('market_alignment', {}))
                 
                 # Display quality assessment
                 if 'quality_assessment' in parsed_data and parsed_data.get('quality_assessment') is not None:
-                    display_quality_assessment(parsed_data.get('quality_assessment', {}))
+                    try:
+                        display_quality_assessment(parsed_data.get('quality_assessment', {}))
+                    except Exception:
+                        st.json(parsed_data.get('quality_assessment', {}))
                 
                 # Display skill suggestions
                 if 'skill_suggestions' in parsed_data and parsed_data.get('skill_suggestions') is not None:
-                    display_skill_suggestions(parsed_data.get('skill_suggestions', {}))
+                    try:
+                        display_skill_suggestions(parsed_data.get('skill_suggestions', {}))
+                    except Exception:
+                        st.json(parsed_data.get('skill_suggestions', {}))
                     
                 st.markdown("---")
                 # --- Download / Save Report ---
@@ -752,17 +764,41 @@ def page():
                             role = maybe_json.get("role", "the position")
                             email_body = maybe_json.get("email_body") or maybe_json.get("email_content", "")
                             subject_lines = maybe_json.get("subject_lines", [])
+                            
                             st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                            
                             if subject_lines:
                                 st.markdown("**Subject line options:**")
                                 for s in subject_lines:
                                     st.markdown(f"- {s}")
+                                st.markdown("---")
+                            
                             if email_body:
-                                st.markdown("```")
-                                st.markdown(email_body)
-                                st.markdown("```")
-                            else:
-                                st.error("Email content not generated properly")
+                                # Clean up the email body - remove any JSON artifacts
+                                clean_body = email_body
+                                
+                                # If the body contains JSON structure, extract just the body content
+                                if '{"subject_lines"' in clean_body and '"body":' in clean_body:
+                                    try:
+                                        json_match = re.search(r'"body":\s*"([^"]*(?:\\.[^"]*)*)"', clean_body, re.DOTALL)
+                                        if json_match:
+                                            clean_body = json_match.group(1)
+                                            # Unescape JSON string
+                                            clean_body = clean_body.replace('\\n', '\n').replace('\\"', '"').replace('\\t', '\t')
+                                    except:
+                                        pass
+                                
+                            # Display the email body in a nicely formatted box without introducing leading indentation
+                            st.markdown("**Email Body:**")
+                            box_html = (
+                                "<div style=\"background-color: #f8f9fa; padding: 12px 16px; border-radius: 8px; "
+                                "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; white-space: pre-wrap;\">"
+                                f"{clean_body}"  # keep original newlines/spacing from the model
+                                "</div>"
+                            )
+                            st.markdown(box_html, unsafe_allow_html=True)
+                        if not email_body:
+                            st.error("Email content not generated properly")
                         elif maybe_json.get("report_type"):
                             display_market_research_report(maybe_json)
                         else:
@@ -857,15 +893,41 @@ def page():
                         role = data.get("role", "the position")
                         email_body = data.get("email_body") or data.get("email_content", "")
                         subject_lines = data.get("subject_lines", [])
+                        
                         st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                        
                         if subject_lines:
                             st.markdown("**Subject line options:**")
                             for s in subject_lines:
                                 st.markdown(f"- {s}")
+                            st.markdown("---")
+                        
                         if email_body:
-                            st.markdown("```")
-                            st.markdown(email_body)
-                            st.markdown("```")
+                            # Clean up the email body - remove any JSON artifacts
+                            clean_body = email_body
+                            
+                            # If the body contains JSON structure, extract just the body content
+                            if '{"subject_lines"' in clean_body and '"body":' in clean_body:
+                                try:
+                                    # Try to extract the body from JSON structure (use top-level json import)
+                                    json_match = re.search(r'"body":\s*"([^"]*(?:\\.[^"]*)*)"', clean_body, re.DOTALL)
+                                    if json_match:
+                                        clean_body = json_match.group(1)
+                                        # Unescape JSON string
+                                        clean_body = clean_body.replace('\\n', '\n').replace('\\"', '"').replace('\\t', '\t')
+                                except:
+                                    pass
+                            
+                            # Display the email body in a nicely formatted box without introducing leading indentation
+                            st.markdown("**Email Body:**")
+                            box_html = (
+                                "<div style=\"background-color: #f8f9fa; padding: 12px 16px; border-radius: 8px; "
+                                "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; white-space: pre-wrap;\">"
+                                f"{clean_body}"
+                                "</div>"
+                            )
+                            st.markdown(box_html, unsafe_allow_html=True)
+                            
                             # Save to chat history
                             st.session_state.chat_history.append({
                                 "role": "assistant",
@@ -890,15 +952,39 @@ def page():
                                     role = jd.get("role", "the position")
                                     email_body = jd.get("email_body") or jd.get("email_content", "")
                                     subject_lines = jd.get("subject_lines", [])
+                                    
                                     st.markdown(f"### 📧 Recruiter Outreach Email for {role}")
+                                    
                                     if subject_lines:
                                         st.markdown("**Subject line options:**")
                                         for s in subject_lines:
                                             st.markdown(f"- {s}")
+                                        st.markdown("---")
+                                    
                                     if email_body:
-                                        st.markdown("```")
-                                        st.markdown(email_body)
-                                        st.markdown("```")
+                                        # Clean up the email body - remove any JSON artifacts
+                                        clean_body = email_body
+                                        
+                                        # If the body contains JSON structure, extract just the body content
+                                        if '{"subject_lines"' in clean_body and '"body":' in clean_body:
+                                            try:
+                                                json_match = re.search(r'"body":\s*"([^"]*(?:\\.[^"]*)*)"', clean_body, re.DOTALL)
+                                                if json_match:
+                                                    clean_body = json_match.group(1)
+                                                    # Unescape JSON string
+                                                    clean_body = clean_body.replace('\\n', '\n').replace('\\"', '"').replace('\\t', '\t')
+                                            except:
+                                                pass
+                                        
+                                        # Display the email body in a nicely formatted box without introducing leading indentation
+                                        st.markdown("**Email Body:**")
+                                        box_html = (
+                                            "<div style=\"background-color: #f8f9fa; padding: 12px 16px; border-radius: 8px; "
+                                            "font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.5; white-space: pre-wrap;\">"
+                                            f"{clean_body}"
+                                            "</div>"
+                                        )
+                                        st.markdown(box_html, unsafe_allow_html=True)
                                     else:
                                         st.error("Email content not generated properly")
                                 else:
@@ -1088,8 +1174,8 @@ def _maybe_parse_json_object(text: str):
     s = (s
          .replace("\u201c", '"').replace("\u201d", '"')
          .replace("\u2018", "'").replace("\u2019", "'")
-         .replace("“", '"').replace("”", '"')
-         .replace("‘", "'").replace("’", "'"))
+         .replace(""", '"').replace(""", '"')
+         .replace("'", "'").replace("'", "'"))
     # Remove code fences
     if s.startswith("```"):
         # Strip first fence line
@@ -1361,6 +1447,116 @@ def _display_generic_section(title_key: str, content: Any):
         else:
             # Nested structure - fallback to JSON for clarity
             st.json(content)
+
+# --- Hiring Recommendation and Analysis Sections ---
+def display_hiring_recommendation(parsed_data: Any):
+    """Render hiring recommendation card if present in parsed_data."""
+    try:
+        data = parsed_data.get('hiring_recommendation') if isinstance(parsed_data, dict) else None
+        if not data:
+            return
+        st.markdown("### 🧭 Hiring Recommendation")
+        if isinstance(data, str):
+            st.markdown(data)
+            return
+        if isinstance(data, dict):
+            # Common fields: recommendation, confidence, rationale, next_steps
+            recommendation = data.get('recommendation') or data.get('summary')
+            confidence = data.get('confidence')
+            rationale = data.get('rationale') or data.get('reasoning')
+            next_steps = data.get('next_steps') or data.get('actions')
+            if recommendation:
+                st.markdown(f"**Recommendation:** {recommendation}")
+            if confidence is not None:
+                st.markdown(f"**Confidence:** {confidence}")
+            if rationale:
+                st.markdown("**Rationale:**")
+                st.markdown(str(rationale))
+            if next_steps:
+                st.markdown("**Suggested Next Steps:**")
+                if isinstance(next_steps, list):
+                    for step in next_steps:
+                        st.markdown(f"- {step}")
+                else:
+                    st.markdown(str(next_steps))
+            # Render any other extra fields generically
+            extra = {k: v for k, v in data.items() if k not in {'recommendation','summary','confidence','rationale','reasoning','next_steps','actions'}}
+            if extra:
+                _display_generic_section("Additional Details", extra)
+    except Exception as e:
+        logger.error(f"Error displaying hiring recommendation: {e}")
+
+def display_market_alignment_analysis(market_alignment: Any):
+    """Render market alignment analysis section."""
+    try:
+        if not market_alignment:
+            return
+        st.markdown("### 📈 Market Alignment")
+        if isinstance(market_alignment, str):
+            st.markdown(market_alignment)
+            return
+        if isinstance(market_alignment, dict):
+            # Known keys but render generically as needed
+            key_order = [
+                'target_role','top_market_skills','gap_analysis','market_trends','comparable_jobs','skills_alignment','recommendations'
+            ]
+            for key in key_order:
+                if key in market_alignment and market_alignment.get(key) is not None:
+                    _display_generic_section(key, market_alignment.get(key))
+            # Any remaining keys
+            remaining = {k: v for k, v in market_alignment.items() if k not in key_order}
+            if remaining:
+                _display_generic_section("Additional Insights", remaining)
+    except Exception as e:
+        logger.error(f"Error displaying market alignment: {e}")
+
+def display_quality_assessment(quality: Any):
+    """Render resume quality assessment section."""
+    try:
+        if not quality:
+            return
+        st.markdown("### 🧪 Quality Assessment")
+        if isinstance(quality, str):
+            st.markdown(quality)
+            return
+        if isinstance(quality, dict):
+            # Typical fields
+            metrics = {k: quality.get(k) for k in ['clarity','impact','relevance','readability','structure'] if k in quality}
+            if metrics:
+                cols = st.columns(len(metrics))
+                for (k, v), col in zip(metrics.items(), cols):
+                    with col:
+                        try:
+                            st.metric(k.title(), v)
+                        except Exception:
+                            st.markdown(f"**{k.title()}:** {v}")
+            for key in ['strengths','improvements','notes','summary']:
+                if key in quality and quality.get(key) is not None:
+                    _display_generic_section(key, quality.get(key))
+            extra = {k: v for k, v in quality.items() if k not in set(metrics.keys()) | {'strengths','improvements','notes','summary'}}
+            if extra:
+                _display_generic_section("Details", extra)
+    except Exception as e:
+        logger.error(f"Error displaying quality assessment: {e}")
+
+def display_skill_suggestions(suggestions: Any):
+    """Render skill suggestions section."""
+    try:
+        if not suggestions:
+            return
+        st.markdown("### 🧩 Skill Suggestions")
+        if isinstance(suggestions, str):
+            st.markdown(suggestions)
+            return
+        if isinstance(suggestions, dict):
+            for key in ['technical_skills','soft_skills','certifications','recommendations']:
+                if key in suggestions and suggestions.get(key) is not None:
+                    _display_generic_section(key, suggestions.get(key))
+            extra = {k: v for k, v in suggestions.items() if k not in {'technical_skills','soft_skills','certifications','recommendations'}}
+            if extra:
+                _display_generic_section("Additional Suggestions", extra)
+    except Exception as e:
+        logger.error(f"Error displaying skill suggestions: {e}")
 
 # ... (rest of the code remains the same)
         
@@ -1690,10 +1886,35 @@ def call_backend_assistant(message):
         # Using the global state for enhanced context tracking
         conversation_history = []
         for msg in st.session_state.chat_history:
-            # Convert to format expected by backend
+            # Convert to format expected by backend. Ensure message is a STRING.
+            raw_content = msg.get("content")
+            if isinstance(raw_content, str):
+                safe_message = raw_content
+            else:
+                # For dict or other objects, prefer a concise textual summary
+                try:
+                    if isinstance(raw_content, dict):
+                        preferred_text = (
+                            raw_content.get("response")
+                            or raw_content.get("email_body")
+                            or raw_content.get("email_content")
+                        )
+                        if isinstance(preferred_text, str) and preferred_text.strip():
+                            safe_message = preferred_text
+                        else:
+                            rt = raw_content.get("response_type") or raw_content.get("report_type")
+                            role = raw_content.get("role")
+                            meta = f" type={rt}" if rt else ""
+                            meta += f" role={role}" if role else ""
+                            safe_message = f"[structured_response{meta}]"
+                    else:
+                        safe_message = str(raw_content)
+                except Exception:
+                    safe_message = str(raw_content)
+
             conversation_history.append({
-                "sender": "user" if msg["role"] == "user" else "assistant",
-                "message": msg["content"]
+                "sender": "user" if msg.get("role") == "user" else "assistant",
+                "message": safe_message
             })
         
         # Fetch context from session state (if not exist, use empty dict)

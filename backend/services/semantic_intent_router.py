@@ -169,8 +169,9 @@ Available intents:
 Instructions:
 1. Choose the most appropriate intent from the list above
 2. Extract relevant entities (role, skills, location, company, etc.)
-3. Provide a confidence score from 0.0 to 1.0
-4. Give a brief rationale for your choice
+3. IMPORTANT: Preserve role names EXACTLY as written. Do NOT expand abbreviations like "Gen AI" to "Generative Artificial Intelligence" or "AI" to "Artificial Intelligence"
+4. Provide a confidence score from 0.0 to 1.0
+5. Give a brief rationale for your choice
 
 Respond with ONLY valid JSON in this exact format:
 {{

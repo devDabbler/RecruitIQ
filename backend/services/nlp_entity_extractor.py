@@ -72,6 +72,10 @@ class NLPEntityExtractor:
                 "data scientist", "data science", "machine learning engineer",
                 "ml engineer", "ai engineer", "research scientist", "analytics engineer"
             ],
+            "gen_ai_engineer": [
+                "gen ai engineer", "gen ai", "generative ai engineer", "generative ai",
+                "genai engineer", "llm engineer", "large language model engineer"
+            ],
             "product_manager": [
                 "product manager", "product management", "pm", "product owner",
                 "senior product manager", "principal product manager"
@@ -98,7 +102,7 @@ class NLPEntityExtractor:
         self.skills_knowledge_base = {
             "programming_languages": [
                 "python", "java", "javascript", "typescript", "c++", "c#", "go",
-                "rust", "kotlin", "swift", "php", "ruby", "scala", "r"
+                "rust", "kotlin", "swift", "php", "ruby", "scala", "r", "r programming", "r language"
             ],
             "web_technologies": [
                 "react", "angular", "vue", "node.js", "express", "django",

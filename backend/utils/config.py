@@ -39,9 +39,10 @@ class Settings(BaseSettings):
     meta_llama_api_key: str = Field(default=os.getenv("META_LLAMA_API_KEY", ""))
     
     # Nebius AI Configuration
+    nebius_enabled: bool = Field(default=os.getenv("NEBIUS_ENABLED", "false").lower() == "true")
     nebius_api_key: str = Field(default=os.getenv("NEBIUS_API_KEY", ""))
     nebius_base_url: str = Field(default=os.getenv("NEBIUS_BASE_URL", "https://api.studio.nebius.com/v1/"))
-    nebius_model: str = Field(default=os.getenv("NEBIUS_MODEL", "microsoft/phi-4"))
+    nebius_model: str = Field(default=os.getenv("NEBIUS_MODEL", "microsoft/phi-3-mini-4k-instruct"))
     nebius_timeout: float = Field(default=float(os.getenv("NEBIUS_TIMEOUT", "30.0")))
     nebius_temperature: float = Field(default=float(os.getenv("NEBIUS_TEMPERATURE", "0.1")))
     nebius_max_tokens: int = Field(default=int(os.getenv("NEBIUS_MAX_TOKENS", "500")))

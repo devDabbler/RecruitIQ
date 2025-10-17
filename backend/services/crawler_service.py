@@ -494,7 +494,7 @@ class CrawlerService:
                     
                     skills_text = await self.llm_service.generate_text_async(
                         prompt=skills_prompt,
-                        model="llama_70b",
+                        model="meta-llama/llama-3.3-8b-instruct:free",
                         max_tokens=200
                     )
                     
@@ -512,7 +512,7 @@ class CrawlerService:
                     
                     level_text = await self.llm_service.generate_text_async(
                         prompt=level_prompt,
-                        model="llama_70b",
+                        model="meta-llama/llama-3.3-8b-instruct:free",
                         max_tokens=50
                     )
                     

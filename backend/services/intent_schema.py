@@ -394,11 +394,12 @@ class IntentRegistry:
             ],
             patterns=[
                 r"(?i)(?:sourcing|recruitment).*(?:strategy|advice|tips)",
-                r"(?i)how.*(?:source|recruit|find).*(\w+)",
-                r"(?i)(?:best|good).*(?:way|approach).*(?:source|recruit).*(\w+)",
-                r"(?i)(?:strategy|advice).*(?:for|sourcing).*(\w+)"
+                r"(?i)(?:how|where).*(?:can I|do I|to).*(?:source|recruit|find).*(?:candidates|talent|professionals)",
+                r"(?i)(?:best|good).*(?:way|approach|strategy).*(?:to )?(?:source|recruit|find).*(\w+)",
+                r"(?i)(?:strategy|advice).*(?:for sourcing|to find).*(\w+)",
+                r"(?i)where.*(?:can I find|to find|to look for).*(?:candidates|talent|professionals)"
             ],
-            negative_keywords=["email", "specific candidates", "search database"],
+            negative_keywords=["email", "specific candidates", "search database", "find all", "show me"],
             priority=6,
             confidence_threshold=0.7
         ))

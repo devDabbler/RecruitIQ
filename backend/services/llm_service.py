@@ -19,7 +19,7 @@ os.environ['SENTENCE_TRANSFORMERS_HOME'] = './models/sentence_transformers'
 class DirectNebiusAI:
     """Direct implementation of Nebius AI service to avoid circular imports."""
     
-    def __init__(self, api_key: str, model: str = "microsoft/phi-4", temperature: float = 0.1, max_tokens: int = 1500):
+    def __init__(self, api_key: str, model: str = "microsoft/phi-3-mini-4k-instruct", temperature: float = 0.1, max_tokens: int = 1500):
         """Initialize the Nebius AI service with configuration."""
         self.api_key = api_key
         self.model = model
@@ -152,7 +152,7 @@ except ImportError:
     ChatGroq = None
     logging.warning("langchain_groq package not found, Meta Llama functionality will be limited")
 
-from backend.utils.config import Settings
+from backend.utils.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -194,14 +194,14 @@ class LLMService:
     """
     Service for handling interactions with various LLM providers like Google's Gemini and Cohere.
     """
-    def __init__(self, settings: Settings):
+    def __init__(self, settings=None):
         """
         Initialize the LLM service with configuration settings.
         
         Args:
-            settings: Application settings
+            settings: Application settings (optional, will use get_settings() if not provided)
         """
-        self.settings = settings
+        self.settings = settings or get_settings()
         self.embedding_model = None
         self._embedding_model_loaded = False
         
@@ -213,16 +213,22 @@ class LLMService:
         self.meta_llama_model = None
         self._meta_llama_initialized = False
         
-        # Initialize Cohere
+        # Initialize Cohere (DISABLED - user doesn't need it)
         self.cohere_client = None
         self._cohere_initialized = False
         
-        # Initialize Nebius AI
+        # Initialize Nebius AI (optional; disabled unless NEBIUS_ENABLED=true)
         self.nebius_ai_service = None
         self._nebius_ai_initialized = False
         
-        # Initialize Nebius AI immediately since it's our preferred parser
-        self._initialize_nebius_ai()
+        # Only initialize Nebius if explicitly enabled
+        try:
+            if getattr(self.settings, 'nebius_enabled', False):
+                self._initialize_nebius_ai()
+            else:
+                logger.info("Nebius disabled (NEBIUS_ENABLED!=true). Using OpenRouter for resume parsing.")
+        except Exception:
+            logger.info("Nebius init skipped due to configuration or errors.")
         
         # Connection status
         self._connection_status = None
@@ -503,7 +509,7 @@ class LLMService:
             logger.error(f"Error during Cohere structured extraction: {str(e)}")
             return {"error": str(e)}
     
-    async def generate_text(self, prompt: str, model_type: ModelType = ModelType.META_LLAMA_MAVERICK, task_type: str = "general") -> str:
+    async def generate_text(self, prompt: str, model_type: ModelType = ModelType.META_LLAMA_MAVERICK, task_type: str = "general", max_tokens: int | None = None, system_message: str | None = None) -> str:
         """
         Generate text using one of the configured LLM models.
         
@@ -517,21 +523,44 @@ class LLMService:
         """
         logger.info(f"Generate text called for prompt: '{prompt[:100]}...' with task_type: {task_type}")
         
-        # For ALL resume-related tasks, always prioritize Nebius AI as requested by user
-        # This includes resume parsing, resume quality assessment, skill extraction, etc.
+        # For ALL resume-related tasks, prefer OpenRouter Phi-4 if enabled, else fallback to Nebius
         if (task_type == "resume_parsing" or 
             "resume" in task_type.lower() or 
             "cv" in task_type.lower() or 
-            prompt.lower().find("resume") != -1) and self.nebius_ai_service:
-            try:
-                logger.info(f"Using Nebius AI for resume-related task: {task_type}")
-                nebius_response = await self.nebius_ai_service.generate_completion(prompt, task_type=task_type)
-                return nebius_response
-            except Exception as e:
-                logger.error(f"Error generating text with Nebius AI: {e}")
-                logger.warning("Falling back to other models after Nebius AI failure")
-                # Continue to fallbacks if Nebius fails
-                # Don't raise the exception - let the fallback chain handle it
+            prompt.lower().find("resume") != -1):
+            # Strict routing: use Nebius only for resume parsing when enabled (env overrides settings)
+            nebius_only = bool(getattr(self.settings, 'nebius_enabled', False) or os.environ.get('NEBIUS_ENABLED', '').lower() == 'true')
+            if nebius_only and self.nebius_ai_service:
+                try:
+                    logger.info("Routing resume parsing to Nebius AI as requested")
+                    nebius_response = await self.nebius_ai_service.generate_completion(
+                        prompt,
+                        task_type=task_type,
+                        max_tokens=max_tokens if max_tokens is not None else 1500,
+                        temperature=0.1
+                    )
+                    return nebius_response
+                except Exception as e:
+                    logger.error(f"Nebius AI failed for resume task: {e}")
+                    # As a last resort, try OpenRouter if explicitly enabled
+                    try:
+                        openrouter_key = getattr(self.settings, 'openrouter_api_key', '') or os.environ.get('OPENROUTER_API_KEY', '')
+                        openrouter_enabled = bool(getattr(self.settings, 'openrouter_enabled', False) or os.environ.get('OPENROUTER_ENABLED', '').lower() == 'true')
+                        if openrouter_key and openrouter_enabled:
+                            logger.warning("Falling back to OpenRouter for resume task due to Nebius error")
+                            or_resp = await self._call_openrouter_async(
+                                prompt=prompt,
+                                model=getattr(self.settings, 'openrouter_default_model', 'meta-llama/llama-3.3-8b-instruct:free'),
+                                system_message=system_message or "You are a resume parsing specialist AI. Extract relevant information accurately.",
+                                max_tokens=max_tokens or 2000,
+                                api_key=openrouter_key
+                            )
+                            if or_resp is not None:
+                                return or_resp
+                    except Exception as e2:
+                        logger.error(f"OpenRouter fallback also failed for resume task: {e2}")
+            else:
+                logger.warning("Nebius resume parsing is disabled; proceeding with normal routing.")
         
         # For other tasks or if Nebius AI failed, use Meta Llama
         if hasattr(self, "meta_llama_model") and self.meta_llama_model:
@@ -609,31 +638,52 @@ class LLMService:
         except Exception:
             openrouter_key = os.environ.get('OPENROUTER_API_KEY', '')
 
-        if model and isinstance(model, str):
-            model_lower = model.lower()
-            # Accept a broader set of model indicators so configuration remains dynamic.
-            looks_like_meta_llama = (
-                model_lower.startswith('meta-llama/') or
-                'meta-llama' in model_lower or
-                model_lower.startswith('llama-') or
-                'maverick' in model_lower or
-                'llama' in model_lower or
-                'openrouter' in model_lower
-            )
-            openrouter_enabled = getattr(self.settings, 'openrouter_enabled', False)
-            if looks_like_meta_llama and openrouter_key and openrouter_enabled:
+        # If this is resume parsing and Nebius is enabled, route to Nebius FIRST
+        if (task_type == "resume_parsing" or "resume" in str(task_type).lower() or "cv" in str(task_type).lower() or (isinstance(prompt, str) and 'resume' in prompt.lower())):
+            nebius_enabled_flag = bool(getattr(self.settings, 'nebius_enabled', False) or os.environ.get('NEBIUS_ENABLED', '').lower() == 'true')
+            if nebius_enabled_flag and self.nebius_ai_service:
                 try:
-                    logger.info(f"Using OpenRouter/OpenAI-compatible provider for model override: {model}")
-                    openrouter_resp = await self._call_openrouter_async(prompt=prompt, model=model, system_message=system_message, max_tokens=max_tokens, api_key=openrouter_key)
-                    if openrouter_resp is not None:
-                        return openrouter_resp
+                    logger.info("Task is resume_parsing; routing to Nebius AI first (async path)")
+                    response = await self.nebius_ai_service.generate_completion(
+                        prompt,
+                        max_tokens=max_tokens or 1500,
+                        temperature=0.1,
+                        task_type=task_type
+                    )
+                    return response
                 except Exception as e:
-                    logger.error(f"OpenRouter call failed for model {model}: {e}")
+                    logger.error(f"Nebius AI async path failed: {e}")
+                    # Continue to OpenRouter fallback below
 
-        # Use Nebius AI as the primary model for most tasks (except resume parsing which has its own flow)
-        if self.nebius_ai_service and task_type != "resume_parsing":
+        # OpenRouter as general primary provider (non-resume or Nebius fallback)
+        openrouter_key = getattr(self.settings, 'openrouter_api_key', '') or os.environ.get('OPENROUTER_API_KEY', '')
+        openrouter_enabled = bool(getattr(self.settings, 'openrouter_enabled', True) or os.environ.get('OPENROUTER_ENABLED', '').lower() == 'true')
+
+        if openrouter_key and openrouter_enabled:
             try:
-                logger.info("Sending prompt to Nebius AI model...")
+                default_model = getattr(self.settings, 'openrouter_default_model', 'meta-llama/llama-3.3-8b-instruct:free')
+                final_model = model if isinstance(model, str) else default_model
+                logger.info(f"Using OpenRouter as primary provider with model: {final_model}")
+                openrouter_resp = await self._call_openrouter_async(
+                    prompt=prompt,
+                    model=final_model,
+                    system_message=system_message,
+                    max_tokens=max_tokens,
+                    api_key=openrouter_key
+                )
+                if openrouter_resp is not None:
+                    return openrouter_resp
+            except Exception as e:
+                logger.error(f"OpenRouter (primary) call failed for model {final_model}: {e}")
+                logger.warning("Falling back to other models after OpenRouter failure.")
+
+        # Fallback to Nebius AI ONLY for resume parsing or if OpenRouter fails.
+        if getattr(self.settings, 'nebius_enabled', False) and self.nebius_ai_service:
+            if task_type == "resume_parsing":
+                logger.info("Task is resume_parsing, using dedicated Nebius AI service.")
+            else:
+                logger.warning("Falling back to Nebius AI after OpenRouter failure.")
+            try:
                 response = await self.nebius_ai_service.generate_completion(
                     prompt, 
                     max_tokens=max_tokens or 1200,
@@ -642,8 +692,7 @@ class LLMService:
                 )
                 return response
             except Exception as e:
-                logger.error(f"Error generating text with Nebius AI: {e}")
-                logger.warning("Falling back to other models after Nebius AI failure")
+                logger.error(f"Error generating text with Nebius AI fallback: {e}")
         
         # Use Meta Llama as secondary option (if available and enabled)
         if self.meta_llama_model:
@@ -735,9 +784,11 @@ class LLMService:
             if nebius_api_key:
                 # Create a direct implementation of Nebius AI capabilities
                 # instead of importing NebiusAIService to avoid circular imports
+                # Use a known-valid Nebius model by default unless overridden
+                nebius_model = os.environ.get('NEBIUS_DEFAULT_MODEL', getattr(self.settings, 'nebius_model', 'microsoft/phi-3-mini-4k-instruct'))
                 self.nebius_ai_service = DirectNebiusAI(
                     api_key=nebius_api_key,
-                    model="microsoft/phi-4",
+                    model=nebius_model,
                     temperature=0.1,
                     max_tokens=1500
                 )
@@ -975,25 +1026,9 @@ def verify_llm_connections(llm_service: LLMService) -> Dict[str, bool]:
     connection_status['meta_llama'] = False
     logger.info("Meta Llama is explicitly disabled for resume parsing - Nebius AI is the only allowed resume parser")
     
-    # Check Cohere
-    try:
-        llm_service._initialize_cohere()
-        if llm_service.cohere_client:
-            # Test the connection with a simple request
-            response = llm_service.cohere_client.chat(
-                model="command",
-                message="Hello",
-                max_tokens=10
-            )
-            if response:
-                connection_status['cohere'] = True
-                logger.info("Cohere connection verified successfully")
-            else:
-                logger.warning("Cohere connection test failed")
-        else:
-            logger.warning("Cohere client not properly initialized")
-    except Exception as e:
-        logger.error(f"Cohere connection failed: {e}")
+    # Check Cohere (DISABLED - user doesn't need it)
+    connection_status['cohere'] = False
+    logger.info("Cohere disabled by user preference")
     
     # Check Nebius AI
     try:

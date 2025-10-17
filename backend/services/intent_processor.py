@@ -204,50 +204,23 @@ class IntentProcessor:
                 r"(how many|number of|count of) (applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job)?(\?|\.|!|$)",
                 r"(applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job).*(how many|count|number)(\?|\.|!|$)"
             ],
-            # More specific patterns to avoid conflicts with market research - EXCLUDE market research keywords
             "search_candidates": [
-                # Priority 1: Skills-based patterns (highest priority) - ENHANCED
-                r"(find|search|show|get|locate|discover|identify) (me |all |the )?candidates? (with|who have|who know|knowing|expertise in|experience in|skilled in|proficient in|familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
-                r"(who|which candidates?|what candidates?) (know|have|are skilled in|have experience in|are proficient in|are familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
-                r"(candidates?|professionals?|developers?|engineers?) (with|who have|skilled in|experienced in) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
-                # Priority 1.5: Enhanced skills patterns for "all candidates with X" format
-                r"(find|search|show|get|locate|discover|identify) (me |all |the )?candidates? (with|who have|who know|knowing|expertise in|experience in|skilled in|proficient in|familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
-                r"(show me all|find me all|get all|display all|list all) candidates? (with|who have|who know|knowing|expertise in|experience in|skilled in|proficient in|familiar with) (?P<skills>[^?]*?)(\?|\.|!|$|\s)",
-                # Priority 2: Role-based patterns with "all" handling (only when no skills context)
-                r"(find|search|show|get|locate|discover|identify) (me |all |the )?candidates? (for|in|with|specializing in) (?P<role>[a-zA-Z ]+)(?!\s+with)(?!.*(performance|metrics|kpis|efficiency|effectiveness))(\?|\.|!|$|\s)",
-                r"(look for|seek|find) (?P<role>[a-zA-Z ]+) (candidates?|professionals?|developers?|engineers?)(?!.*(performance|metrics|kpis|efficiency|effectiveness))(\?|\.|!|$|\s)",
-                # Priority 3: "All" patterns (lowest priority, only when no skills/role context)
-                r"(find me all|show me all|get all|display all|list all) (?P<role>[a-zA-Z ]+) candidates?(?!\s+with)(?!.*(performance|metrics|kpis|efficiency|effectiveness))(\?|\.|!|$|\s)",
-                r"(find|search|show|get|locate|discover|identify) (me |all |the )?(?P<role>[a-zA-Z ]+) candidates?(?!.*(performance|metrics|kpis|efficiency|effectiveness))(\?|\.|!|$|\s)"
+                # Simple pattern: "find/finding [role]" - highest priority
+                r"^(find|finding|search|searching|show|locate|get|identify)(ing)?\s+(?P<role>(?:gen ai|data|software|machine learning|ml|ai|backend|frontend|full stack|devops|cloud|product|project)[\w\s]*?(?:engineer|scientist|developer|analyst|manager|candidates?))",
+                # Pattern for: "find candidates who are [ROLE] with [SKILL]"
+                r"(find|search|show|get|locate|discover|identify).*candidates?\s+who\s+(are|is)\s+(?P<role>[\w\s]+?)\s+(with|having|who\s+have|and|that\s+have)\s+(?P<skills>[\w\s,]+?)(?:\?|\.|\!|$)",
+                # Pattern for: "find [ROLE] with [SKILL]"
+                r"(find|search|show|get|locate|discover|identify).*(?P<role>(?:gen ai|data|software|machine learning|ml|ai|backend|frontend|full stack|devops|cloud)[\w\s]*?(?:engineer|scientist|developer|analyst|manager)?)\s+(with|having|who\s+have|and|that\s+have)\s+(?P<skills>[\w\s,]+?)(?:\?|\.|\!|$)",
+                # Fallback: capture everything after "with" or "for"
+                r"(find|search|show|get|locate|discover|identify).*candidates.*(with|who have|skilled in|for)\s+(?P<skills_or_role>.*)",
+                r"(who|which|what) candidates.*(know|have|are skilled in)\s+(?P<skills>.*)"
             ],
             # Email generation intents - ENHANCED WITH CLEAR DISTINCTION
             "recruiter_outreach_email": [
-                # HIGHEST PRIORITY: Handle "our job [role]" syntax specifically - most specific first
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop).*?(?:recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources)?.*?(?:outreach |cold |initial |contact |introductory |first |opening )?email.*?(?:to|for|sent to|addressed to).*?(?:our job|the job|job)\s+(?P<role>(?:[a-zA-Z]+(?:\s+[a-zA-Z]+)*))(?:\s+(?:position|role))?(?:[\.\?!]|$)",
-                
-                # SECOND PRIORITY: "to candidates for our job [role]" pattern
-                r"(write|create|draft|compose|prepare|craft|build|formulate|develop).*?(?:recruiter)?.*?email.*?(?:to|for).*?candidates.*?(?:for|about).*?(?:our job|the job|job)\s+(?P<role>(?:[a-zA-Z]+(?:\s+[a-zA-Z]+)*))(?:\s+(?:position|role))?(?:[\.\?!]|$)",
-
-                # Variant: role before candidates e.g., "email to potential data scientist candidates"
-                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter )?email (to|for|addressed to) (a |an )?(potential |prospective )?(?P<role>[^?!.]+?) candidates?(\?|$|\s)",
-
-                # HIGHEST PRIORITY: Explicit recruiter-to-candidate patterns
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s? (for|about|regarding|concerning)(\?|$|\s)",
-                r"(recruiter|recruitment|hiring|talent acquisition|talent|hr|human resources) (outreach|cold|initial|contact|introductory|first|opening) email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s? (for|about|regarding|concerning)(\?|$|\s)",
-                r"(draft|create|write|compose|prepare|craft|build|formulate|develop) (a |an )?outreach email (from|by) (a |an )?recruiter (to|for|addressed to) (a |an )?(?:candidate|professional)s? (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-                r"(write|create|draft|compose|prepare|craft|build|formulate|develop) (a |an )?recruiter email (to|for|addressed to) (a |an )?(potential |prospective |candidate |job seeker )?(?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-
-                # HIGH PRIORITY: Candidate pitch/outreach patterns (recruiter perspective)
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?candidate (pitch|outreach) email (to|for|sent to|addressed to) (a |an )?(prospective |potential )?candidate (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-                r"(draft|create|write|compose|prepare|craft|build|formulate|develop) (a |an )?(candidate pitch|outreach email) (to|for|sent to|addressed to) (a |an )?(prospective |potential )?candidate (about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-
-                # MEDIUM PRIORITY: Generic email to candidates (must exclude application context)
-                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop) (a |an )?email (to|for|sent to|addressed to) (a |an )?(prospective |potential |candidate |job seeker )?candidates? (for|about|regarding|concerning) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(?!.*(apply|application|applying|job I want|position I want|role I want|why I\'m|why I am|great fit|qualified for))(\?|$|\s)",
-
-                # LOWER PRIORITY: Action-based patterns
-                r"(message|contact|reach out to|connect with) (potential |prospective )?candidates? (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-                r"(recruitment|hiring|talent) (message|communication|correspondence) (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)",
-                r"(prospect|recruit|approach) (candidates?|professionals?) (for|about|regarding) (?P<role>(?:senior |junior |lead |principal |staff )?[A-Za-z -]+(?: engineer| developer| scientist| analyst| manager| specialist))s?(\?|$|\s)"
+                # Broad patterns to catch any request for a recruiter or outreach email
+                r"(generate|create|write|draft|compose|prepare|craft|build|formulate|develop).*(recruiter|outreach|recruitment|hiring|talent|cold).*email",
+                r"email.*(to|for|about|regarding).*candidate.*for.*(?P<role>[a-zA-Z -]+)",
+                r"recruiter email for (?P<role>.*)"
             ],
             "candidate_pitch_email": [
                 # HIGHEST PRIORITY: Explicit candidate-to-company patterns with application intent
@@ -393,9 +366,7 @@ class IntentProcessor:
                 r"^(external|online|web|internet) (find|get|tell me) (market|industry) (data|information|stats|statistics|figures) (on|for|about) (?P<query>.*)",
                 # Only match when explicitly asking for external information
                 r"^(find|get|tell me) (external|online|web|internet) (market|industry) (data|information|stats|statistics|figures) (on|for|about) (?P<query>.*)",
-                r"^what (can you find|information exists|data is available) (externally|online|on the web|on the internet) (about|on|for) (?P<query>.*)",
-                # Fix for "Search for information about climate change" - should be web_search, not company_info
-                r"^(search|find|look up) (for|about) (?P<query>.*)"
+                r"^what (can you find|information exists|data is available) (externally|online|on the web|on the internet) (about|on|for) (?P<query>.*)"
             ],
             "job_posting_analysis": [
                 r"(analyze|review|check|evaluate) (this |the )?job posting( at| from| on)? (?P<url>https?://\S+)",
@@ -579,7 +550,7 @@ class IntentProcessor:
             "company_info": ["company", "employer", "organization", "information", "details", "about", "culture", "benefits", "work life"],
             "applications_count": ["how many", "applied", "applications", "applicants", "count", "number of"],
             "market_research": ["market", "analysis", "research", "viability", "talent", "sourcing", "assess", "evaluate", "conduct", "feasibility", "hiring", "manager", "briefing", "compare", "identify", "create", "plan", "json", "externally"],
-            "web_search": ["search", "find", "information", "about", "what", "how", "tell me", "look up", "research"],
+            "web_search": ["web search", "google", "internet search", "online search", "look up online", "search online", "external information"],
             "general_question": ["what", "how", "why", "when", "where", "who", "help", "hello", "hi", "can you", "could you"],
         }
     

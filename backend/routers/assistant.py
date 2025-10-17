@@ -849,18 +849,82 @@ async def chat_with_assistant(
             skills = entities.get('skills', '')
             domain = entities.get('domain', '')
             
+            logger.info(f"[SEARCH_CANDIDATES] Initial entities - role: '{role}', skills: '{skills}', all entities: {entities}")
+            
+            # Normalize role names - fix LLM over-expansion
+            if role:
+                role_lower = role.lower()
+                # Map expanded forms back to common abbreviations
+                role_normalizations = {
+                    'generative artificial intelligence': 'gen ai',
+                    'gen artificial intelligence': 'gen ai',
+                    'artificial intelligence': 'ai',
+                    'machine learning': 'ml',
+                }
+                for expanded, abbrev in role_normalizations.items():
+                    if expanded in role_lower:
+                        role = role_lower.replace(expanded, abbrev)
+                        logger.info(f"[SEARCH_CANDIDATES] Normalized role from '{entities.get('role')}' to '{role}'")
+                        break
+            
+            # Handle legacy skills_or_role field - try to split into role and skills
+            if not role and not skills and 'skills_or_role' in entities:
+                combined = entities.get('skills_or_role', '')
+                # Try to extract role from the original message
+                role_patterns = [
+                    r'(gen ai|generative ai|data|software|machine learning|ml|ai|backend|frontend|full stack|devops|cloud)[\w\s]*?(?:engineer|scientist|developer|analyst|manager)',
+                    r'(product|project)\s+manager',
+                    r'(qa|quality assurance)\s+engineer'
+                ]
+                for pattern in role_patterns:
+                    role_match = re.search(pattern, message.lower())
+                    if role_match:
+                        role = role_match.group(0).strip()
+                        # Remove role from combined to get skills
+                        skills = combined.replace(role, '').strip()
+                        break
+                
+                # If no role found, treat combined as skills
+                if not role:
+                    skills = combined
+            
             # Prepare the response
             response_text = ""
             
             try:
-                # Extract role from message if not found in entities
-                if not role and "data scientist" in message.lower():
-                    role = "data scientist"
-                elif not role and "find me all" in message.lower():
-                    # Extract role mentioned after "find me all"
-                    role_match = re.search(r"find me all ([a-zA-Z ]+) candidates", message.lower())
-                    if role_match:
-                        role = role_match.group(1).strip()
+                # Enhanced extraction for role and skills if not found in entities
+                message_lower = message.lower()
+                
+                # Extract role if not found
+                if not role:
+                    role_patterns = [
+                        r'(gen ai engineer|generative ai engineer)',
+                        r'(gen ai|generative ai)',
+                        r'(data scientist|data engineer|data analyst)',
+                        r'(software engineer|software developer)',
+                        r'(machine learning engineer|ml engineer)',
+                        r'(backend developer|frontend developer|full stack developer)',
+                        r'(devops engineer|cloud engineer)',
+                        r'(product manager|project manager)',
+                        r'(qa engineer|quality assurance engineer)'
+                    ]
+                    for pattern in role_patterns:
+                        role_match = re.search(pattern, message_lower)
+                        if role_match:
+                            role = role_match.group(1).strip()
+                            logger.info(f"Extracted role from message: {role}")
+                            break
+                
+                # Extract skills if not found  
+                if not skills:
+                    # Look for skill patterns after "with", "having", "know", etc.
+                    skill_pattern = r'(?:with|having|know|knows|skilled in|experienced in)\s+([a-z\s,+#]+?)(?:\s+(?:skills?|experience|programming|language))?(?:\?|\.|\!|$|and\s)'
+                    skill_match = re.search(skill_pattern, message_lower)
+                    if skill_match:
+                        skills = skill_match.group(1).strip()
+                        logger.info(f"Extracted skills from message: {skills}")
+                
+                logger.info(f"[SEARCH_CANDIDATES] Final extracted - role: '{role}', skills: '{skills}'")
                 
                 # If we have a specific role query
                 if role:
@@ -923,6 +987,34 @@ async def chat_with_assistant(
                     
                     # Combine results, removing duplicates by creating dictionary keyed by ID
                     all_candidates = list({candidate.id: candidate for candidate in resume_candidates}.values())
+                    
+                    # IMPORTANT: If skills are also specified, filter by skills too
+                    if skills:
+                        logger.info(f"Filtering {len(all_candidates)} role-matched candidates by skill: {skills}")
+                        from ..models.models import CandidateSkill
+                        
+                        # Get candidate IDs that match the skill requirement
+                        skill_filtered_candidates = []
+                        for candidate in all_candidates:
+                            # Check if candidate has the skill in their CandidateSkill records
+                            has_skill_in_table = db.query(CandidateSkill).filter(
+                                CandidateSkill.candidate_id == candidate.id,
+                                CandidateSkill.skill_name.ilike(f"%{skills}%")
+                            ).first() is not None
+                            
+                            # Also check in resume content
+                            has_skill_in_resume = False
+                            if hasattr(candidate, 'resumes') and candidate.resumes:
+                                for resume in candidate.resumes:
+                                    if resume.parsed_content and skills.lower() in resume.parsed_content.lower():
+                                        has_skill_in_resume = True
+                                        break
+                            
+                            if has_skill_in_table or has_skill_in_resume:
+                                skill_filtered_candidates.append(candidate)
+                        
+                        all_candidates = skill_filtered_candidates
+                        logger.info(f"After skill filtering: {len(all_candidates)} candidates remain")
                     count = len(all_candidates)
                     
                     if count > 0:
@@ -979,7 +1071,10 @@ async def chat_with_assistant(
                         candidate_details.sort(key=lambda x: x['match_score'], reverse=True)
                         
                         # Generate response text
-                        response_text = f"Found {count} {'candidate' if count == 1 else 'candidates'} with role or experience as {role}:\n\n"
+                        if skills:
+                            response_text = f"Found {count} {'candidate' if count == 1 else 'candidates'} with role '{role}' and skill '{skills}':\n\n"
+                        else:
+                            response_text = f"Found {count} {'candidate' if count == 1 else 'candidates'} with role or experience as {role}:\n\n"
                         for i, candidate in enumerate(candidate_details, 1):
                             score_emoji = "🟢" if candidate['match_score'] >= 80 else "🟡" if candidate['match_score'] >= 70 else "🔴"
                             response_text += f"{i}. {score_emoji} {candidate['name']} - {candidate['position']} (Match: {candidate['match_score']}%)\n"
@@ -2134,7 +2229,7 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
         # Handle recruiter outreach email generation
         elif intent == "recruiter_outreach_email":
             role = entities.get('role', '').strip()
-            logger.info(f"Generating recruiter outreach email for {role} role")
+            logger.info(f"RECRUITER_EMAIL_HANDLER: Starting for role: '{role}'")
             
             try:
                 # Merge optional style settings from conversation_context into entities
@@ -2198,7 +2293,9 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                     logger.warning(f"Could not merge style settings into entities: {merge_err}")
 
                 # Use the intent processor to generate the recruiter outreach email
+                logger.info(f"RECRUITER_EMAIL_HANDLER: Calling intent_processor with entities: {entities}")
                 intent_result = await intent_processor.process_intent(intent, entities, message)
+                logger.info(f"RECRUITER_EMAIL_HANDLER: Received from intent_processor: {intent_result}")
                 
                 if intent_result.get("intent_processed", False):
                     # Return the structured response with response_type for frontend handling
@@ -2218,15 +2315,50 @@ Be specific about timeframes (e.g., '2-3 weeks for initial screening' rather tha
                 else:
                     # Fallback if intent processor couldn't handle it
                     error = intent_result.get("error", "Unable to generate recruiter outreach email")
-                    logger.error(f"Intent processor failed for recruiter outreach: {error}")
-                    
-                    return {
-                        "response": f"I'm sorry, I encountered an error while generating the recruiter outreach email: {error}",
-                        "conversation_context": conversation_context
-                    }
+                    logger.error(f"RECRUITER_EMAIL_HANDLER: Intent processor failed: {error}. Falling back to LLM service.")
+
+                    # Fallback to LLM service
+                    prompt = f"""
+                    Generate a professional and engaging outreach email to a candidate for a {role} position.
+
+                    The email should include:
+                    1.  A compelling subject line.
+                    2.  A personalized greeting.
+                    3.  A brief introduction to the company.
+                    4.  An explanation of why the candidate's profile is a good fit.
+                    5.  A clear call to action (e.g., asking for a brief chat).
+                    6.  A professional closing and signature.
+
+                    Format the response as a complete email.
+                    """
+                    try:
+                        logger.info(f"RECRUITER_EMAIL_HANDLER: Fallback prompt: {prompt}")
+                        fallback_email = await llm_service.generate_text_async(
+                            prompt=prompt,
+                            task_type="chat",
+                            model=model_override,
+                            system_message="You are an expert recruiter who writes compelling outreach emails."
+                        )
+                        # Wrap the fallback response in the rich format the frontend expects
+                        final_response = {
+                            "response": fallback_email, # For immediate display
+                            "response_type": "recruiter_outreach_email",
+                            "email_body": fallback_email,
+                            "subject_lines": ["Exciting Career Opportunity"], # Placeholder subject
+                            "style": {"tone": "professional", "creativity": "medium"},
+                            "conversation_context": conversation_context
+                        }
+                        logger.info(f"RECRUITER_EMAIL_HANDLER: Returning structured LLM fallback response: {final_response}")
+                        return final_response
+                    except Exception as llm_e:
+                        logger.error(f"RECRUITER_EMAIL_HANDLER: LLM fallback failed: {llm_e}")
+                        return {
+                            "response": f"I'm sorry, I encountered an error while generating the recruiter outreach email: {error}",
+                            "conversation_context": conversation_context
+                        }
                     
             except Exception as e:
-                logger.error(f"Error generating recruiter outreach email: {e}")
+                logger.error(f"RECRUITER_EMAIL_HANDLER: Unhandled exception: {e}", exc_info=True)
                 return {
                     "response": "I'm sorry, I encountered an error while generating the recruiter outreach email. Please try again later.",
                     "conversation_context": conversation_context

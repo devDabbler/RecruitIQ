@@ -1,6 +1,6 @@
 {
   "nebius_base_url": "https://api.studio.nebius.com/v1/",
-  "model": "microsoft/phi-4",
+  "model": "microsoft/phi-3-mini-4k-instruct",
   "api_key": "${NEBIUS_API_KEY}",
   "max_tokens": 1500,
   "timeout": 30.0,

@@ -152,3 +152,7 @@ training_data/
 
 # Ignore backend scripts
 backend/scripts/
+
+# ==== Images ====
+# Ignore PNG images in documentation
+docs/image/RECRUITER_QUESTIONS_GUIDE/*.png

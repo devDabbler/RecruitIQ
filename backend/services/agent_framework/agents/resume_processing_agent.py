@@ -631,38 +631,80 @@ Provide:
 
 Format as JSON with keys: technical_skills, soft_skills, certifications, recommendations"""
                 
-                # Get suggestions from LLM
+                # Get suggestions from LLM with strict JSON instruction
                 try:
-                    full_prompt = (
-                        "System: You are a career advisor specializing in enhancing professional resumes.\n\n"
-                        f"User: {prompt}"
+                    system_msg = (
+                        "You are a career advisor specializing in enhancing professional resumes. "
+                        "Return ONLY a valid JSON object with keys: technical_skills (array), soft_skills (array), "
+                        "certifications (array), recommendations (string). No code fences, no extra text."
                     )
-                    response_message = await self.llm_service.generate_text(full_prompt)
-                    content = response_message.content if hasattr(response_message, 'content') else str(response_message)
+                    content = await self.llm_service.generate_text(
+                        prompt,
+                        task_type="general",
+                        max_tokens=800,
+                        system_message=system_msg,
+                    )
                     logger.debug(f"LLM response for skill suggestions: {content}")
 
-                    # Extract and parse the JSON response
-                    json_str = content
-                    if "```json" in json_str:
-                        json_str = json_str.split("```json")[1].split("```")[0].strip()
-                    
-                    suggestion_data = json.loads(json_str)
-                    
-                    # Update suggestions with parsed data
-                    suggestions["technical_skills"] = suggestion_data.get("technical_skills", [])
-                    suggestions["soft_skills"] = suggestion_data.get("soft_skills", [])
-                    suggestions["certifications"] = suggestion_data.get("certifications", [])
-                    suggestions["recommendations"] = suggestion_data.get("recommendations", "")
-                    
-                    logger.info(f"Generated {len(suggestions['technical_skills'])} technical skills, {len(suggestions['soft_skills'])} soft skills, and {len(suggestions['certifications'])} certification suggestions.")
+                    # Robust JSON extraction (brace counting)
+                    text = str(content or "").strip()
+                    json_str = None
+                    if "{" in text and "}" in text:
+                        brace = 0
+                        start = -1
+                        for i, ch in enumerate(text):
+                            if ch == '{':
+                                if brace == 0:
+                                    start = i
+                                brace += 1
+                            elif ch == '}':
+                                brace -= 1
+                                if brace == 0 and start != -1:
+                                    json_str = text[start:i+1]
+                                    break
+                    if json_str is None:
+                        # Handle common code-fence responses
+                        if "```json" in text:
+                            try:
+                                json_str = text.split("```json",1)[1].split("```",1)[0].strip()
+                            except Exception:
+                                json_str = None
 
-                except (json.JSONDecodeError, AttributeError) as e:
-                    logger.error(f"Error processing LLM response for skill suggestions: {e}")
-                    suggestions["recommendations"] = "Could not generate personalized suggestions due to a formatting error."
+                    data = json.loads(json_str) if json_str else {}
+                    # Update suggestions with parsed data
+                    suggestions["technical_skills"] = data.get("technical_skills", [])
+                    suggestions["soft_skills"] = data.get("soft_skills", [])
+                    suggestions["certifications"] = data.get("certifications", [])
+                    suggestions["recommendations"] = data.get("recommendations", ")")
+
+                    # Ensure types
+                    for key in ("technical_skills","soft_skills","certifications"):
+                        if not isinstance(suggestions[key], list):
+                            suggestions[key] = []
+                    if not isinstance(suggestions["recommendations"], str):
+                        suggestions["recommendations"] = ""
+
+                    logger.info(
+                        f"Generated {len(suggestions['technical_skills'])} technical, "
+                        f"{len(suggestions['soft_skills'])} soft, {len(suggestions['certifications'])} certs."
+                    )
+
                 except Exception as e:
-                    logger.error(f"Error generating skill suggestions from LLM: {e}")
-                    # Provide fallback suggestions
-                    suggestions["recommendations"] = "Could not generate personalized suggestions. Consider reviewing industry standards for your role."
+                    logger.error(f"Error generating/processing LLM skill suggestions, using fallback: {e}")
+                    # Provide deterministic fallback suggestions based on job titles and current skills
+                    inferred = []
+                    for title in job_titles:
+                        try:
+                            inferred.extend(self._infer_skills_for_role(title))
+                        except Exception:
+                            pass
+                    inferred = [s for s in inferred if s.lower() not in current_skills]
+                    suggestions["technical_skills"] = list(dict.fromkeys(inferred))[:7]
+                    suggestions["soft_skills"] = ["communication","teamwork","problem-solving","adaptability"]
+                    suggestions["certifications"] = ["AWS Certified Cloud Practitioner","Scrum Master"]
+                    suggestions["recommendations"] = (
+                        "Focus on complementary tools and certifications aligned with your recent roles."
+                    )
         except Exception as e:
             logger.error(f"Error in skill suggestion generation: {e}")
         

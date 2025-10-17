@@ -32,11 +32,12 @@ class NebiusAIParser:
             logger.info(f"Nebius API key present: {'***' if getattr(nebius_service, 'api_key', None) else 'MISSING'}")
         except Exception as e:
             logger.warning(f"Nebius AI service config could not be loaded at init: {e}")
-        # Warn if LLM service is not Nebius
+        # Note: We now use a unified LLMService which prefers OpenRouter Phi-4.
+        # This is expected and not an error.
         if getattr(self.structured_extractor, 'llm_service', None) is None:
-            logger.warning("StructuredExtractor.llm_service is None! Nebius AI will not be used.")
-        elif 'nebius' not in str(type(self.structured_extractor.llm_service)).lower():
-            logger.warning(f"StructuredExtractor.llm_service is not NebiusAIService: {type(self.structured_extractor.llm_service)}")
+            logger.warning("StructuredExtractor.llm_service is None! No LLM will be used for structured extraction.")
+        else:
+            logger.info(f"StructuredExtractor using unified LLMService: {type(self.structured_extractor.llm_service)} (OpenRouter primary)")
 
     
     async def parse_resume(self, raw_text: str, resume_path: str = "") -> Dict[str, Any]:

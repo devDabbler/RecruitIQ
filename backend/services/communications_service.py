@@ -194,10 +194,10 @@ class CommunicationsService:
         Return only the email body text without any additional commentary.
         """
         
-        # Generate the email draft using LLaMA
+        # Generate the email draft using available model
         email_draft = await self.llm_service.generate_text_async(
             prompt=prompt,
-            model="llama_70b",  # Use the larger model for better writing quality
+            model="meta-llama/llama-3.3-8b-instruct:free",  # Use available model for better writing quality
             max_tokens=500,
         )
         
@@ -316,28 +316,35 @@ class CommunicationsService:
         - Style tone: {tone}.
         - Creativity level: {creativity} ({creativity_hint})
         - Length: under 180–200 words.
-        - Use candidate-centric language (you/your). No placeholders besides [Candidate Name] for greeting.
+        - Use candidate-centric language (you/your).
+        - USE PLACEHOLDERS for sender/company identity. Never invent real names or companies.
+          Use exactly these placeholders when referring to yourself or the company:
+          [Your Name], [Your Title], [Company Name], [Company Website] (optional)
 
         {prompt_job_ctx}
 
-        Produce a JSON object ONLY (no commentary, no markdown) with keys:
+        IMPORTANT: Return ONLY a valid JSON object with this exact structure:
         {{
-          "subject_lines": ["...", "..."],  // {subject_line_count} engaging options, <= 8 words each
-          "body": "..."  // complete email body ready to send
+          "subject_lines": ["Subject 1", "Subject 2", "Subject 3"],
+          "body": "Complete email body text here"
         }}
 
-        The body should include:
-        - Brief intro of you/company/team
-        - Enticing description of the {role} opportunity
-        - 2–4 short bullet-like lines or sentences highlighting impact/requirements
+        The body should include (in this order with clean spacing):
+        - Greeting line with the placeholder: Hi [Candidate Name],
+        - 1 blank line, then a short intro using placeholders for your identity/company
+        - A concise paragraph about the {role} opportunity grounded in job context if provided
+        - A short bullet list (2–4 items) using "- " dashes (not asterisks)
         - Clear call to action to chat or apply
-        - Professional closing with signature
+        - Signature block using placeholders on separate lines:
+          Best regards,\n[Your Name]\n[Your Title]\n[Company Name]\n[Company Website]
+
+        Do NOT include any text outside the JSON object. Do NOT use markdown formatting or code fences.
         """
 
         try:
             raw = await self.llm_service.generate_text_async(
                 prompt=prompt,
-                model="llama_70b",
+                model="meta-llama/llama-3.3-8b-instruct:free",
                 max_tokens=500,
             )
 
@@ -350,12 +357,34 @@ class CommunicationsService:
             data: Dict[str, Any]
             try:
                 data = json.loads(json_text)
-            except Exception:
-                # Fallback: try to heuristically split subject lines from body
-                lines = [ln.strip() for ln in json_text.splitlines() if ln.strip()]
-                subjects = []
-                body = "\n".join(lines)
-                data = {"subject_lines": subjects[:subject_line_count], "body": body}
+            except Exception as e:
+                logger.warning(f"Failed to parse JSON from AI response: {e}")
+                logger.warning(f"Raw response: {json_text[:200]}...")
+                
+                # Fallback: try to extract structured data from the response
+                # Look for subject lines and body patterns
+                subject_lines = []
+                body = ""
+                
+                # Try to find subject lines in the text
+                subject_match = re.search(r'"subject_lines":\s*\[(.*?)\]', json_text, re.DOTALL)
+                if subject_match:
+                    subject_text = subject_match.group(1)
+                    # Extract individual subject lines
+                    subjects = re.findall(r'"([^"]+)"', subject_text)
+                    subject_lines = [s.strip() for s in subjects if s.strip()][:subject_line_count]
+                
+                # Try to find body content
+                body_match = re.search(r'"body":\s*"([^"]*(?:\\.[^"]*)*)"', json_text, re.DOTALL)
+                if body_match:
+                    body = body_match.group(1)
+                    # Unescape JSON string
+                    body = body.replace('\\n', '\n').replace('\\"', '"').replace('\\t', '\t')
+                else:
+                    # If no structured data found, use the raw text as body
+                    body = json_text
+                
+                data = {"subject_lines": subject_lines, "body": body}
 
             # Validate structure
             subject_lines = data.get("subject_lines") or []
@@ -366,13 +395,87 @@ class CommunicationsService:
             body = data.get("body") or ""
             body = str(body).strip()
 
-            # Post-generation guardrails: ensure candidate-facing greeting at top
+            # --- Formatting & placeholder normalization helpers ---
+            def _normalize_placeholders(text: str) -> str:
+                t = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+                # Ensure greeting
+                if not re.match(r"(?i)\s*(hi|hello|dear)\s*\[candidate name\]", t):
+                    t = "Hi [Candidate Name],\n\n" + t
+
+                # Replace any invented sender/company with placeholders
+                # Common intro patterns
+                t = re.sub(r"(?i)\bi'm\s+([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\b", "I'm [Your Name]", t)
+                t = re.sub(r"(?i)\bi am\s+([A-Z][A-Za-z\-']+(?:\s+[A-Z][A-Za-z\-']+)*)\b", "I am [Your Name]", t)
+                t = re.sub(r"(?i)\bwith\s+([A-Z][\w .,&-]+)\b", "with [Company Name]", t)
+                t = re.sub(r"(?i)\bat\s+([A-Z][\w .,&-]+)\b", "at [Company Name]", t)
+
+                # If title is stated generically (e.g., a recruiter), leave it; otherwise allow placeholder
+                t = re.sub(r"(?i)\b(as|working as)\s+([\w\- ]{2,40})\s+at\s+\[Company Name\]", r"as [Your Title] at [Company Name]", t)
+
+                # Normalize bullet markers to '- ' (no extra blank lines between bullets)
+                raw_lines = t.split('\n')
+                normalized_lines = []
+                for ln in raw_lines:
+                    if re.match(r"^\s*[\*•]\s+", ln):
+                        ln = re.sub(r"^\s*[\*•]\s+", "- ", ln)
+                    normalized_lines.append(ln.rstrip())
+
+                # Compact whitespace: allow max one blank line between paragraphs
+                compact_lines = []
+                previous_blank = False
+                in_bullets = False
+                for ln in normalized_lines:
+                    is_bullet = bool(re.match(r"^\s*-\s+", ln))
+                    is_blank = (ln.strip() == "")
+
+                    if is_bullet:
+                        # Start of bullet block: ensure exactly one blank line before it
+                        if not in_bullets:
+                            if compact_lines and compact_lines[-1].strip() != "":
+                                compact_lines.append("")
+                        in_bullets = True
+                        compact_lines.append(ln)
+                        previous_blank = False
+                        continue
+
+                    # Blank lines inside a bullet block are skipped entirely
+                    if is_blank and in_bullets:
+                        continue
+
+                    # Non-bullet line
+                    if is_blank:
+                        if not previous_blank and compact_lines:
+                            compact_lines.append("")
+                        previous_blank = True
+                    else:
+                        compact_lines.append(ln)
+                        previous_blank = False
+                        in_bullets = False
+
+                t = "\n".join(compact_lines).strip()
+
+                # Enforce signature block placeholders
+                if re.search(r"(?i)\bbest\s+regards\b", t) or re.search(r"(?i)\bthanks\b", t):
+                    # Replace any trailing name/title/company lines with placeholders
+                    t = re.sub(
+                        r"(?is)(best\s+regards,?\s*)(?:.*?)(?:\n\s*)*$",
+                        "Best regards,\n[Your Name]\n[Your Title]\n[Company Name]\n[Company Website]",
+                        t.strip(),
+                    )
+                else:
+                    t = t.rstrip() + "\n\nBest regards,\n[Your Name]\n[Your Title]\n[Company Name]\n[Company Website]"
+
+                # Collapse 3+ blank lines to max 2
+                t = re.sub(r"\n{3,}", "\n\n", t)
+                return t.strip()
+
+            # Post-generation guardrails: ensure candidate-facing greeting and placeholders
             lowered = body.lower()
             if "dear hiring manager" in lowered or "hiring manager" in lowered:
                 body = re.sub(r"(?i)dear\s*hiring\s*manager\s*,?", "Hi [Candidate Name],", body)
                 body = body.replace("hiring manager", "candidate")
-            if not re.match(r"(?i)\s*(hi|hello|dear)\s*\[candidate name\]", body):
-                body = "Hi [Candidate Name],\n\n" + body
+            body = _normalize_placeholders(body)
 
             # Final sanitization to remove any trailing placeholder headings
             body = clean_generated_text(body)
