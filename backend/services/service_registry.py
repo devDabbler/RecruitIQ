@@ -3,7 +3,6 @@ import logging
 from .llm_service import LLMService, get_llm_service
 from .intent_processor import IntentProcessor, get_intent_processor
 from .web_search_service import WebSearchService, get_web_search_service
-from .recruitiq_travel_service import RecruitIQTravelService
 from .communications_service import CommunicationsService
 from .matching_integrator import MatchingIntegrator
 from .rag_service import RAGService
@@ -26,7 +25,6 @@ class ServiceRegistry:
         self._llm_service = None
         self._intent_processor = None
         self._web_search_service = None
-        self._travel_service = None
         self._communications_service = None
         self._graph_service = None
         self._rag_service = None
@@ -58,12 +56,6 @@ class ServiceRegistry:
         if self._web_search_service is None:
             self._web_search_service = get_web_search_service()
         return self._web_search_service
-
-    @property
-    def travel_service(self):
-        if self._travel_service is None:
-            self._travel_service = RecruitIQTravelService()
-        return self._travel_service
 
     @property
     def communications_service(self):
@@ -197,9 +189,6 @@ def provide_resume_parser():
 
 def provide_crawler_service():
     return registry.crawler_service
-
-def provide_travel_service():
-    return registry.travel_service
 
 def provide_communications_service():
     return registry.communications_service

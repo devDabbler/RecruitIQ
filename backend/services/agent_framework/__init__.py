@@ -34,7 +34,6 @@ def initialize_agents():
         "job_analysis_agent",
         "communication_agent",
         "market_intel_agent",
-        "travel_assistant_agent",
         "recruitment_workflow_agent"
     ]
     

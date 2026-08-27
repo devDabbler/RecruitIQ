@@ -78,8 +78,6 @@ class RecruitmentWorkflowAgent(BaseAgent):
             return agent_class(communications_service=service_registry.provide_communications_service(), llm_service=service_registry.provide_llm_service())
         elif agent_name == "MarketIntelAgent":
             return agent_class(web_search_service=service_registry.provide_web_search_service(), llm_service=service_registry.provide_llm_service(), job_service=service_registry.provide_job_service())
-        elif agent_name == "TravelAssistantAgent":
-            return agent_class(travel_service=service_registry.provide_travel_service(), llm_service=service_registry.provide_llm_service())
         else:
             return agent_class()
 
