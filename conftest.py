@@ -94,6 +94,15 @@ def _wrap_pytest_skip():
                     break
         return original_skip(*args, **kwargs)
 
+    # Preserve attributes that pytest internals rely on. In particular,
+    # _pytest.unittest.TestCaseFunction.addSkip raises pytest.skip.Exception
+    # when a unittest.TestCase calls self.skipTest(); without this attribute
+    # every unittest skip explodes with
+    # "AttributeError: 'function' object has no attribute 'Exception'".
+    for attr in ("Exception", "__doc__", "__name__", "__wrapped__"):
+        if hasattr(original_skip, attr):
+            setattr(_skip_wrapper, attr, getattr(original_skip, attr))
+
     pytest.skip = _skip_wrapper
 
 
