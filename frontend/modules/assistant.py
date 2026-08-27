@@ -1861,7 +1861,7 @@ def save_candidate_pitch(pitch_content, user_id=None, candidate_id=None, job_id=
                 response = requests.post(api_url, json=payload)
                 
                 if response.status_code == 200:
-                    st.success(" Pitch saved successfully!")
+                    st.success("Pitch saved successfully!")
                     return {"success": True, "message": "Pitch saved successfully"}
                 else:
                     st.error(f"Failed to save pitch: {response.text}")
