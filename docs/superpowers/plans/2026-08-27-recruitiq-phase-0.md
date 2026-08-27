@@ -953,7 +953,9 @@ GRAPH_CONTEXT_DEPTH=2
 cd C:\Users\seaso\RecruitIQ
 git check-ignore -q -- .env.example
 if ($LASTEXITCODE -ne 0) { "OK - .env.example is trackable" } else { "STILL IGNORED - fix the !.env.example rule" }
-Select-String -Path .env.example -Pattern 'eyJ|sk-or-v1-[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|cadjhosea'
+# The last alternative reads the live DB password from .env so no secret fragment appears in this document.
+$livePw = (Select-String -Path .env -Pattern '^POSTGRES_PASSWORD=(.+)$').Matches[0].Groups[1].Value
+Select-String -Path .env.example -Pattern ('eyJ|sk-or-v1-[A-Za-z0-9]{20,}|gsk_[A-Za-z0-9]{20,}|' + [regex]::Escape($livePw))
 "(no output above = no real secrets)"
 ```
 
