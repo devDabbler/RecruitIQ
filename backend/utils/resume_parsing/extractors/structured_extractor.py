@@ -79,8 +79,8 @@ class StructuredExtractor(BaseExtractor):
                     prompt
                     + "\n\nIMPORTANT: Respond with a single raw JSON object only. Do NOT include code fences, explanations, or extra text."
                 )
-                response_text = await self.llm_service.generate_text(
-                    strict_prompt, max_tokens=8192, temperature=0.0, task_type="resume"
+                response_text = await self.llm_service.generate_text_async(
+                    strict_prompt, max_tokens=8192, task_type="resume"
                 )
                 extracted_data = self._parse_llm_response(response_text)
                 validated_data = contract.model_validate(extracted_data)

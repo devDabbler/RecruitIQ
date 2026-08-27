@@ -78,6 +78,8 @@ python-memcached = "^1.59"
 flake8 = "^7.3.0"
 fuzzywuzzy = "^0.18.0"
 python-levenshtein = "^0.25.0"
+rapidfuzz = "^3.10.0,!=3.14.0"
+pypdfium2 = "^4.30.0,!=4.30.1"
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.2.0"

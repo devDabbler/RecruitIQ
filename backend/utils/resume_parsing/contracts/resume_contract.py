@@ -110,7 +110,7 @@ class LanguageContract(BaseModel):
 
 class MilitaryContract(BaseModel):
     """Military experience contract"""
-    branch: str
+    branch: Optional[str] = None  # Made optional to handle cases where branch cannot be determined
     rank: Optional[str] = None
     title: Optional[str] = None
     start_date: Optional[Union[str, date]] = None
@@ -122,6 +122,13 @@ class MilitaryContract(BaseModel):
     awards: Optional[List[str]] = Field(default_factory=list)
     clearances: Optional[List[str]] = Field(default_factory=list)
     training: Optional[List[str]] = Field(default_factory=list)
+    
+    @validator('branch', pre=True)
+    def ensure_branch_not_empty(cls, v):
+        """Convert empty string to None for branch"""
+        if v == '' or (isinstance(v, str) and not v.strip()):
+            return None
+        return v
     
     @validator('responsibilities', pre=True)
     def ensure_responsibilities_list(cls, v):
@@ -189,6 +196,24 @@ class EnhancedExperienceContract(ExperienceContract):
         return self.responsibilities
     responsibilities: List[str] = Field(default_factory=list)
     duration_months: Optional[int] = None
+    
+    @validator('achievements', pre=True)
+    def ensure_achievements_list(cls, v):
+        """Ensure achievements is always a list of strings"""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            # Split by newlines and clean up
+            lines = [line.strip() for line in v.split('\n') if line.strip()]
+            cleaned_lines = []
+            for line in lines:
+                cleaned_line = re.sub(r'^[•\-*◦]\s*', '', line)
+                if cleaned_line:
+                    cleaned_lines.append(cleaned_line)
+            return cleaned_lines
+        elif isinstance(v, list):
+            return [item for item in v if isinstance(item, str) and item.strip()]
+        return []
     
     @validator('responsibilities', pre=True)
     def ensure_responsibilities_list(cls, v):
