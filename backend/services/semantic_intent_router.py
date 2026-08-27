@@ -84,10 +84,6 @@ class SemanticIntentRouter:
                 r"(find|search|show|get).*(candidates|professionals).*(with|who have).*(skills?|experience)",
                 r"(candidates|professionals).*(with|skilled in|experienced in)",
             ],
-            "travel_time": [
-                r"(how long|travel time|commute time).*(from|between).*(to|and)",
-                r"(distance|duration).*(from|between).*(to|and)",
-            ],
             "market_research": [
                 r"(assess|analyze|evaluate).*(viability|market).*(for|of).*(role|position).*(in|at)",
                 r"(market analysis|market research).*(for|on).*(role|position)",
@@ -406,13 +402,6 @@ Remove any entities that are null or empty strings. Only include entities that a
     def _extract_entities_advanced(self, message: str, intent_name: str) -> Dict[str, Any]:
         """Extract entities using advanced NLP techniques."""
         try:
-            # Special handling for travel intents
-            if intent_name == "travel_time":
-                travel_entities = self._extract_travel_entities(message)
-                if travel_entities:
-                    logger.debug(f"Travel entity extraction for '{message}': {travel_entities}")
-                    return travel_entities
-            
             nlp_extractor = get_nlp_extractor()
             nlp_entities = nlp_extractor.extract_entities(message)
             
@@ -428,40 +417,6 @@ Remove any entities that are null or empty strings. Only include entities that a
         except Exception as e:
             logger.warning(f"Advanced NLP extraction failed: {e}, falling back to regex")
             return self._extract_entities_from_pattern(message, "", intent_name)
-
-    def _extract_travel_entities(self, message: str) -> Dict[str, Any]:
-        """Extract travel-specific entities (origin and destination) from a message."""
-        import re
-        
-        entities = {}
-        message_lower = message.lower()
-        
-        # Pattern 1: "from X to Y" - most common and reliable
-        from_to_match = re.search(r'from\s+([A-Za-z\s,]+?)\s+to\s+([A-Za-z\s,]+?)(?:\?|$|\s|\.)', message_lower)
-        if from_to_match:
-            entities['origin'] = from_to_match.group(1).strip()
-            entities['destination'] = from_to_match.group(2).strip()
-            return entities
-        
-        # Pattern 2: "X to Y" (without "from")
-        to_match = re.search(r'([A-Za-z\s,]+?)\s+to\s+([A-Za-z\s,]+?)(?:\?|$|\s|\.)', message_lower)
-        if to_match:
-            # Make sure we're not capturing too much before "to"
-            origin_text = to_match.group(1).strip()
-            # If the origin text is too long, it's probably not a location
-            if len(origin_text.split()) <= 3:  # Reasonable limit for location names
-                entities['origin'] = origin_text
-                entities['destination'] = to_match.group(2).strip()
-                return entities
-        
-        # Pattern 3: "between X and Y"
-        between_match = re.search(r'between\s+([A-Za-z\s,]+?)\s+and\s+([A-Za-z\s,]+?)(?:\?|$|\s|\.)', message_lower)
-        if between_match:
-            entities['origin'] = between_match.group(1).strip()
-            entities['destination'] = between_match.group(2).strip()
-            return entities
-        
-        return entities
 
     def generate_clarifying_question(
         self, 

@@ -1811,8 +1811,6 @@ class IntentProcessor:
         
         # Look for related topics in previous queries
         related_terms = {
-            "relocation": ["move", "relocate", "housing", "commute"],
-            "office_visit": ["visit", "office", "tour", "building"],
             "search_candidates": ["candidate", "find", "search", "database"],
             "recruiter_outreach_email": ["email", "recruiter", "outreach", "candidate"],
             "candidate_pitch_email": ["email", "pitch", "candidate", "company"],
