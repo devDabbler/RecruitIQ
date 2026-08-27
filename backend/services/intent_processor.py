@@ -186,6 +186,8 @@ class IntentProcessor:
             ],
             # Database query intents
             "candidate_count": [
+                # "Are there any" without skills - just counting candidates
+                r"^(are there|is there|do we have|do you have)\s+(any\s+)?(?P<role>(?:gen ai|generative ai|data|software|machine learning|ml|ai|backend|frontend|full stack|fullstack|devops|cloud|product|project|qa|quality assurance)[\w\s]*?(?:engineer|scientist|developer|analyst|manager|specialist|architect|lead|candidates?))(?:\s+(?:in|the|our|this)\s+)?(?:database|system|ats)?(?:\?|\.|\!|$)",
                 r"(how many|count|number of|total|quantity of) candidates? (do we have|are there|in the database|in our system|available|stored|saved)",
                 # Robust handling for common grammar/typo variants: 'are this database', 'in this database', 'in database'
                 r"(how many|count|number of|total|quantity of) candidates? (are|is)? (this|the|our)? ?database",
@@ -205,7 +207,10 @@ class IntentProcessor:
                 r"(applications|applicants) (for|to) (the )?(?P<role>[^?!.]+?)( role| job).*(how many|count|number)(\?|\.|!|$)"
             ],
             "search_candidates": [
-                # Simple pattern: "find/finding [role]" - highest priority
+                # HIGHEST PRIORITY: "Are there any" database queries - must come first
+                r"(are there|is there|do we have|do you have|have we got|got any)\s+(any\s+)?(?P<role>(?:gen ai|generative ai|data|software|machine learning|ml|ai|backend|frontend|full stack|fullstack|devops|cloud|product|project|qa|quality assurance)[\w\s]*?(?:engineer|scientist|developer|analyst|manager|specialist|architect|lead|candidates?))\s+(with|having|who\s+have|that\s+have|who\s+know|who\s+knows|skilled\s+in|experienced\s+in)\s+(?P<skills>[\w\s,+#]+?)(?:\s+(?:in|the|our|this)\s+)?(?:database|system|ats)?(?:\?|\.|\!|$)",
+                r"(are there|is there|do we have|do you have)\s+(any\s+)?(?P<role>[\w\s]+?)\s+(with|having|who\s+have|that\s+have|who\s+know)\s+(?P<skills>[\w\s,+#]+?)(?:\s+(?:in|the|our|this)\s+)?(?:database|system|ats)?(?:\?|\.|\!|$)",
+                # Simple pattern: "find/finding [role]" - high priority
                 r"^(find|finding|search|searching|show|locate|get|identify)(ing)?\s+(?P<role>(?:gen ai|data|software|machine learning|ml|ai|backend|frontend|full stack|devops|cloud|product|project)[\w\s]*?(?:engineer|scientist|developer|analyst|manager|candidates?))",
                 # Pattern for: "find candidates who are [ROLE] with [SKILL]"
                 r"(find|search|show|get|locate|discover|identify).*candidates?\s+who\s+(are|is)\s+(?P<role>[\w\s]+?)\s+(with|having|who\s+have|and|that\s+have)\s+(?P<skills>[\w\s,]+?)(?:\?|\.|\!|$)",
@@ -539,7 +544,8 @@ class IntentProcessor:
         # Enhanced fuzzy matching keywords for each intent
         self.intent_keywords = {
             "travel_time": ["travel", "commute", "journey", "trip", "drive", "fly", "train", "bus", "time", "duration", "how long", "distance", "how far", "from", "to", "between"],
-            "search_candidates": ["find", "search", "candidates", "professionals", "developers", "engineers", "with", "who have", "skilled", "experienced", "python", "java", "react", "javascript"],
+            "search_candidates": ["find", "search", "candidates", "professionals", "developers", "engineers", "scientists", "analysts", "managers", "with", "who have", "skilled", "experienced", "python", "java", "react", "javascript", "r programming", "sql", "database", "are there", "do we have", "do you have"],
+            "candidate_count": ["how many", "count", "number of", "total", "are there", "do we have", "candidates", "database", "system"],
             "recruiter_outreach_email": ["recruiter", "outreach", "email", "generate", "create", "write", "draft", "candidates", "prospective", "potential", "hiring", "talent"],
             "candidate_pitch_email": ["candidate", "pitch", "email", "application", "cover letter", "generate", "create", "write", "draft", "company", "employer", "job seeker"],
             "salary_info": ["salary", "pay", "compensation", "how much", "earnings", "income", "wages", "make", "earn", "get paid", "average", "typical"],
@@ -1302,26 +1308,29 @@ class IntentProcessor:
         # Store all matches with confidence scores
         potential_matches = []
         
-        # Priority order with enhanced data intents at highest priority
+        # Priority order with database queries at highest priority
         intent_priority = [
-            # NEW ENHANCED DATA INTENTS - HIGHEST PRIORITY
+            # DATABASE QUERIES - ABSOLUTE HIGHEST PRIORITY (must check before web_search)
+            "search_candidates", "candidate_count", "job_count", "applications_count",
+            "candidate_breakdown", "view_profile", "job_match",
+            # Database analysis intents
+            "job_analysis", "pipeline_insights", "comprehensive_analysis", 
+            "trend_analysis", "performance_metrics",
+            # NEW ENHANCED DATA INTENTS
             "cost_of_living", "price_info", "schedule_info", "recent_data",
             # Travel and transportation intents
             "travel_time", "transportation_options", "market_research",
-            # Core recruitment intents
-            "candidate_count", "job_count", "applications_count", "search_candidates", 
+            # Other recruitment intents
             "candidate_sourcing_strategy", "candidate_outreach",
-            "view_profile", "job_match", "salary_info", 
-            # Company and skill intents (moved after enhanced data intents)
-            "company_info", "skill_info", "candidate_breakdown", "candidate_comparison", 
+            "salary_info", 
+            # Company and skill intents
+            "company_info", "skill_info", "candidate_comparison", 
             "skill_gap_analysis", "hiring_timeline", "market_trends", 
             "advanced_matching", "recruiter_outreach_email", 
             "candidate_pitch_email", "minimum_wage", "labor_law",
             "job_posting_analysis", "company_research",
-            # Database analysis intents - moved higher to avoid conflicts
-            "job_analysis", "pipeline_insights", "comprehensive_analysis", 
-            "trend_analysis", "performance_metrics",
-            "web_search"  # Moved to end to avoid conflicts with database analysis
+            # WEB SEARCH - LOWEST PRIORITY (only if nothing else matches)
+            "web_search"
         ]
         
         for intent in intent_priority:

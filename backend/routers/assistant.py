@@ -928,45 +928,50 @@ async def chat_with_assistant(
                 
                 # If we have a specific role query
                 if role:
-                    # First try to use the enhanced matching pipeline for better relevance
-                    try:
-                        # Find a relevant job to anchor enhanced matching dynamically
-                        job = db.query(Job).filter(
-                            or_(
-                                Job.title.ilike(f"%{role}%"),
-                                Job.department.ilike(f"%{role}%"),
-                                Job.job_overview.ilike(f"%{role}%"),
-                                Job.required_qualifications.ilike(f"%{role}%")
-                            )
-                        ).order_by(Job.created_at.desc()).first()
-                        if job:
-                            agent = AgentFactory.create_agent("matching")
-                            task = {
-                                "type": "candidates_for_job",
-                                "job_id": job.id,
-                                "strategy": "enhanced",
-                                "db": db,
-                                "min_score": 20.0,
-                                "limit": 10
-                            }
-                            enhanced_result = await agent.execute(task)
-                            candidate_list = enhanced_result.get("results", []) if isinstance(enhanced_result, dict) else enhanced_result
-                            if candidate_list:
-                                # Build response text from enhanced results
-                                response_text = f"Top matches for {role} based on enhanced matching against job '{job.title}':\n\n"
-                                for i, cand in enumerate(candidate_list, 1):
-                                    name = cand.get("name") or f"Candidate {cand.get('id')}"
-                                    position_disp = cand.get("position") or "Position not specified"
-                                    score_val = int(round(cand.get("match_score", 0)))
-                                    score_emoji = "🟢" if score_val >= 80 else "🟡" if score_val >= 70 else "🔴"
-                                    response_text += f"{i}. {score_emoji} {name} - {position_disp} (Match: {score_val}%)\n"
-                                return {
-                                    "response": response_text,
-                                    "candidate_details": candidate_list,
-                                    "conversation_context": conversation_context
+                    # IMPORTANT: Skip enhanced matching if specific skills are required
+                    # Enhanced matching uses job requirements, not user's skill query
+                    if not skills:
+                        # First try to use the enhanced matching pipeline for better relevance
+                        try:
+                            # Find a relevant job to anchor enhanced matching dynamically
+                            job = db.query(Job).filter(
+                                or_(
+                                    Job.title.ilike(f"%{role}%"),
+                                    Job.department.ilike(f"%{role}%"),
+                                    Job.job_overview.ilike(f"%{role}%"),
+                                    Job.required_qualifications.ilike(f"%{role}%")
+                                )
+                            ).order_by(Job.created_at.desc()).first()
+                            if job:
+                                agent = AgentFactory.create_agent("matching")
+                                task = {
+                                    "type": "candidates_for_job",
+                                    "job_id": job.id,
+                                    "strategy": "enhanced",
+                                    "db": db,
+                                    "min_score": 20.0,
+                                    "limit": 10
                                 }
-                    except Exception as e:
-                        logger.warning(f"Enhanced matching failed; falling back to basic search: {e}")
+                                enhanced_result = await agent.execute(task)
+                                candidate_list = enhanced_result.get("results", []) if isinstance(enhanced_result, dict) else enhanced_result
+                                if candidate_list:
+                                    # Build response text from enhanced results
+                                    response_text = f"Top matches for {role} based on enhanced matching against job '{job.title}':\n\n"
+                                    for i, cand in enumerate(candidate_list, 1):
+                                        name = cand.get("name") or f"Candidate {cand.get('id')}"
+                                        position_disp = cand.get("position") or "Position not specified"
+                                        score_val = int(round(cand.get("match_score", 0)))
+                                        score_emoji = "🟢" if score_val >= 80 else "🟡" if score_val >= 70 else "🔴"
+                                        response_text += f"{i}. {score_emoji} {name} - {position_disp} (Match: {score_val}%)\n"
+                                    return {
+                                        "response": response_text,
+                                        "candidate_details": candidate_list,
+                                        "conversation_context": conversation_context
+                                    }
+                        except Exception as e:
+                            logger.warning(f"Enhanced matching failed; falling back to basic search: {e}")
+                    else:
+                        logger.info(f"Skipping enhanced matching because specific skill '{skills}' was requested - using direct skill filtering instead")
                     
                     # Query the database for candidates with resumes containing the role
                     # Using Resume parsed_content since Candidate may not have a direct role attribute
@@ -1042,15 +1047,41 @@ async def chat_with_assistant(
                                 if hasattr(candidate, 'current_position'):
                                     position = candidate.current_position
                             
-                            # Calculate match score based on role relevance
+                            # Calculate match score based on role AND skill relevance
                             match_score = 0
-                            # Check if candidate's position matches the role
+                            
+                            # Base role match score
+                            role_score = 0
                             if position and role.lower() in position.lower():
-                                match_score = 90  # High score for exact role match
+                                role_score = 90  # High score for exact role match
                             elif position and any(word in position.lower() for word in role.lower().split()):
-                                match_score = 75  # Medium score for partial role match
+                                role_score = 75  # Medium score for partial role match
                             else:
-                                match_score = 60  # Base score for resume content match
+                                role_score = 60  # Base score for resume content match
+                            
+                            # Skill match score (if skills were specified in query)
+                            skill_score = 0
+                            if skills:
+                                # Check if candidate has the required skill
+                                from ..models.models import CandidateSkill
+                                has_skill = db.query(CandidateSkill).filter(
+                                    CandidateSkill.candidate_id == candidate.id,
+                                    CandidateSkill.skill_name.ilike(f"%{skills}%")
+                                ).first() is not None
+                                
+                                # Also check in resume
+                                if not has_skill and hasattr(candidate, 'resumes') and candidate.resumes:
+                                    for resume in candidate.resumes:
+                                        if resume.parsed_content and skills.lower() in resume.parsed_content.lower():
+                                            has_skill = True
+                                            break
+                                
+                                skill_score = 100 if has_skill else 0
+                                # Combined score: 50% role + 50% skill when skills are specified
+                                match_score = int((role_score * 0.5) + (skill_score * 0.5))
+                            else:
+                                # No skill requirement, use role score only
+                                match_score = role_score
                             
                             # Get candidate skills for display
                             candidate_skills = []
@@ -1089,7 +1120,11 @@ async def chat_with_assistant(
                             "conversation_context": conversation_context
                         }
                     else:
-                        response_text = f"No candidates found matching '{role}'. Try a different role or check if there are candidates in the database."
+                        # Provide specific message based on whether skills were specified
+                        if skills:
+                            response_text = f"No candidates found with role '{role}' and skill '{skills}' in the database. There may be {role} candidates without this specific skill, or you could try a different search."
+                        else:
+                            response_text = f"No candidates found matching '{role}'. Try a different role or check if there are candidates in the database."
                 
                 # If we have skills but no role
                 elif skills or "python" in message.lower() or "machine learning" in message.lower():
