@@ -49,12 +49,6 @@ class Settings(BaseSettings):
         env=["POSTGRES_CONN", "DATABASE_URL"]
     )
     
-    # Neo4j settings
-    neo4j_uri: str = Field(default=os.getenv("NEO4J_URI", "bolt://localhost:7687"))
-    neo4j_user: str = Field(default=os.getenv("NEO4J_USER", "neo4j"))
-    neo4j_password: str = Field(default=os.getenv("NEO4J_PASSWORD", "password"))
-    neo4j_database: str = Field(default=os.getenv("NEO4J_DATABASE", "neo4j"))
-    
     # Redis settings
     redis_host: str = Field(default=os.getenv("REDIS_HOST", "localhost"))
     redis_port: int = Field(default=int(os.getenv("REDIS_PORT", "6379")))

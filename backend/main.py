@@ -9,14 +9,10 @@ logging.basicConfig(level=logging.DEBUG)
 
 # Reduce verbosity for specific loggers
 loggers_to_quiet = [
-    "neo4j", "httpx", "httpcore", "urllib3", "LiteLLM", 
-    "sentence_transformers", "huggingface_hub", "pdfminer"
+    "httpx", "httpcore", "urllib3", "LiteLLM", "pdfminer"
 ]
 for logger_name in loggers_to_quiet:
     logging.getLogger(logger_name).setLevel(logging.WARNING)
-
-from backend.utils.neo4j_vector_monkeypatch import patch_neo4j_set_vector_property
-patch_neo4j_set_vector_property()
 
 # Import startup optimizer
 from backend.utils.startup_optimizer import startup_timer, startup_phase, optimize_imports, lazy_load_heavy_modules
@@ -29,7 +25,7 @@ from backend.utils.database import Base, engine, verify_postgres_connection
 from fastapi import FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
 from backend.routers import tasks, interviews, pitches, agent, performance, cache
-from backend.api.routes import job_routes, job_embeddings
+from backend.api.routes import job_routes
 
 app = FastAPI()
 
@@ -72,7 +68,6 @@ app.include_router(matching.router, tags=["matching"])
 app.include_router(enhanced_matching.router, tags=["enhanced-matching"])  # New enhanced matching router
 app.include_router(jobs.router, prefix="/api", tags=["jobs"])
 app.include_router(job_routes.router, tags=["jobs"])  # New job routes with sync functionality
-app.include_router(job_embeddings.router, tags=["jobs"])  # New job embeddings routes
 app.include_router(candidates.router, prefix="/api", tags=["candidates"])
 app.include_router(resume.router, tags=["resume"])  # Removed prefix because resume.router already has /api/resume prefix
 app.include_router(assistant.router, prefix="/api", tags=["assistant"])
