@@ -21,13 +21,28 @@ rather than hidden:
   and the provider is being replaced), a running server with seeded data, or a
   real resume fixture that policy forbids committing.
 
-## Tests that still fail
+## Recently fixed
 
-A handful fail against genuine defects and are deliberately left visible.
-The clearest is a character-corruption bug in experience parsing:
+The nine failures left visible after Phase 0 were debugged and fixed in
+Phase 1a. The suite is now 58 passed, 0 failed, 93 skipped. Root causes:
 
-```
-AssertionError: Expected 'Full Stack Developer', got 'Full Stack "eveloper'
-```
+- **Character corruption in experience parsing** — encoding-corrupted
+  regex character classes consumed a character after quotes:
 
-These are the eval harness's first targets.
+  ```
+  AssertionError: Expected 'Full Stack Developer', got 'Full Stack "eveloper'
+  ```
+
+- **Invented date precision** — date tokens were pushed through
+  `dateutil.parse(fuzzy=True)` with no default, so a resume saying
+  `2020 - Present` came back as `2020-08`, the missing month filled in
+  from the wall clock. Dates are now preserved exactly as written.
+- **Cache decorator contract drift** — `cache_result` required awaitable
+  mocks the tests didn't provide; the decorator is await-compatible now.
+- **Military dates** — only bare-year ranges matched, so
+  `Jan 2015 - Jun 2019` produced an empty `start_date`.
+- **Spaced LinkedIn URLs** — OCR output like `linked in.com/in/x` was
+  missed entirely and mis-captured as a location.
+- **Education section slicing** — the section ended at the first blank
+  line (dropping every entry after the first) and institutions starting
+  with the keyword ("University of California") never matched.
