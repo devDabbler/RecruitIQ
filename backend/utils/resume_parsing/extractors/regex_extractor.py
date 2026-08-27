@@ -795,7 +795,7 @@ class _MiniExperienceParser:
         """Lazy-load spaCy once to leverage NER for missing fields."""
         if not hasattr(_MiniExperienceParser, "_nlp"):
             try:
-                import spacy  # noqa: import-not-at-top (lazy load)
+                import spacy  # noqa  (lazy load)
                 _MiniExperienceParser._nlp = spacy.load("en_core_web_sm")
             except Exception:
                 # Fallback to blank model if spaCy model not present
@@ -1756,35 +1756,6 @@ class _MiniExperienceParser:
             for keyword in ('tech', 'systems', 'solutions', 'group', 'inc', 'llc', 'ltd', 'corp')
         )
         return has_company_suffix or is_proper_noun or has_company_keywords
-
-
-        """Enhanced fallback extraction for missed experiences."""
-        additional = []
-        lines = text.split('\n')
-        
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
-            
-            # Skip empty lines and bullets
-            if not line or re.match(r'^[•\-\*\+◦▪▸→]\s*$', line):
-                i += 1
-                continue
-                
-            # Check if line could be a job title
-            if self._is_potential_title(line):
-                # Look ahead for company and dates
-                exp_data = self._extract_from_context(lines, i)
-                if exp_data:
-                    key = self._make_key(exp_data)
-                    if key not in seen:
-                        seen.add(key)
-                        additional.append(exp_data)
-                        i += 3  # Skip processed lines
-                        continue
-            i += 1
-            
-        return additional
 
     def _extract_from_context(self, lines: list, i: int):
         """
