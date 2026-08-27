@@ -226,7 +226,7 @@ class RegexExtractor:
 
     _DEGREE_RE = re.compile(r"\b(?:B\.?[AS]\.?|Bachelor(?:'s)?|M\.?[AS]\.?|Master(?:'s)?|MBA|Ph\.?D\.?|Doctorate|Associate|Diploma|Certificate)\b", re.I)
     _INSTITUTION_RE = re.compile(r"\b(?:[A-Z][A-Za-z.&'() -]{0,40}?(?:University|College|Institute|School|Academy|Uni)[A-Za-z.&'() -]*\b|MIT|UCLA|NYU|NYIT|Caltech|CalTech)\b", re.I)
-    _BULLET_OR_COMMA = re.compile(r"(?:[\nΓÇó\-\*]\s*|,\s*)")
+    _BULLET_OR_COMMA = re.compile(r"(?:[\n•\-\*]\s*|,\s*)")
     _EDUCATION_SECTION_RE = re.compile(r'(?i)(?:education|academic background|degrees?|qualifications?|academics?)[\s\-:]+')
 
     class _ExtractorResult(dict):
@@ -857,9 +857,9 @@ class _MiniExperienceParser:
 
     # Enhanced date pattern with more variations
     # Simplified and balanced date range regex to avoid runtime compile errors.
-    # Captures start and end tokens separated by dash/ΓÇô/ΓÇö/to words.
+    # Captures start and end tokens separated by dash/–/—/to words.
     _DATE_RE = re.compile(
-        r"(?P<start>[^\-<|ΓÇôΓÇö~to]{2,40})\s*(?:[-<|ΓÇôΓÇö~]|\bto\b)\s*(?P<end>[^\-]{2,40})",
+        r"(?P<start>[^\-<|–—~to]{2,40})\s*(?:[-<|–—~]|\bto\b)\s*(?P<end>[^\-]{2,40})",
         re.I,
     )
 
@@ -867,14 +867,14 @@ class _MiniExperienceParser:
     # Alternative date patterns
     _ALT_DATE_PATTERNS = [
         # MM/YYYY - MM/YYYY or MM-YYYY
-        re.compile(r"(?P<start>\d{1,2}[/-]\d{4})\s*[-<|ΓÇôΓÇö~to]+\s*(?P<end>\d{1,2}[/-]\d{4}|Present|Current)", re.I),
+        re.compile(r"(?P<start>\d{1,2}[/-]\d{4})\s*[-<|–—~to]+\s*(?P<end>\d{1,2}[/-]\d{4}|Present|Current)", re.I),
         # YYYY - YYYY
-        re.compile(r"(?P<start>\d{4})\s*[-<|ΓÇôΓÇö~to]+\s*(?P<end>\d{4}|Present|Current)", re.I),
+        re.compile(r"(?P<start>\d{4})\s*[-<|–—~to]+\s*(?P<end>\d{4}|Present|Current)", re.I),
         # Month Year (no dash)
         re.compile(r"(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[^\n]*\d{4})\s+(?P<end>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[^\n]*\d{4}|Present|Current)", re.I),
     ]
 
-    _BULLET_RE = re.compile(r"^\s*[ΓÇó\-\*\+ΓùªΓû¬Γû╕ΓåÆ]\s*(.+)", re.MULTILINE)
+    _BULLET_RE = re.compile(r"^\s*[•\-\*\+◦▪▸→]\s*(.+)", re.MULTILINE)
     _MAX_LOOKAHEAD = 10
     
     # Common job title keywords for validation
@@ -1032,14 +1032,14 @@ class _MiniExperienceParser:
     def _preprocess_text(self, text: str) -> str:
         """Preprocess text for better parsing."""
         # Normalize quotes
-        text = re.sub(r'[<18<19]', "'", text)
-        text = re.sub(r'[<1C<1D]', '"', text)
+        text = re.sub(r'[‘’]', "'", text)
+        text = re.sub(r'[“”]', '"', text)
         
         # Normalize dashes
-        text = re.sub(r'[<13<14]', '-', text)
+        text = re.sub(r'[–—]', '-', text)
         
         # Normalize bullet points
-        text = re.sub(r'[<22\u25E6<23<43]', 'ΓÇó', text)
+        text = re.sub(r'[•\u25E6‣⁃]', '•', text)
         
         # Normalize whitespace but preserve line breaks
         lines = text.split('\n')
@@ -1089,7 +1089,7 @@ class _MiniExperienceParser:
                 continue
                 
             # Skip if block is just a list of skills or bullet points
-            if block.count('\n') >= 2 and all(line.strip().startswith(('ΓÇó', '-', '*')) 
+            if block.count('\n') >= 2 and all(line.strip().startswith(('•', '-', '*')) 
                                            for line in block.split('\n')[1:] if line.strip()):
                 continue
                 
@@ -1324,11 +1324,11 @@ class _MiniExperienceParser:
             # Clean up title
             if title:
                 # Remove bullet points and markers
-                title = re.sub(r'^[<22\-\*]\s+', '', title)
+                title = re.sub(r'^[•\-\*]\s+', '', title)
                 # Remove "Role:" or "Title:" prefix
                 title = re.sub(r'^(?:role|position|title|job)\s*:\s*', '', title, flags=re.I)
                 # Remove trailing punctuation
-                title = re.sub(r'[,;:\-ΓÇô|]+$', '', title)
+                title = re.sub(r'[,;:\-–|]+$', '', title)
                 
                 # Avoid bullet points or descriptions being classified as titles
                 if title.lower().startswith(('developed', 'built', 'implemented', 'created', 
@@ -1342,11 +1342,11 @@ class _MiniExperienceParser:
             # Clean up company
             if company:
                 # Remove bullet points and markers
-                company = re.sub(r'^[<22\-\*]\s+', '', company)
+                company = re.sub(r'^[•\-\*]\s+', '', company)
                 # Remove "Company:" prefix
                 company = re.sub(r'^(?:company|employer|organization)\s*:\s*', '', company, flags=re.I)
                 # Remove trailing punctuation
-                company = re.sub(r'[,;:\-ΓÇô|]+$', '', company)
+                company = re.sub(r'[,;:\-–|]+$', '', company)
                 
                 # Avoid bullet points being classified as companies
                 if company.lower().startswith(('developed', 'built', 'implemented', 'created', 
@@ -1384,7 +1384,7 @@ class _MiniExperienceParser:
                 # Remove "Location:" prefix
                 location = re.sub(r'^(?:location)\s*:\s*', '', location, flags=re.I)
                 # Remove trailing punctuation
-                location = re.sub(r'[,;:\-ΓÇô|]+$', '', location)
+                location = re.sub(r'[,;:\-–|]+$', '', location)
                 
                 # Location length check
                 if len(location) > 50 or not self._is_location(location):
@@ -1543,25 +1543,25 @@ class _MiniExperienceParser:
     _DATE_PATTERNS = [
         # MM/YYYY - MM/YYYY or MM-YYYY
         re.compile(
-            r'(?P<start>(?:0?[1-9]|1[0-2])(?:[/-](?:19|20)?\d{2}))\s*[-ΓÇôΓÇö]+\s*'
+            r'(?P<start>(?:0?[1-9]|1[0-2])(?:[/-](?:19|20)?\d{2}))\s*[-–—]+\s*'
             r'(?P<end>(?:0?[1-9]|1[0-2])(?:[/-](?:19|20)?\d{2})|Present|Current|Now|Ongoing)',
             re.I
         ),
         # Month YYYY - Month YYYY
         re.compile(
-            r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\s*[-ΓÇôΓÇö]+\s*'
+            r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\s*[-–—]+\s*'
             r'(?P<end>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|Present|Current|Now|Ongoing)',
             re.I
         ),
         # YYYY - YYYY
         re.compile(
-            r'(?P<start>(?:19|20)\d{2})\s*[-ΓÇôΓÇö]+\s*'
+            r'(?P<start>(?:19|20)\d{2})\s*[-–—]+\s*'
             r'(?P<end>(?:19|20)\d{2}|Present|Current|Now|Ongoing)',
             re.I
         ),
         # Month YYYY - Present (with optional day)
         re.compile(
-            r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\s*[-ΓÇôΓÇö]+\s*'
+            r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:st|nd|rd|th)?,?\s+\d{4})\s*[-–—]+\s*'
             r'(?P<end>Present|Current|Now|Ongoing)',
             re.I
         ),
@@ -1605,7 +1605,7 @@ class _MiniExperienceParser:
                 if start or end:
                     return start, end
         # Fallback: Look for any date-like patterns
-        date_parts = re.split(r'\s*[-ΓÇôΓÇö]+\s*', date_str, maxsplit=1)
+        date_parts = re.split(r'\s*[-–—]+\s*', date_str, maxsplit=1)
         if len(date_parts) == 2:
             start = self._normalize_date_enhanced(date_parts[0])
             end = self._normalize_date_enhanced(date_parts[1])
@@ -1729,7 +1729,7 @@ class _MiniExperienceParser:
             line = lines[i].strip()
             
             # Skip empty lines and bullets
-            if not line or re.match(r'^[ΓÇó\-\*\+ΓùªΓû¬Γû╕ΓåÆ]\s*$', line):
+            if not line or re.match(r'^[•\-\*\+◦▪▸→]\s*$', line):
                 i += 1
                 continue
                 
@@ -1844,7 +1844,7 @@ class _MiniExperienceParser:
             return False
             
         # Check for common bullet point markers
-        if re.match(r'^[ΓÇó\-\*\+ΓùªΓû¬Γû╕ΓåÆ]\s', text):
+        if re.match(r'^[•\-\*\+◦▪▸→]\s', text):
             return True
             
         # Check for numbered bullets
@@ -1869,12 +1869,12 @@ class _MiniExperienceParser:
             
         # Common date patterns
         date_patterns = [
-            r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\b',
-            r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
-            r'\b\d{1,2}/\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*\d{1,2}/\d{4}\b',
-            r'\b\d{1,2}/\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
-            r'\b\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*\d{4}\b',
-            r'\b\d{4}\s*(?:-|to|ΓÇô|ΓÇö|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
+            r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\s*(?:-|to|–|—|through)\s*(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\b',
+            r'\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\s*(?:-|to|–|—|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
+            r'\b\d{1,2}/\d{4}\s*(?:-|to|–|—|through)\s*\d{1,2}/\d{4}\b',
+            r'\b\d{1,2}/\d{4}\s*(?:-|to|–|—|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
+            r'\b\d{4}\s*(?:-|to|–|—|through)\s*\d{4}\b',
+            r'\b\d{4}\s*(?:-|to|–|—|through)\s*(?:Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\b',
             r'\(\s*\d{4}\s*-\s*(?:\d{4}|Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\s*\)',
             r'\(\s*\d{1,2}/\d{4}\s*-\s*(?:\d{1,2}/\d{4}|Present|Current|Now|Ongoing|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}|Present|Current)\s*\)',
         ]
@@ -1901,7 +1901,7 @@ class _MiniExperienceParser:
             date_str = re.sub(rf'\b{term}\b', 'Present', date_str, flags=re.I)
         
         # Handle Roger Waters resume format - "September 2022 - Present"
-        month_year_pattern = r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\s*[-ΓÇôΓÇö]\s*(?P<end>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|Present)'
+        month_year_pattern = r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\s*[-–—]\s*(?P<end>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|Present)'
         month_year_match = re.search(month_year_pattern, date_str, re.I)
         if month_year_match:
             start = self._normalize_date_enhanced(month_year_match.group("start"))
@@ -1924,7 +1924,7 @@ class _MiniExperienceParser:
                 return start, end
         
         # Try to extract just years if nothing else worked
-        years_pattern = r'(\d{4})\s*[-ΓÇôΓÇö]\s*(\d{4}|Present)'
+        years_pattern = r'(\d{4})\s*[-–—]\s*(\d{4}|Present)'
         years_match = re.search(years_pattern, date_str, re.I)
         if years_match:
             start_year = f"{years_match.group(1)}-01"
@@ -1937,14 +1937,14 @@ class _MiniExperienceParser:
             return start_year, end_year
         
         # Try single year + Present pattern (case-insensitive)
-        single_year_pattern = r'(\d{4})\s*[-ΓÇôΓÇö]\s*(Present|PRESENT|present|Current|current)'
+        single_year_pattern = r'(\d{4})\s*[-–—]\s*(Present|PRESENT|present|Current|current)'
         single_year_match = re.search(single_year_pattern, date_str, re.I)
         if single_year_match:
             start_year = f"{single_year_match.group(1)}-01"
             return start_year, "Present"
         
         # Try to split on common separators and parse each part
-        separators = ['-', 'ΓÇô', 'ΓÇö', '~', 'to', 'through', 'until']
+        separators = ['-', '–', '—', '~', 'to', 'through', 'until']
         for sep in separators:
             if sep in date_str.lower():
                 parts = re.split(rf'\s*{re.escape(sep)}\s*', date_str, flags=re.I)
@@ -2201,7 +2201,7 @@ class _MiniExperienceParser:
                 
             # Clean up title
             exp.title = re.sub(r'\s+', ' ', exp.title).strip()
-            exp.title = re.sub(r'^[\-\*\ΓÇó\ΓåÆ\+ΓùªΓû¬Γû╕]+\s*', '', exp.title)  # Remove leading bullets
+            exp.title = re.sub(r'^[\-\*•→\+◦▪▸]+\s*', '', exp.title)  # Remove leading bullets
             
             # Clean up company
             exp.company = re.sub(r'\s+', ' ', exp.company).strip()
@@ -2236,14 +2236,14 @@ class _MiniExperienceParser:
         
         # Enhanced skill section detection patterns
         skill_headers = [
-            r"(?:technical\s+)?skills?\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"(?:core\s+)?competenc(?:ies|es)\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"expertise\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"technologies\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"programming\s+languages?\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"tools?\s*(?:and\s+)?(?:technologies|frameworks)?\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"key\s+skills?\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
-            r"areas?\s+of\s+expertise\s*(?:\s*[:\-ΓÇôΓÇö]|$)",
+            r"(?:technical\s+)?skills?\s*(?:\s*[:\-–—]|$)",
+            r"(?:core\s+)?competenc(?:ies|es)\s*(?:\s*[:\-–—]|$)",
+            r"expertise\s*(?:\s*[:\-–—]|$)",
+            r"technologies\s*(?:\s*[:\-–—]|$)",
+            r"programming\s+languages?\s*(?:\s*[:\-–—]|$)",
+            r"tools?\s*(?:and\s+)?(?:technologies|frameworks)?\s*(?:\s*[:\-–—]|$)",
+            r"key\s+skills?\s*(?:\s*[:\-–—]|$)",
+            r"areas?\s+of\s+expertise\s*(?:\s*[:\-–—]|$)",
         ]
         
         # Common skill patterns and keywords
@@ -2259,7 +2259,7 @@ class _MiniExperienceParser:
         ]
         
         # Bullet and delimiter patterns
-        delimiters = re.compile(r'[,;|ΓÇó\-\*\+ΓùªΓû¬Γû╕ΓåÆ/]|\band\b|\s{2,}', re.I)
+        delimiters = re.compile(r'[,;|•\-\*\+◦▪▸→/]|\band\b|\s{2,}', re.I)
         
         # Find skill sections
         lines = text.split('\n')
@@ -2499,7 +2499,7 @@ class _MiniExperienceParser:
             'TensorFlow', 'PyTorch', 'Keras', 'Scikit-learn', 'Pandas', 'NumPy',
             'Tableau', 'Power BI', 'Excel', 'R', 'MATLAB', 'SAS', 'SPSS',
             'Photoshop', 'Illustrator', 'Figma', 'Sketch', 'InDesign',
-            # ΓÇªand so onΓÇª
+            # ...and so on...
         }
         known_skills_lower = {s.lower() for s in known_skills}
 
@@ -2526,7 +2526,7 @@ class _MiniExperienceParser:
                     # Certain technical acronyms
                     elif re.search(r'\b(?:JS|API|SQL|ML|AI|UI|UX|SDK|IDE|ORM|CSS|HTML|XML|JSON|YAML|REST|SOAP|HTTP|TCP|UDP|IP|DNS|CDN|VPN|SSH|FTP|SMTP|POP3|IMAP)\b', ps, re.I):
                         skills.add(ps)
-                    # Generic ΓÇ£single termΓÇ¥ technical pattern
+                    # Generic "single term" technical pattern
                     elif re.search(r'^[A-Z][a-zA-Z0-9]*(?:\.[a-zA-Z]+)?$|^[A-Z]+(?:\+\+|#)?$', ps):
                         skills.add(ps)
 

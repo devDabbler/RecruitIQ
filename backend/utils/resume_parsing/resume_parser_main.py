@@ -410,10 +410,10 @@ class ResumeParser:
         text = re.sub(r'[\u2013\u2014\u2015]', '-', text)  # Em/en dashes to hyphens
         text = re.sub(r'[\u2018\u2019]', "'", text)  # Smart quotes to straight
         text = re.sub(r'[\u201c\u201d]', '"', text)  # Smart double quotes    
-        text = re.sub(r'[\u2022\u2023\u25e6\u2043\u2219]', 'ΓÇó', text)  # Normalize bullets
+        text = re.sub(r'[\u2022\u2023\u25e6\u2043\u2219]', '•', text)  # Normalize bullets
 
         # Preserve newlines after bullet points and section headers
-        text = re.sub(r'(ΓÇó[^\n]*)', r'\1\n', text)  # Ensure newline after bullets
+        text = re.sub(r'(•[^\n]*)', r'\1\n', text)  # Ensure newline after bullets
         text = re.sub(r'^([A-Z][A-Z\s]{3,}):?\s*$', r'\1\n', text, flags=re.MULTILINE)  # Section headers
 
         # Fix common spacing issues
