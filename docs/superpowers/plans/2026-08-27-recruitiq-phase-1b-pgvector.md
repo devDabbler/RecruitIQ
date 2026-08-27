@@ -1082,6 +1082,25 @@ def test_store_candidate_embedding(db):
         {"cid": candidate.id},
     ).scalar()
     assert row is True
+
+
+def test_search_candidates_by_text(db):
+    """Natural-language semantic candidate search over pgvector (the RAG-showcase path)."""
+    from backend.models.models import Candidate
+    from backend.services.vector_search_service import VectorSearchService
+
+    svc = VectorSearchService(embedding_model=StubEmbedder())
+    candidates = db.query(Candidate).limit(3).all()
+    if not candidates:
+        pytest.skip("needs seeded candidates")
+    for c in candidates:
+        svc.store_candidate_embedding(db, c.id)
+
+    results = svc.search_candidates_by_text(db, "python data engineer with airflow", limit=5)
+    assert isinstance(results, list) and len(results) >= 1
+    assert all({"id", "name", "position", "similarity"} <= set(r) for r in results)
+    sims = [r["similarity"] for r in results]
+    assert sims == sorted(sims, reverse=True), "must be ranked best-first"
 ```
 
 - [ ] **Step 2: Run — expect import error**
@@ -1158,6 +1177,35 @@ class VectorSearchService:
         db.commit()
         return True
 
+    def search_candidates_by_text(self, db, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Semantic candidate search: embed the natural-language query, cosine-rank
+        candidates. This is the pgvector successor to the old (non-functional)
+        Neo4j RAG retrieval; Phase 2's search_candidates tool will call it."""
+        query_vec = self.embedding_model.embed_query(query)
+        rows = db.execute(
+            text(
+                """
+                SELECT c.id, c.first_name, c.last_name, c.email, c.current_position,
+                       1 - (c.embedding <=> CAST(:qvec AS vector)) AS similarity
+                FROM candidates c
+                WHERE c.embedding IS NOT NULL
+                ORDER BY c.embedding <=> CAST(:qvec AS vector)
+                LIMIT :limit
+                """
+            ),
+            {"qvec": str(query_vec), "limit": limit},
+        ).fetchall()
+        return [
+            {
+                "id": r.id,
+                "name": f"{r.first_name or ''} {r.last_name or ''}".strip(),
+                "email": r.email,
+                "position": r.current_position,
+                "similarity": max(0.0, min(1.0, float(r.similarity))),
+            }
+            for r in rows
+        ]
+
     def find_similar_jobs(self, db, job_id: int, limit: int = 5) -> List[Dict[str, Any]]:
         """Cosine similarity over jobs.embedding; excludes the query job."""
         rows = db.execute(
@@ -1189,7 +1237,7 @@ class VectorSearchService:
 poetry run pytest backend/tests/test_vector_search.py -v
 ```
 
-Expected: 2 passed.
+Expected: 3 passed.
 
 - [ ] **Step 5: Replace the two Task-4 stubs in job_service**
 
@@ -1437,6 +1485,6 @@ Then use **superpowers:finishing-a-development-branch** — merge to main, push,
 ## Execution notes
 
 - **Order matters:** Tasks 2-7 run against the current DB and require no Docker. Task 8 is the first one needing Docker Desktop installed (user step). If Docker install is blocked, Tasks 2-7 still merge cleanly as "Phase 1b part 1".
-- **Suite count arithmetic:** 58 baseline → +1 (Task 2) → +5 (Task 6) → +2 DB tests (Task 10, skip without pgvector) = 66 expected passes locally by the end; CI will show more skips (no seed data, no tunnel).
+- **Suite count arithmetic:** 58 baseline → +1 (Task 2) → +5 (Task 6) → +3 DB tests (Task 10, skip without pgvector) = 67 expected passes locally by the end; CI will show more skips (no seed data, no tunnel).
 - **The tunnel being down** never blocks execution: the adapter falls back deterministically. It only blocks the *backfill* being semantically meaningful (Task 10 Step 7 — rerun when up).
 - **Do not** touch `regex_extractor.py`'s shadowed duplicate methods, `intent_processor.py`'s size, or `assistant.py`'s 3,135 lines — that is Phase 2 (tool calling) scope.
