@@ -33,7 +33,7 @@ class DirectNebiusAI:
         self.client = None
         logging.info(f"Initialized Direct Nebius AI with model: {self.model}")
     
-    async def generate_text(self, prompt: str, max_tokens: int = None, temperature: float = None, **kwargs) -> str:
+    async def generate_text(self, prompt: str, max_tokens: Optional[int] = None, temperature: Optional[float] = None, **kwargs) -> str:
         """Generate text using Nebius AI API - primary method used by extractors."""
         # This method is called by the structured_extractor.py
         return await self.generate_completion(prompt, max_tokens=max_tokens, temperature=temperature, **kwargs)
@@ -231,7 +231,7 @@ class LLMService:
             logger.info("Nebius init skipped due to configuration or errors.")
         
         # Connection status
-        self._connection_status = None
+        self._connection_status: Optional[Dict[str, bool]] = None
     
     async def initialize(self) -> bool:
         """
@@ -335,64 +335,6 @@ class LLMService:
         
         return self.embedding_model
     
-    def _initialize_nebius_ai(self) -> bool:
-        """
-        Initialize the Nebius AI service - THIS IS THE REQUIRED SERVICE FOR RESUME PARSING.
-        
-        Returns:
-            True if initialization was successful, False otherwise
-        """
-        if self._nebius_ai_initialized and self.nebius_ai_service is not None:
-            logger.info("Nebius AI already initialized and available")
-            return True
-        
-        try:
-            # Force import and initialization of Nebius AI
-            from backend.services.nebius_ai_service import get_nebius_ai_service, NebiusAIService
-            
-            # CRITICAL: Resolve API key with Settings (.env) as primary source,
-            # then fall back to environment variables for compatibility.
-            api_key = getattr(self.settings, 'nebius_api_key', None) or ""
-            source = "settings.nebius_api_key"
-            if not api_key:
-                api_key = os.environ.get('NEBIUS_API_KEY', "")
-                source = "env:NEBIUS_API_KEY" if api_key else source
-            if not api_key:
-                api_key = os.environ.get('NEBIUS_API_TOKEN', "")
-                source = "env:NEBIUS_API_TOKEN" if api_key else source
-            
-            if not api_key:
-                logger.critical("CRITICAL ERROR: NEBIUS_API_KEY not found in environment or settings.")
-                logger.critical("Resume parsing will fail without this API key. Check your environment variables.")
-                raise ValueError("NEBIUS_API_KEY missing - this is required for resume parsing")
-            else:
-                masked = f"{api_key[:4]}...{api_key[-4:]}" if len(api_key) > 8 else "****"
-                logger.info(f"Nebius API key resolved from {source}: {masked}")
-            
-            # Force direct initialization with inline configuration
-            config = {
-                "nebius_base_url": "https://api.studio.nebius.com/v1/",
-                "model": "microsoft/phi-4",
-                "api_key": api_key,
-                "timeout": 180.0,  # Increased timeout for large resume parsing
-                "temperature": 0.1,
-                "max_tokens": 2000
-            }
-            
-            # Create service directly instead of using factory
-            self.nebius_ai_service = NebiusAIService(config)
-            logger.info("Nebius AI service initialized directly with API key and config")
-            self._nebius_ai_initialized = True
-            return True
-        
-        except Exception as e:
-            error_msg = f"CRITICAL ERROR initializing Nebius AI service: {str(e)}"
-            logger.critical(error_msg)
-            print(error_msg)  # Print to ensure visibility
-            
-            # Raise exception to prevent silent failures
-            raise RuntimeError("Nebius AI initialization failed - cannot proceed with resume parsing") from e
-    
     def get_llm(self, model_name):
         """
         Get an LLM instance by model name.
@@ -445,9 +387,11 @@ class LLMService:
             text.strip() + "\n\nIMPORTANT: Return ONLY a valid JSON object matching the required schema. Do not include any explanations or formatting."
         )
         try:
+            # Type guard: we know cohere_client is not None here
+            assert self.cohere_client is not None
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: self.cohere_client.chat(
+                lambda: self.cohere_client.chat(  # type: ignore
                     model="command-r",
                     message=prompt,
                     temperature=0.2,
@@ -479,12 +423,15 @@ class LLMService:
         import json
         try:
             gemini = self.get_llm(model)
+            if gemini is None:
+                logger.error("Gemini model not available")
+                return {}
             # Use async generation if available, else fallback
             if hasattr(gemini, "generate_content_async"):
-                response = await gemini.generate_content_async(prompt, **kwargs)
+                response = await gemini.generate_content_async(prompt, **kwargs)  # type: ignore
                 raw = response.text if hasattr(response, 'text') else str(response)
             else:
-                response = gemini.generate_content(prompt, **kwargs)
+                response = gemini.generate_content(prompt, **kwargs)  # type: ignore
                 raw = response.text if hasattr(response, 'text') else str(response)
             try:
                 data = json.loads(raw)
@@ -496,20 +443,8 @@ class LLMService:
         except Exception as e:
             logger.error(f"Gemini structured extraction failed: {e}")
             return {}
-
-        
-        try:
-            response = self.cohere_client.chat(
-                message=f"Extract structured data from this resume: {text}",
-                model=ModelType.COHERE_COMMAND_R.value,
-                temperature=0.1
-            )
-            return response.to_dict() if hasattr(response, "to_dict") else {"text": str(response)}
-        except Exception as e:
-            logger.error(f"Error during Cohere structured extraction: {str(e)}")
-            return {"error": str(e)}
     
-    async def generate_text(self, prompt: str, model_type: ModelType = ModelType.META_LLAMA_MAVERICK, task_type: str = "general", max_tokens: int | None = None, system_message: str | None = None) -> str:
+    async def generate_text(self, prompt: str, model_type: ModelType = ModelType.META_LLAMA_MAVERICK, task_type: str = "general", max_tokens: Optional[int] = None, system_message: Optional[str] = None) -> str:
         """
         Generate text using one of the configured LLM models.
         
@@ -567,10 +502,10 @@ class LLMService:
             try:
                 logger.info("Sending prompt to Meta Llama model...")
                 # The response from invoke is an AIMessage object
-                response_message = await self.meta_llama_model.ainvoke(prompt)
+                response_message = await self.meta_llama_model.ainvoke(prompt)  # type: ignore
                 
                 # The actual text is in the `content` attribute
-                return response_message.content
+                return response_message.content  # type: ignore
             except Exception as e:
                 logger.error(f"Error generating text with Meta Llama: {e}")
                 # Continue to fallbacks instead of raising
@@ -706,10 +641,10 @@ class LLMService:
                 
                 logger.info("Sending prompt to Meta Llama model...")
                 # The response from invoke is an AIMessage object
-                response_message = await self.meta_llama_model.ainvoke(messages)
+                response_message = await self.meta_llama_model.ainvoke(messages)  # type: ignore
                 
                 # The actual text is in the `content` attribute
-                return response_message.content
+                return response_message.content  # type: ignore
             except Exception as e:
                 logger.error(f"Error generating text with Meta Llama: {e}")
         
@@ -801,7 +736,7 @@ class LLMService:
             
         self._nebius_ai_initialized = True
 
-    async def _call_openrouter_async(self, prompt: str, model: str, system_message: Optional[str] = None, max_tokens: Optional[int] = None, api_key: str = None) -> Optional[str]:
+    async def _call_openrouter_async(self, prompt: str, model: str, system_message: Optional[str] = None, max_tokens: Optional[int] = None, api_key: Optional[str] = None) -> Optional[str]:
         """
         Minimal OpenRouter call that posts a chat completion request to OpenRouter-compatible API.
         This keeps the change small and avoids pulling in new heavy dependencies.
