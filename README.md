@@ -43,7 +43,8 @@ me what the previous one got wrong.
 
 ## What is actually here
 
-A FastAPI backend (95 routes) and a Streamlit frontend, backed by PostgreSQL.
+A FastAPI backend (92 routes) and a Streamlit frontend, backed by a single
+PostgreSQL database with `pgvector`.
 
 **The resume parsing pipeline** is the part I am most confident in. LLM
 structured extraction against a Pydantic contract, falling back to a regex
@@ -54,6 +55,12 @@ resumes describe experience in a format civilian parsers reliably mangle.
 independently, then applies cross-domain penalties. A pre-K teacher does not
 rank for a Data Engineer role just because both mention "leadership".
 
+**Semantic search** embeds every candidate and job as a 768-dimension vector
+(`nomic-embed-text`, served by an Ollama instance I already run for another
+project) and ranks by cosine similarity in `pgvector`. "Machine learning
+engineer with python" surfaces the NLP Engineers first — no keyword overlap
+required.
+
 ---
 
 ## Honest status
@@ -61,17 +68,21 @@ rank for a Data Engineer role just because both mention "leadership".
 This is a portfolio piece under active renovation, not a product. Being
 specific about what is broken is more useful to you than a feature list:
 
-- **Neo4j is being removed.** It holds 48 nodes and its vector indexes are
-  misconfigured — 384-dimension indexes against 1536-dimension stored vectors.
-  It is the single biggest barrier to anyone running this project, and it is
-  being folded into Postgres with `pgvector`.
+- **Neo4j is gone.** It held 48 nodes and its vector indexes were
+  misconfigured — 384-dimension indexes against 1536-dimension stored vectors —
+  so the "graph layer" was concept, not capability. Phase 1b deleted it
+  (~5,400 lines net, 31 packages including LangChain and the entire PyTorch
+  stack) and rebuilt the vector layer on Postgres + `pgvector`: 768-dimension
+  embeddings, HNSW indexes, working semantic search. `docker compose up -d db`
+  is now the whole database story.
 - **The Nebius API key is dead (HTTP 401)** and it is still the primary
-  provider, so AI-dependent paths fail until the provider chain is rebuilt.
+  provider, so AI-dependent paths fail until the provider chain is rebuilt
+  (Phase 2). Its doomed connection test also dominates the ~27 s first-request
+  warmup.
 - **`intent_processor.py` is 4,338 lines of hand-written regex** across 30+
   intents. It is being replaced with ~8 tool definitions.
-- **The test suite:** 58 passing, 0 failing, 93 skipped. The nine defects
-  that were failing visibly after Phase 0 — including a
-  character-corruption bug in experience parsing — are fixed. See
+- **The test suite:** 65 passing, 0 failing, 86 skipped, with CI (ruff +
+  pytest against a pgvector service container) on every PR. See
   [documentation/TESTING.md](documentation/TESTING.md).
 
 Full assessment and plan:
@@ -81,12 +92,14 @@ Full assessment and plan:
 
 ## Running it
 
-Requires **Python 3.11+**, Poetry and PostgreSQL. Neo4j, Redis and MinIO are
-optional — the app degrades gracefully without them.
+Requires **Python 3.11+**, Poetry and Docker. Redis and MinIO are optional —
+the app degrades gracefully without them.
 
 ```bash
 poetry install
 cp .env.example .env        # fill in POSTGRES_* at minimum
+docker compose up -d db     # pgvector Postgres on :5433
+cd backend && poetry run alembic upgrade head && cd ..
 ```
 
 ```bash
@@ -97,10 +110,11 @@ poetry run python -m uvicorn main:app --host 127.0.0.1 --port 8000 --app-dir bac
 poetry run streamlit run frontend/app.py
 ```
 
-API docs at `http://localhost:8000/docs`.
+API docs at `http://localhost:8000/docs`. To embed seed data for semantic
+search: `poetry run python scripts/backfill_embeddings.py`.
 
-The first request takes around 30 seconds while spaCy and the OCR models load.
-Subsequent requests are around 300 ms.
+The first request takes around 27 seconds while the parsing subsystem warms
+up. Subsequent requests are under 100 ms.
 
 ---
 
