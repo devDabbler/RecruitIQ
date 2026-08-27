@@ -15,8 +15,8 @@ from pathlib import Path
 # Import the new resume parser components
 from backend.utils.resume_parsing import ResumeData, create_resume_parser
 
-# Import database connection utilities (PostgreSQL and Neo4j)
-from backend.database.db_connection import get_postgres_connection, get_neo4j_connection
+# Import database connection utilities (PostgreSQL)
+from backend.database.db_connection import get_postgres_connection
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,6 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import desc  # Removed func
 
-from backend.services.rag_service import RAGService
-# Removed unused LLMService, GraphService, JobService imports
 from backend.utils.database import get_db  # Corrected import path
 # Removed unused Settings import
 
@@ -61,19 +59,6 @@ class JobMatchResult(BaseModel):
 class MatchJobsResponse(BaseModel):
     jobs: List[JobMatchResult]
 
-# Service dependencies
-def get_rag_service():
-    from backend.services.llm_service import get_llm_service
-    from backend.services.graph_service import get_graph_service
-    from backend.utils.config import get_settings
-    
-    llm_service = get_llm_service()
-    graph_service = get_graph_service()
-    settings = get_settings()
-    
-    return RAGService(llm_service, graph_service, settings)
-
-
 @router.post("/match_candidates", status_code=status.HTTP_200_OK)
 async def match_candidates_for_jobs(
     request: CandidateMatchRequest,
@@ -101,21 +86,6 @@ async def match_candidates_for_jobs(
     except Exception as e:
         logger.exception(f"Agentic Zero error in match_candidates_for_jobs: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
-    # LEGACY LOGIC (commented out for migration):
-    # try:
-    #     rag_service = get_rag_service()
-    #     raw_results = await rag_service.search_candidates_for_jobs(
-    #         job_ids=request.job_ids,
-    #         min_score=request.min_score,
-    #         limit=10,
-    #         db=db
-    #     )
-    #     return raw_results
-    # except HTTPException as e:
-    #     raise e
-    # except Exception as e:
-    #     logger.exception(f"Error matching candidates to jobs: {str(e)}")
-    #     raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/match_jobs")

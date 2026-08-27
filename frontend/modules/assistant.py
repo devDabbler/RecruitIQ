@@ -348,32 +348,7 @@ def page():
                 if st.button(parse_button_text, type="primary", disabled=not (uploaded_file and selected_job)):
                     with st.spinner("🤖 Processing resume with AI agent..."):
                         try:
-                            # First ensure job data is synced to Neo4j
-                            try:
-                                job_id = selected_job.get('id') if selected_job else None
-                                sync_response = None
-                                if job_id:
-                                    sync_url = f"{get_backend_url()}/api/jobs/sync-to-neo4j"
-                                    sync_response = requests.post(
-                                        sync_url,
-                                        json={"job_ids": [job_id]},
-                                        timeout=30
-                                    )
-                                
-                                if sync_response and sync_response.status_code == 200:
-                                    logger.info(f"Job successfully synced to Neo4j: {sync_response.json()}")
-                                elif sync_response:
-                                    logger.warning(f"Job sync warning: {sync_response.text}")
-                                else:
-                                    logger.warning("No job ID available for sync")
-                            except requests.exceptions.Timeout:
-                                logger.warning("Job sync timed out, continuing with analysis")
-                            except Exception as e:
-                                logger.warning(f"Job sync error: {e}, continuing with analysis")
-                            
-                            # Continue with analysis regardless of sync status
-                                
-                            # Now process the resume with the agent
+                            # Process the resume with the agent
                             files = {"files": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)}
                             task_details = {"target_job_title": target_job_title, "job_data": selected_job}
                             agent_task_url = f"{get_backend_url()}/api/assistant/agent-task"
@@ -463,10 +438,10 @@ def page():
                                     # st.json(result)  # Commented out for production
                                     st.write("Debug response details disabled for production")
                                 
-                                # If the error is related to Neo4j, try to provide a helpful message
+                                # Embedding-related failures are non-fatal; analysis proceeds without vectors
                                 error_msg = result.get("message", "").lower()
-                                if "neo4j" in error_msg or "graph" in error_msg or "vector" in error_msg or "embedding" in error_msg:
-                                    st.warning("⚠️ **Database Synchronization Issue:** Try running the job sync script to ensure all jobs are properly synchronized to the graph database.")
+                                if "vector" in error_msg or "embedding" in error_msg:
+                                    st.warning("⚠️ Embedding service unavailable — analysis completed without semantic scoring.")
                         except Exception as e:
                             logger.error(f"Error during agent processing: {e}", exc_info=True)
                             st.error(f"Agent processing failed: {str(e)}")

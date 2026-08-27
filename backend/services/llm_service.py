@@ -7,13 +7,11 @@ import logging
 import os
 import httpx
 import random
-from functools import lru_cache
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 import urllib.parse
 
 # Set cache directory for sentence transformers to avoid re-downloading
-os.environ['SENTENCE_TRANSFORMERS_HOME'] = './models/sentence_transformers'
 
 # Direct implementation of Nebius AI to avoid circular imports
 class DirectNebiusAI:
@@ -146,12 +144,6 @@ except ImportError:
     GenerativeModel = None
     logging.warning("google.generativeai package not found, Gemini functionality will be limited")
 
-try:
-    from langchain_groq import ChatGroq
-except ImportError:
-    ChatGroq = None
-    logging.warning("langchain_groq package not found, Meta Llama functionality will be limited")
-
 from backend.utils.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -169,25 +161,6 @@ class ModelType(Enum):
     COHERE_COMMAND_R = "command-r"
     COHERE_COMMAND_R_PLUS = "command-r-plus"
     NEBIUS_PHI4 = "microsoft/phi-4"
-
-
-@lru_cache(maxsize=1)
-def _load_sentence_transformer_model(model_name: str):
-    """
-    Loads and caches the sentence transformer model.
-    This function is cached to ensure the model is loaded only once.
-    """
-    try:
-        from sentence_transformers import SentenceTransformer
-        logger.info(f"Loading sentence transformer model: {model_name}")
-        # The model will be downloaded to the cache directory set by SENTENCE_TRANSFORMERS_HOME
-        return SentenceTransformer(model_name)
-    except ImportError:
-        logger.error("sentence_transformers package not found. Please install it to use embedding models.")
-        return None
-    except Exception as e:
-        logger.error(f"Failed to load sentence transformer model '{model_name}': {e}")
-        return None
 
 
 class LLMService:
@@ -278,61 +251,15 @@ class LLMService:
             return False
     
     def get_embedding_model(self):
-        """
-        Get the embedding model, loading it if necessary.
-        This method ensures the model is loaded only once and cached.
-        """
+        """Return the shared 768-dim Ollama embedding adapter (loaded once)."""
         if not self._embedding_model_loaded:
-            # Use the cached loading function
-            self.embedding_model = _load_sentence_transformer_model("sentence-transformers/all-MiniLM-L6-v2")
-            
-            if self.embedding_model is None:
-                # Fallback to simple embedding adapter if sentence transformers fails
-                logger.warning("Falling back to simple embedding adapter")
-                class SimpleEmbeddingAdapter:
-                    def embed_documents(self, texts):
-                        # Simple fallback - return random embeddings
-                        import numpy as np
-                        return [np.random.rand(384).tolist() for _ in texts]
-                    
-                    def embed_query(self, text):
-                        import numpy as np
-                        return np.random.rand(384).tolist()
-                    
-                    def encode(self, text):
-                        """Direct encode method for compatibility with cache_utils"""
-                        import numpy as np
-                        if isinstance(text, str):
-                            return np.random.rand(384)
-                        else:
-                            return np.array([np.random.rand(384) for _ in text])
-                
-                self.embedding_model = SimpleEmbeddingAdapter()
-            else:
-                # Wrap the sentence transformer in a consistent interface
-                class SentenceTransformerAdapter:
-                    def __init__(self, model):
-                        self.model = model
-                    
-                    def embed_documents(self, texts):
-                        return self.model.encode(texts).tolist()
-                    
-                    def embed_query(self, text):
-                        return self.model.encode([text])[0].tolist()
-                    
-                    def encode(self, text):
-                        """Direct encode method for compatibility with cache_utils"""
-                        if isinstance(text, str):
-                            # Return numpy array for single string (needed for cache_utils)
-                            return self.model.encode([text])[0]
-                        else:
-                            # Return numpy array for list of strings
-                            return self.model.encode(text)
-                
-                self.embedding_model = SentenceTransformerAdapter(self.embedding_model)
-            
+            from backend.services.ollama_embeddings import OllamaEmbeddingAdapter
+            self.embedding_model = OllamaEmbeddingAdapter(
+                base_url=getattr(self.settings, "ollama_base_url", "https://ollama.sentienttrader.ai"),
+                model=getattr(self.settings, "ollama_embed_model", "nomic-embed-text"),
+                timeout=getattr(self.settings, "ollama_embed_timeout", 20.0),
+            )
             self._embedding_model_loaded = True
-        
         return self.embedding_model
     
     def get_llm(self, model_name):
@@ -350,10 +277,6 @@ class LLMService:
             if not self._nebius_ai_initialized:
                 self._initialize_nebius_ai()
             return self.nebius_ai_service
-        elif model_name == ModelType.META_LLAMA_MAVERICK.value:
-            # Lazy initialize Meta Llama
-            self._initialize_meta_llama()
-            return self.meta_llama_model
         elif model_name == ModelType.COHERE_COMMAND.value:
             # Lazy initialize Cohere
             self._initialize_cohere()
@@ -497,19 +420,6 @@ class LLMService:
             else:
                 logger.warning("Nebius resume parsing is disabled; proceeding with normal routing.")
         
-        # For other tasks or if Nebius AI failed, use Meta Llama
-        if hasattr(self, "meta_llama_model") and self.meta_llama_model:
-            try:
-                logger.info("Sending prompt to Meta Llama model...")
-                # The response from invoke is an AIMessage object
-                response_message = await self.meta_llama_model.ainvoke(prompt)  # type: ignore
-                
-                # The actual text is in the `content` attribute
-                return response_message.content  # type: ignore
-            except Exception as e:
-                logger.error(f"Error generating text with Meta Llama: {e}")
-                # Continue to fallbacks instead of raising
-        
         # If Meta Llama fails or isn't available, try Cohere
         if self.cohere_client:
             try:
@@ -629,25 +539,6 @@ class LLMService:
             except Exception as e:
                 logger.error(f"Error generating text with Nebius AI fallback: {e}")
         
-        # Use Meta Llama as secondary option (if available and enabled)
-        if self.meta_llama_model:
-            try:
-                from langchain_core.messages import HumanMessage, SystemMessage
-                
-                messages = []
-                if system_message:
-                    messages.append(SystemMessage(content=system_message))
-                messages.append(HumanMessage(content=prompt))
-                
-                logger.info("Sending prompt to Meta Llama model...")
-                # The response from invoke is an AIMessage object
-                response_message = await self.meta_llama_model.ainvoke(messages)  # type: ignore
-                
-                # The actual text is in the `content` attribute
-                return response_message.content  # type: ignore
-            except Exception as e:
-                logger.error(f"Error generating text with Meta Llama: {e}")
-        
         # Fallback to Cohere if other models are not available
         if self.cohere_client:
             try:
@@ -671,14 +562,6 @@ class LLMService:
         
         # If all else fails, give a helpful error response
         return "I'm having trouble generating a response with my AI service right now. Please try again later."
-
-    def _initialize_meta_llama(self) -> bool:
-        """Meta Llama initialization is DISABLED for all resume-related tasks."""
-        # COMPLETELY DISABLED: Meta Llama is not allowed for resume parsing or any resume-related tasks
-        logger.warning("Meta Llama initialization is DISABLED - resume parsing must use Nebius AI exclusively")
-        self.meta_llama_model = None
-        self._meta_llama_initialized = False
-        return False
 
     def _initialize_cohere(self):
         """Lazy initialize Cohere client."""
