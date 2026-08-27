@@ -69,8 +69,9 @@ specific about what is broken is more useful to you than a feature list:
   provider, so AI-dependent paths fail until the provider chain is rebuilt.
 - **`intent_processor.py` is 4,338 lines of hand-written regex** across 30+
   intents. It is being replaced with ~8 tool definitions.
-- **The test suite:** 50 passing, 9 failing, 92 skipped. The failures are
-  real defects, left visible on purpose. See
+- **The test suite:** 58 passing, 0 failing, 93 skipped. The nine defects
+  that were failing visibly after Phase 0 — including a
+  character-corruption bug in experience parsing — are fixed. See
   [documentation/TESTING.md](documentation/TESTING.md).
 
 Full assessment and plan:
