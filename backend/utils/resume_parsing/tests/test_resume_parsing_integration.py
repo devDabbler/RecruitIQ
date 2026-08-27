@@ -10,6 +10,8 @@ PATHS = [SAMPLE_TXT] + ([SAMPLE_PDF] if SAMPLE_PDF else [])
 @pytest.mark.asyncio
 async def test_parse_end_to_end(resume_path: pathlib.Path):
     """Run real parser on sample files and assert key fields are populated."""
+    if not resume_path.exists():
+        pytest.skip("resume fixtures are local-only (never committed); absent in CI")
     text = resume_path.read_text(encoding='utf-8', errors='ignore')
     extractor = RegexExtractor()
     result_dict = await extractor.extract(text)
