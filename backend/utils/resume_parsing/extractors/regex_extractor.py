@@ -1010,19 +1010,15 @@ class _MiniExperienceParser:
                 seen_keys.add(key)
                 deduped.append(exp)
         
-        # 3. Sort experiences by date (most recent first)
+        # 3. Sort experiences by date (most recent first). Dates are stored
+        # as written in the resume ("July 2023", "2020"), so derive a
+        # comparable YYYY-MM key instead of comparing the raw strings.
         def get_sort_key(exp):
-            # If end date is present, use it (present/current is treated as most recent)
-            if exp.end_date and 'present' in exp.end_date.lower():
-                return ('9999-99', exp.start_date or '0000-00')
-            elif exp.end_date:
-                return (exp.end_date, exp.start_date or '0000-00')
-            # If only start date, use that
-            elif exp.start_date:
-                return (exp.start_date, '0000-00')
-            # If no dates, sort by length of title (more detailed titles first)
-            else:
-                return ('0000-00', '0000-00')
+            start_key = self._date_sort_value(exp.start_date)
+            # If end date is missing, fall back to the start date
+            end_key = (self._date_sort_value(exp.end_date)
+                       if exp.end_date else start_key)
+            return (end_key, start_key)
         
         # Sort in reverse order (most recent first)
         sorted_exps = sorted(deduped, key=get_sort_key, reverse=True)
@@ -1887,74 +1883,81 @@ class _MiniExperienceParser:
         return None
 
     def _parse_dates(self, date_str: str) -> Tuple[Optional[str], Optional[str]]:
-        """Parse dates with enhanced dateutil support and better pattern matching."""
+        """Split a date-range string into raw (start, end) tokens.
+
+        Dates are preserved exactly as written in the resume ("2020",
+        "July 2023", "07/2020") - the parser must not invent precision
+        that is not in the source text. Present-style end markers are
+        normalized to the canonical "Present".
+        """
         if not date_str:
             return None, None
-            
+
         # Clean up the date string
         date_str = re.sub(r'\s+', ' ', date_str.strip())
-        
-        # Handle common present/current variations
-        present_terms = ['present', 'current', 'now', 'ongoing', 'today']
-        for term in present_terms:
-            # Use case-insensitive replacement but always convert to "Present" with capital P
-            date_str = re.sub(rf'\b{term}\b', 'Present', date_str, flags=re.I)
-        
-        # Handle Roger Waters resume format - "September 2022 - Present"
-        month_year_pattern = r'(?P<start>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4})\s*[-–—]\s*(?P<end>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{4}|Present)'
-        month_year_match = re.search(month_year_pattern, date_str, re.I)
-        if month_year_match:
-            start = self._normalize_date_enhanced(month_year_match.group("start"))
-            end = self._normalize_date_enhanced(month_year_match.group("end"))
-            return start, end
-        
-        # Try main pattern first
-        m = self._DATE_RE.search(date_str)
-        if m:
-            start = self._normalize_date_enhanced(m.group("start"))
-            end = self._normalize_date_enhanced(m.group("end"))
-            return start, end
-        
-        # Try alternative patterns
-        for pattern in self._ALT_DATE_PATTERNS:
+
+        # Structured range patterns first (most reliable)
+        for pattern in self._DATE_PATTERNS:
             m = pattern.search(date_str)
             if m:
-                start = self._normalize_date_enhanced(m.group("start"))
-                end = self._normalize_date_enhanced(m.group("end"))
+                return (
+                    self._clean_date_token(m.group('start')),
+                    self._clean_date_token(m.group('end')),
+                )
+
+        # Generic fallback: split once on a range separator
+        parts = re.split(
+            r'\s*(?:[-–—~]|\bto\b|\bthrough\b|\buntil\b)\s*',
+            date_str, maxsplit=1, flags=re.I,
+        )
+        if len(parts) == 2:
+            start = self._clean_date_token(parts[0])
+            end = self._clean_date_token(parts[1])
+            if start or end:
                 return start, end
-        
-        # Try to extract just years if nothing else worked
-        years_pattern = r'(\d{4})\s*[-–—]\s*(\d{4}|Present)'
-        years_match = re.search(years_pattern, date_str, re.I)
-        if years_match:
-            start_year = f"{years_match.group(1)}-01"
-            end_value = years_match.group(2)
-            # Case-insensitive comparison for Present
-            if end_value.lower() != "present":
-                end_year = f"{end_value}-01"
-            else:
-                end_year = "Present"
-            return start_year, end_year
-        
-        # Try single year + Present pattern (case-insensitive)
-        single_year_pattern = r'(\d{4})\s*[-–—]\s*(Present|PRESENT|present|Current|current)'
-        single_year_match = re.search(single_year_pattern, date_str, re.I)
-        if single_year_match:
-            start_year = f"{single_year_match.group(1)}-01"
-            return start_year, "Present"
-        
-        # Try to split on common separators and parse each part
-        separators = ['-', '–', '—', '~', 'to', 'through', 'until']
-        for sep in separators:
-            if sep in date_str.lower():
-                parts = re.split(rf'\s*{re.escape(sep)}\s*', date_str, flags=re.I)
-                if len(parts) == 2:
-                    start = self._normalize_date_enhanced(parts[0].strip())
-                    end = self._normalize_date_enhanced(parts[1].strip())
-                    if start or end:
-                        return start, end
-                        
+
         return None, None
+
+    @staticmethod
+    def _clean_date_token(token: Optional[str]) -> Optional[str]:
+        """Trim a raw date token; map present-style variants to "Present"."""
+        if not token:
+            return None
+        token = token.strip()
+        if token.lower() in ('present', 'current', 'now', 'ongoing', 'today'):
+            return 'Present'
+        return token or None
+
+    @staticmethod
+    def _date_sort_value(date_str: Optional[str]) -> str:
+        """Derive a sortable "YYYY-MM" key from a raw date token.
+
+        Used only for ordering results (most recent first); the stored
+        dates stay exactly as written in the resume.
+        """
+        if not date_str:
+            return '0000-00'
+        lowered = date_str.lower()
+        if lowered in ('present', 'current', 'now', 'ongoing', 'today'):
+            return '9999-99'
+        year_match = re.search(r'\b(\d{4})\b', date_str)
+        if not year_match:
+            return '0000-00'
+        month = '00'
+        month_match = re.search(
+            r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)', lowered)
+        if month_match:
+            month_map = {
+                'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+                'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+                'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12',
+            }
+            month = month_map[month_match.group(1)]
+        else:
+            mm_match = re.match(r'\s*(\d{1,2})[/-]\d{4}', date_str)
+            if mm_match:
+                month = f"{int(mm_match.group(1)):02d}"
+        return f"{year_match.group(1)}-{month}"
 
     def _normalize_date_enhanced(self, date_str: str) -> Optional[str]:
         """Enhanced date normalization using dateutil for robust parsing."""
