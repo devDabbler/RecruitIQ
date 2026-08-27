@@ -5,7 +5,6 @@ from ..models.models import Job
 from .llm_service import LLMService
 from backend.utils.cache_utils import get_embedding_cached
 import asyncio
-from .graph_service import GraphService
 import logging
 import re
 
@@ -52,15 +51,13 @@ class JobService:
     which enables AI-powered matching between jobs and candidates.
     """
     
-    def __init__(self, llm_service: Optional[LLMService] = None, graph_service: Optional[GraphService] = None):
+    def __init__(self, llm_service: Optional[LLMService] = None):
         """Initialize the JobService.
-        
+
         Args:
             llm_service: LLMService instance for generating embeddings
-            graph_service: GraphService instance for storing embeddings in Neo4j
         """
         self.llm_service = llm_service
-        self.graph_service = graph_service
     
     def create_embeddings(self, job_data: Dict[str, Any]) -> Dict[str, List[float]]:
         """Create embeddings for job data.
@@ -196,60 +193,10 @@ class JobService:
         return f"Skills: {skills_text}" if skills_text else ""
     
     def store_job_embeddings(self, db: Session, job_id: int) -> bool:
-        """Store embeddings for a job in the database and Neo4j.
-        
-        Args:
-            db: Database session
-            job_id: ID of the job to store embeddings for
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        if not self.llm_service or not self.graph_service:
-            logger.warning("Services not initialized. Cannot store embeddings.")
-            return False
-        
-        try:
-            # Get job from database
-            job = db.query(Job).filter(Job.id == job_id).first()
-            if not job:
-                logger.error(f"Job with ID {job_id} not found")
-                return False
-            
-            # Convert job to dictionary
-            job_data = {
-                "id": job.id,
-                "title": job.title,
-                "department": job.department,
-                "job_overview": job.job_overview,
-                "required_qualifications": job.required_qualifications,
-                "location": job.location,
-                "location_type": job.location_type,
-                "job_type": job.job_type,
-                "experience_level": job.experience_level,
-                "skills": job.skills.split(",") if isinstance(job.skills, str) and job.skills else []
-            }
-            
-            # Create embeddings
-            embeddings = self.create_embeddings(job_data)
-            
-            # Store embeddings in database
-            job.description_embedding = json.dumps(embeddings.get("description", []))
-            job.requirements_embedding = json.dumps(embeddings.get("requirements", []))
-            job.skills_embedding = json.dumps(embeddings.get("skills", []))
-            
-            db.commit()
-            db.refresh(job)
-            
-            # Store in Neo4j
-            self.graph_service.store_job(job.id, job_data, embeddings)
-            
-            logger.info(f"Successfully stored embeddings for job {job_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error storing job embeddings: {str(e)}")
-            return False
+        """Neo4j embedding storage removed in Phase 1b Task 4.
+        Reimplemented on pgvector in Phase 1b Task 10."""
+        logger.info(f"store_job_embeddings({job_id}): pgvector storage lands in Task 10; no-op for now")
+        return False
 
     async def get_skills_for_comparable_jobs(self, job_title: str) -> List[str]:
         """
@@ -261,23 +208,15 @@ class JobService:
         Returns:
             A de-duplicated list of skills from similar jobs.
         """
-        if not self.llm_service or not self.graph_service:
-            logger.warning("LLM or Graph service not initialized. Cannot get comparable skills.")
+        if not self.llm_service:
+            logger.warning("LLM service not initialized. Cannot get comparable skills.")
             return []
 
         try:
-            # Generate embedding for the input job title
-            embedding_model = self.llm_service.get_embedding_model()
-            title_embedding = await get_embedding_cached(embedding_model, job_title)
-            try:
-                emb_len = len(getattr(title_embedding, 'tolist', lambda: title_embedding)()) if hasattr(title_embedding, 'tolist') else len(title_embedding)  # type: ignore
-            except Exception:
-                emb_len = -1
-            logger.debug(f"Title embedding generated for '{job_title}' (length={emb_len}). Using graph to find similar jobs...")
-            
-            # Find similar jobs using the graph service
-            similar_jobs = self.graph_service.find_similar_jobs(title_embedding.tolist(), limit=8)
-            logger.debug(f"GraphService returned {len(similar_jobs)} similar jobs for '{job_title}'.")
+            # Neo4j similar-jobs lookup removed in Phase 1b Task 4; the LLM fallback
+            # below (which was already the live path with Neo4j down) takes over.
+            # pgvector-based similar jobs lands in Task 10.
+            similar_jobs: List[Dict[str, Any]] = []
 
             # Log first 1–2 similar jobs and count total raw skills
             total_jobs = len(similar_jobs)
@@ -620,10 +559,6 @@ def get_job_service():
     global _job_service_instance
     if _job_service_instance is None:
         from backend.services.llm_service import get_llm_service
-        from backend.services.graph_service import get_graph_service
-        
-        llm_service = get_llm_service()
-        graph_service = get_graph_service()
-        
-        _job_service_instance = JobService(llm_service, graph_service)
+
+        _job_service_instance = JobService(get_llm_service())
     return _job_service_instance

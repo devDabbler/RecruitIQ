@@ -19,7 +19,6 @@ from ..models.models import Job, Candidate, Resume, JobApplication, SavedJob
 from ..services.service_registry import (
     provide_job_service,
     provide_llm_service,
-    provide_graph_service,
 )
 
 # Additional models for candidate matching
@@ -79,8 +78,7 @@ async def create_job(
     job: JobCreateUpdate,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """
     Create a new job posting.
@@ -140,8 +138,7 @@ async def get_job(
     job_id: int,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Get job by ID."""
     job = db.query(Job).filter(Job.id == job_id).first()
@@ -165,8 +162,7 @@ async def update_job(
     job_update: JobCreateUpdate,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Update an existing job posting."""
     db_job = db.query(Job).filter(Job.id == job_id).first()
@@ -226,8 +222,7 @@ async def delete_job(
     job_id: int,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Delete a job posting and all related records (future-proof)."""
     try:
@@ -316,8 +311,7 @@ async def search_jobs(
     page_size: int = Query(10, ge=1, le=100),
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Search for jobs with various filters."""
     query = db.query(Job)
@@ -389,8 +383,7 @@ async def get_job_candidates(
     status: Optional[str] = None,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Get candidates that have applied for a job."""
     # Verify job exists
@@ -426,8 +419,7 @@ async def track_job_view(
     job_id: int,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
-    llm_service = Depends(provide_llm_service),
-    graph_service = Depends(provide_graph_service)
+    llm_service = Depends(provide_llm_service)
 ):
     """Track when a job is viewed (for analytics)."""
     job = db.query(Job).filter(Job.id == job_id).first()
