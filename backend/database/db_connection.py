@@ -1,6 +1,6 @@
 """
 Database Connection Utilities for RecruitIQ
-Provides connection functions for PostgreSQL and Neo4j databases
+Provides connection functions for PostgreSQL
 """
 
 import os
@@ -15,9 +15,6 @@ load_dotenv()
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
-# Neo4j
-from neo4j import GraphDatabase
-
 from ..utils.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -28,12 +25,6 @@ PG_PORT = os.environ.get('PG_PORT', '5432')
 PG_DATABASE = os.environ.get('PG_DATABASE', 'ats_db')
 PG_USER = os.environ.get('PG_USER', 'admin')
 PG_PASSWORD = os.environ.get('PG_PASSWORD', '')
-
-# Neo4j Configuration
-NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
-NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
-NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', '')
-NEO4J_DATABASE = os.environ.get('NEO4J_DATABASE', 'neo4j')
 
 def get_postgres_connection():
     """
@@ -78,23 +69,6 @@ def get_postgres_connection():
         logger.error(error_msg, exc_info=True)
         raise Exception(f"Failed to connect to database: {str(e)}")
 
-def get_neo4j_connection():
-    """
-    Get a connection to the Neo4j database
-    
-    Returns:
-        Driver object for Neo4j
-    """
-    try:
-        driver = GraphDatabase.driver(
-            NEO4J_URI, 
-            auth=(NEO4J_USER, NEO4J_PASSWORD)
-        )
-        return driver
-    except Exception as e:
-        logger.error(f"Error connecting to Neo4j: {e}")
-        raise
-
 def execute_postgres_query(query: str, params: Optional[Dict[str, Any]] = None):
     """
     Execute a query on the PostgreSQL database
@@ -123,31 +97,6 @@ def execute_postgres_query(query: str, params: Optional[Dict[str, Any]] = None):
     finally:
         if connection:
             connection.close()
-
-def execute_neo4j_query(query: str, params: Optional[Dict[str, Any]] = None):
-    """
-    Execute a query on the Neo4j database
-    
-    Args:
-        query: Cypher query to execute
-        params: Parameters for the query
-        
-    Returns:
-        Query results
-    """
-    driver = None
-    try:
-        driver = get_neo4j_connection()
-        with driver.session(database=NEO4J_DATABASE) as session:
-            result = session.run(query, params or {})
-            return [record.data() for record in result]
-    except Exception as e:
-        logger.error(f"Error executing Neo4j query: {e}")
-        raise
-    finally:
-        if driver:
-            driver.close()
-
 
 def get_db_session():
     """Compatibility stub that returns a generator yielding a placeholder DB session.

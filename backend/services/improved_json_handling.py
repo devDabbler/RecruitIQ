@@ -5,6 +5,7 @@ This module provides enhanced functionality for extracting and repairing JSON fr
 import json
 import re
 import logging
+import traceback
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)

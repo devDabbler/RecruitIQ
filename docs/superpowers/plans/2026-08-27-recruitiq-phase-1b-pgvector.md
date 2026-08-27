@@ -1457,7 +1457,9 @@ git status                                            # clean
 poetry run pytest -q 2>&1 | Select-Object -Last 3     # 0 failed
 poetry run python -c "import backend.main; from backend.main import app; print('routes:', len(app.routes))"   # 92
 git grep -il "langchain" -- backend | Measure-Object  # 0 (text_splitter.py docstring mention is fine if it remains — decide: reword it)
-git grep -c "cadjhosea" -- . ':!docs'                 # nothing (password absent)
+# password-absence check: grep tracked files for the old DB password stem
+# (write the stem yourself from .env history - never commit it in a doc)
+git grep -c "<old-password-stem>" -- . ':!docs'       # expect: nothing
 docker compose ps                                     # db healthy
 ```
 

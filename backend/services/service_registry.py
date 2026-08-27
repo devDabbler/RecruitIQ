@@ -5,8 +5,6 @@ from .intent_processor import IntentProcessor, get_intent_processor
 from .web_search_service import WebSearchService, get_web_search_service
 from .communications_service import CommunicationsService
 from .matching_integrator import MatchingIntegrator
-from .rag_service import RAGService
-from .graph_service import GraphService
 from .job_service import JobService
 from ..utils.config import Settings
 from .resume_service import ResumeService
@@ -26,8 +24,6 @@ class ServiceRegistry:
         self._intent_processor = None
         self._web_search_service = None
         self._communications_service = None
-        self._graph_service = None
-        self._rag_service = None
         self._matching_integrator = None
         self._job_service = None
         self._storage_service = None
@@ -64,27 +60,17 @@ class ServiceRegistry:
         return self._communications_service
 
     @property
-    def graph_service(self):
-        if self._graph_service is None:
-            self._graph_service = GraphService(self.settings)
-        return self._graph_service
-
-    @property
-    def rag_service(self):
-        if self._rag_service is None:
-            self._rag_service = RAGService(self.llm_service, self.graph_service, self.settings)
-        return self._rag_service
-
-    @property
     def matching_integrator(self):
         if self._matching_integrator is None:
-            self._matching_integrator = MatchingIntegrator(self.rag_service)
+            self._matching_integrator = MatchingIntegrator(
+                embedding_model=self.llm_service.get_embedding_model()
+            )
         return self._matching_integrator
 
     @property
     def job_service(self):
         if self._job_service is None:
-            self._job_service = JobService(self.llm_service, self.graph_service)
+            self._job_service = JobService(self.llm_service)
         return self._job_service
 
     @property
@@ -165,12 +151,6 @@ def provide_intent_processor():
 
 def provide_web_search_service():
     return registry.web_search_service
-
-def provide_graph_service():
-    return registry.graph_service
-
-def provide_rag_service():
-    return registry.rag_service
 
 def provide_job_service():
     return registry.job_service

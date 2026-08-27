@@ -47,6 +47,7 @@ class Candidate(Base):
     notes = Column(Text, nullable=True)
     current_position = Column(String(255), nullable=True)
     current_company = Column(String(255), nullable=True)
+    embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over position+skills
     created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Add index for sorting
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -119,6 +120,7 @@ class Job(Base):
     skills = Column(String, nullable=True)
     views = Column(Integer, default=0, nullable=True)
     applications = Column(Integer, default=0, nullable=True)
+    embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over title+overview+quals+skills
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -369,7 +371,7 @@ class AgentMemory(Base):
     memory_type = Column(String(50), nullable=False)  # e.g., 'observation', 'reflection', 'action_result'
     content = Column(JSON, nullable=False)  # Flexible field for memory data
     importance = Column(Float, default=0.5) # A score from 0.0 to 1.0
-    embedding = Column(Vector(384)) # Using 384 dimensions from all-MiniLM-L6-v2
+    embedding = Column(Vector(768)) # 768 dimensions from nomic-embed-text
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (

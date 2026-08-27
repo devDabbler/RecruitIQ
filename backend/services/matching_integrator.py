@@ -7,22 +7,19 @@ import logging
 from typing import List, Dict, Any, Optional
 
 from .matching_enhancer import MatchingEnhancer
-from .rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 
 class MatchingIntegrator:
     """Integrates advanced matching capabilities with existing services."""
-    
-    def __init__(self, rag_service: RAGService):
+
+    def __init__(self, embedding_model=None):
         """
-        Initialize the matching integrator.
-        
         Args:
-            rag_service: The RAG service instance for database access
+            embedding_model: optional adapter with encode/embed_query/embed_documents,
+                used by MatchingEnhancer for semantic scoring. Matching works without it.
         """
-        self.rag_service = rag_service
-        self.enhancer = MatchingEnhancer(embedding_model=rag_service.embedding_adapter)
+        self.enhancer = MatchingEnhancer(embedding_model=embedding_model)
     
     async def enhanced_candidate_job_matching(self, job_id: int, db, min_score: float = 20.0, limit: int = 10):
         """

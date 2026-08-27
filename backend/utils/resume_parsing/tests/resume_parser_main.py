@@ -181,8 +181,13 @@ class ResumeParser:
         if file_path.lower().endswith(('.doc', '.docx')):
             return await self._extract_text_from_docx(file_path)
         if file_path.lower().endswith('.txt'):
-            async with asyncio.to_thread(open, file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                return f.read()
+            import asyncio
+
+            def _read():
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    return f.read()
+
+            return await asyncio.to_thread(_read)
         raise ValueError(f"Unsupported file type: {file_path}")
 
     async def parse_resume(self, file_path: str, strategy: str = 'fast') -> ResumeData:
