@@ -73,6 +73,8 @@ router = APIRouter(prefix="/jobs")
 import logging
 from fastapi import HTTPException
 
+logger = logging.getLogger("backend.routers.jobs")
+
 @router.post("/", response_model=JobResponse, status_code=201)
 async def create_job(
     job: JobCreateUpdate,

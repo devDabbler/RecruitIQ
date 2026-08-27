@@ -97,6 +97,10 @@ disallow_incomplete_defs = true
 
 [tool.ruff]
 line-length = 120
+# backend/patches is quarantined legacy monkeypatch code, slated for deletion
+extend-exclude = ["backend/patches"]
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I"]
 ignore = ["E203", "E501"]
 
