@@ -25,10 +25,13 @@ from ..services.service_registry import (
 # Additional models for candidate matching
 class CandidateMatch(BaseModel):
     """Model for a candidate match."""
-    id: int
+    # Candidate ids are UUID strings, and a candidate may have no resume row.
+    # Mirrors CandidateMatchResult in enhanced_matching.py, which was updated
+    # for the UUID migration while this model was not.
+    id: str
     name: str
-    email: str
-    resume_id: int
+    email: Optional[str] = None
+    resume_id: Optional[int] = None
     match_score: float
 
 class CandidateMatchesResponse(BaseModel):

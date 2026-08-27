@@ -48,6 +48,126 @@ nowhere.
 
 Verified by direct inspection on 2026-08-26.
 
+### 2.1 Runtime baseline — verified 2026-08-27
+
+Everything below §2.1 was originally read from source, not observed. On
+2026-08-27 the app was actually launched. **It runs.**
+
+| Check | Result |
+|---|---|
+| Poetry env | Intact (`py3.11`); `import main` clean |
+| Registered routes | 95 routes / 78 OpenAPI paths; 6 agents register |
+| Boot time | ~7 s to bind |
+| `/health`, `/docs` | 200 |
+| `/api/jobs` | 200 in 72 ms, real data |
+| `/api/candidates` | 200 — **28 s cold**, 300 ms warm |
+| Postgres | 16.9, running as service `postgresql-x64-16` |
+| Redis | Running inside WSL Ubuntu (this is what the WSL step was for) |
+| Neo4j | Neo4j Desktop 5.24.0 Enterprise; started later same day — see §2.2 |
+| MinIO | Not running; app falls back to local storage |
+| Docker | **Not installed at all** |
+
+**`ats_db` contents (real, not empty):** 23 candidates, 30 resumes, 6 jobs,
+48 skills, 372 candidate-skill links, 25 education rows, 61 experience rows.
+Alembic stamped `40d08a3d3c48`. Extensions: `pg_trgm`, `plpgsql`, `uuid-ossp` —
+**no pgvector yet**, consistent with vectors having lived in Neo4j.
+
+*Caution for future inspection:* `pg_stat_user_tables.n_live_tup` reads 0 for
+every table here — a stale-statistics artifact that falsely suggests an empty
+database. Use `pg_class.relpages` / `reltuples`, or authenticate and `count(*)`.
+
+**Blocker found and resolved.** Every DB route failed with `password
+authentication failed for user "admin"`. The `admin` password had been rotated
+— most plausibly when CollinsAI was provisioned on 2026-08-06 — and RecruitIQ's
+`.env` and `alembic.ini` (both still carry the old value) were never updated.
+Reset on 2026-08-27 back to the value already in config, via a temporary
+`pg_hba.conf` trust rule scoped to `admin@localhost`, followed by a service
+restart. `pg_hba.conf` was restored to all-`scram-sha-256` and verified clean.
+
+**Three findings that change the plan:**
+
+1. **Port 8000 is occupied by a different project** — an API titled *CollinsAI*
+   (36 paths). RecruitIQ was run on 8010. Because the Streamlit frontend
+   hardcodes `localhost:8000` in **30+ places** with no central client, running
+   the UI today silently points RecruitIQ at the wrong backend. The URLs are
+   also *inconsistent* — some default to `localhost:8000`, others to
+   `localhost:8000/api`. This promotes the central API client from cleanup to
+   an early correctness fix.
+2. **The Nebius key is dead — HTTP 401**, not merely circuit-broken. It is the
+   *current* primary provider, so the app's AI paths are broken today. Verified
+   working: **Groq 200, OpenRouter 200, `ollama.sentienttrader.ai` 200** (124 ms
+   from the laptop; all four models present). §4.3's deprioritization of Nebius
+   is confirmed by evidence.
+3. **Docker is not installed**, making the Phase 1 `docker-compose.yml` a
+   prerequisite to install rather than merely to author.
+
+**The 28 s cold start** is lazy loading of spaCy `en_core_web_lg` (the `_sm`
+model is absent), easyocr, and sentence-transformers — exactly the PyTorch stack
+§4.2 removes. Warm calls are ~300 ms, so this is cold start, not an N+1 query.
+
+### 2.2 Neo4j contents — verified 2026-08-27
+
+Neo4j **5.24.0 Enterprise**, started on request. Bolt auth with the `.env`
+credentials works (that password was *not* rotated). Contents:
+
+| Aspect | Reality |
+|---|---|
+| Total nodes | **48** — 32 `Skill`, 10 `Candidate`, 6 `Job` |
+| Total relationships | **43**, all of one type: `(:Job)-[:REQUIRES]->(:Skill)` |
+| Candidate relationships | **Zero.** 10 candidates, 0 edges |
+| Candidate embeddings | **None.** Props are only id/name/email/phone/location/timestamps |
+| Job embeddings | Present — 3 per job, all **1536-dim** |
+| Vector indexes declared | 8 |
+| Labels with indexes but no nodes | `Resume`, `KnowledgeNode`, `MarketIntelligence`, `AgentInsight` |
+
+**The vector layer is non-functional, not merely sparse.** Two independent
+reasons:
+
+1. **Dimension mismatch.** Seven of the eight vector indexes declare
+   `vector.dimensions: 384`, but the only vectors actually stored are
+   **1536-dim** (an OpenAI-era leftover; the odd one out,
+   `resume_skills_embedding`, is 1536 but indexes a label with zero nodes).
+   A 384-dim index cannot serve 1536-dim vectors.
+2. **The candidate side is empty.** No candidate has an embedding and no
+   candidate has a single relationship — so candidate vector search and graph
+   traversal both have nothing to operate on.
+
+**Postgres and Neo4j are also out of sync:** 23 candidates in Postgres, 10 in
+Neo4j.
+
+**Consequence for Phase 1 — this is good news.** §2's "Neo4j vector + graph
+matching layer" is confirmed as *concept only*; there is essentially nothing to
+migrate. The 384↔768 dim change in §4.2 invalidates nothing that works today.
+Removing Neo4j is close to free, and it is still the single biggest barrier to
+anyone running this project.
+
+### 2.3 Matching works — one-line bug found and fixed
+
+`GET /api/jobs/{id}/matching-candidates` returned **500** even with Neo4j up.
+The pipeline itself was fine — role scoring, skill overlap, experience scoring,
+and cross-domain penalties all computed correctly — and then failed at response
+serialization:
+
+```
+2 validation errors for CandidateMatch
+id         Input should be a valid integer ... input_value='22d0dac0-348c-...'
+resume_id  Input should be a valid integer ... input_value=None
+```
+
+`CandidateMatch` in `backend/routers/jobs.py:26` still declared `id: int` and
+`resume_id: int`. Candidate ids are **UUID strings**, and a candidate may have
+no resume row. The sibling model `CandidateMatchResult`
+(`backend/routers/enhanced_matching.py:47`) had already been corrected to
+`id: str` / `resume_id: Optional[int]` — so this was **drift between two
+routers**, not a design flaw.
+
+Fixed 2026-08-27. The endpoint now returns **HTTP 200 with 10 ranked
+candidates** in ~5.9 s cold (top match 97.4% for *Data Engineer*).
+
+**Implication:** the demo's headline capability was one type annotation away
+from working. Similar int-vs-UUID drift very likely exists elsewhere and is
+worth an explicit sweep in Phase 1.
+
 ### Security (better than assumed)
 
 - `.env` has **never** been committed on any branch. Live API keys are local-only.
@@ -383,8 +503,8 @@ nginx server block on the droplet, DNS at Namecheap, certbot, systemd units with
 
 ## 11. Open Items
 
-1. **Runtime verification not done.** Requires Postgres running; the app was
-   previously launched via WSL. Must be resolved at the start of Phase 1.
+1. ~~**Runtime verification not done.**~~ **RESOLVED 2026-08-27** — see §2.1.
+   The app boots and serves real data. The WSL step was Redis, not Postgres.
 2. **Ollama observability gap.** `%LOCALAPPDATA%\Ollama\server.log` has not been
    written to despite the service serving requests. Local-side usage cannot be
    audited. Worth fixing before benchmarking, since eval timings depend on it.
@@ -406,6 +526,21 @@ poetry run python start_backend.py    # terminal 1 → :8000
 poetry run python start_frontend.py   # terminal 2 → :8501
 ```
 
-Login `testuser` / `password`. Requires PostgreSQL and Neo4j already running —
-almost certainly what the WSL step was for. `run.py` starts both; `dev.py` is
-broken (opens port 5000, nothing listens there).
+Login `testuser` / `password`. `run.py` starts both; `dev.py` is broken (opens
+port 5000, nothing listens there).
+
+**Corrected 2026-08-27 by actually running it:**
+
+- **`start_backend.py` hardcodes port 8000, which CollinsAI now owns.** Launch
+  uvicorn directly on a free port instead:
+  ```powershell
+  cd backend
+  poetry run python -m uvicorn main:app --host 127.0.0.1 --port 8010
+  ```
+- **Do not launch the Streamlit frontend until the port conflict is settled** —
+  it hardcodes `localhost:8000` in 30+ places and will hit CollinsAI's API.
+- **Neo4j is not required to boot.** It is down, and `/api/candidates` and
+  `/api/jobs` both return real data anyway. MinIO is likewise optional (falls
+  back to local storage). Only **Postgres** is genuinely required; Redis runs in
+  WSL.
+- Allow ~30 s for the first request (model lazy-loading) before assuming a hang.
