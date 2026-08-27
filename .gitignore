@@ -62,7 +62,10 @@ logs/
 *.tflite
 *.bin
 *.safetensors
-backend/models/sentence_transformers/
+# Hugging Face / sentence-transformers cache, wherever it lands. The 86.7 MB
+# blob came from one of these directories, and the cache also exists at the
+# repo root - keep this rule unanchored.
+sentence_transformers/
 
 # ==== Node ====
 node_modules/
