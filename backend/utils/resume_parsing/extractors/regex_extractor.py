@@ -128,6 +128,10 @@ class RegexExtractor:
             if ('@' in line) or (re.search(r'\d', line) and any(c.isdigit() for c in line if c.isdigit())):
                 # Skip lines containing email or many digits (likely phone/address)
                 continue
+            if re.search(r'linked\s*in|github|https?://|www\.', line, re.I):
+                # Profile-URL lines are never locations ("linked in.com/..." must
+                # not be captured as the city "linked in")
+                continue
             for lp in location_patterns:
                 loc_match = re.search(lp, line.strip(), re.I)
                 if loc_match:
@@ -144,7 +148,9 @@ class RegexExtractor:
             if m:
                 linkedin_match_val = m.group(0)
             else:
-                loose_re = re.compile(r'linkedin\s*[\.:]?\s*com\s*/\s*(?:in|pub|profile)\s*/\s*([A-Za-z0-9_\-~/]+)', re.IGNORECASE)
+                # "linked\s*in" tolerates OCR spacing inside the word itself
+                # ("linked in.com/in/janesmith")
+                loose_re = re.compile(r'linked\s*in\s*[\.:]?\s*com\s*/\s*(?:in|pub|profile)\s*/\s*([A-Za-z0-9_\-~/]+)', re.IGNORECASE)
                 m2 = loose_re.search(text)
                 if m2:
                     # Rebuild canonical path removing spaces
@@ -562,8 +568,11 @@ class RegexExtractor:
             military_entry['rank'] = best_match.group(0).title()
             military_entry['title'] = best_match.group(0).title()
         
-        # Extract dates
+        # Extract dates (month-name ranges first so "Jan 2015 - Jun 2019"
+        # isn't half-matched by the bare-year patterns)
         date_patterns = [
+            r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})\s*(?:[-–—]|to)\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})',
+            r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})\s*(?:[-–—]|to)\s*(?:present|current)',
             r'(\d{4})\s*[-–—]\s*(\d{4})',
             r'(\d{4})\s+to\s+(\d{4})',
             r'(\d{4})\s*[-–—]\s*present',
@@ -731,8 +740,11 @@ class RegexExtractor:
             military_entry['rank'] = best_match.group(0).title()
             military_entry['title'] = best_match.group(0).title()
         
-        # Extract dates
+        # Extract dates (month-name ranges first so "Jan 2015 - Jun 2019"
+        # isn't half-matched by the bare-year patterns)
         date_patterns = [
+            r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})\s*(?:[-–—]|to)\s*((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})',
+            r'((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{4})\s*(?:[-–—]|to)\s*(?:present|current)',
             r'(\d{4})\s*[-–—]\s*(\d{4})',
             r'(\d{4})\s+to\s+(\d{4})',
             r'(\d{4})\s*[-–—]\s*present',
@@ -801,6 +813,16 @@ class _MiniExperienceParser:
         # Two-line format: "Title at Company" followed by "Location | Dates" on next line
         re.compile(
             r"(?P<title>[^\n@]{3,100}?)\s+at\s+(?P<company>[^\n]{2,60}?)\s*\n\s*(?P<location>[A-Za-z].{2,60}?)\s*\|\s*(?P<dates>[^\n]{4,40})",
+            re.I | re.MULTILINE,
+        ),
+        # Two-line format: "Title at Company - Location" followed by a bare
+        # date-range line ("July 2023 - Present", "2013 - 2015", "07/2020 - 08/2021")
+        re.compile(
+            r"(?P<title>[^\n@]{3,100}?)\s+at\s+(?P<company>[^\n\-\(]{2,60}?)"
+            r"(?:\s*[-<|]\s*(?P<location>[^\n\(]{2,40}?))?\s*\n"
+            r"\s*(?P<dates>(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{1,2}/\d{4}|\d{4})"
+            r"\s*(?:[-<|~]|\bto\b)\s*"
+            r"(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}|\d{1,2}/\d{4}|\d{4}|Present|Current|Now|Ongoing))",
             re.I | re.MULTILINE,
         ),
         # Title at Company - Location (Dates) format (very common)
@@ -933,13 +955,12 @@ class _MiniExperienceParser:
         
         # Approach 2: If no explicit section or few results, try looking for experience patterns throughout
         if not results or len(results) < 2:
-            # Look for experience patterns in the entire text
+            # Look for experience patterns in the entire text.
+            # _process_experience_section already deduplicates against the
+            # shared seen_keys set, so its results can be taken as-is
+            # (re-checking seen_keys here would always discard them).
             full_results = self._process_experience_section(text, seen_keys)
-            for exp in full_results:
-                key = self._make_key(exp)
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    results.append(exp)
+            results.extend(full_results)
         
         # Optional special-case formats are disabled when heuristics are off
         # Keep everything generic; do not apply resume-specific formats
@@ -1049,20 +1070,22 @@ class _MiniExperienceParser:
         
         # Do not include resume-specific splitting heuristics
         
-        # General approach: Split by potential block separators
+        # General approach: Split by potential block separators.
+        # NOTE: do not split in front of date lines - multi-line entry
+        # formats ("Company \n Title \n Dates" and "Title at Company \n
+        # Dates") keep their date range on a line of its own, and cutting
+        # it away makes those entries unparseable.
         separators = [
             # Roger Waters format - "Title at Company - Location (Dates)"
             r'\n(?=[A-Z][^\n]{2,}\s+(?:at|for|with)\s+[A-Za-z])',
-            # Title - Company - Location (Dates) format
-            r'\n(?=[A-Z][^\n]{2,}\s+[-|]\s+[A-Za-z])',
-            # Date range as separator
-            r'\n(?=\d{4}\s*[-<|]\s*(?:\d{4}|Present|Current))',
+            # Title - Company - Location (Dates) format. The negative
+            # lookahead keeps date-range lines ("July 2023 - Present") from
+            # being mistaken for a new dash-separated entry.
+            r'\n(?!(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})(?=[A-Z][^\n]{2,}\s+[-|]\s+[A-Za-z])',
             # Double newline as separator
             r'\n\s*\n',
             # Lines with company, location format
             r'\n(?=[A-Za-z][^\n]{2,},\s*[A-Za-z]{2}\s*[-<|])',
-            # Month Year date format
-            r'\n(?=(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[^\n]*\d{4})',
         ]
         
         # Start with the full text as a single block
@@ -1084,9 +1107,11 @@ class _MiniExperienceParser:
             if len(block) < 20:  # Too short
                 continue
                 
-            # Skip if block is just a list of skills or bullet points
-            if block.count('\n') >= 2 and all(line.strip().startswith(('•', '-', '*')) 
-                                           for line in block.split('\n')[1:] if line.strip()):
+            # Skip if the block is nothing but bullet points (an orphaned
+            # description/skill list). A header line followed by bullets is
+            # the canonical job-entry shape and must be kept.
+            block_lines = [ln.strip() for ln in block.split('\n') if ln.strip()]
+            if block_lines and all(ln.startswith(('•', '-', '*')) for ln in block_lines):
                 continue
                 
             valid_blocks.append(block)
@@ -1375,6 +1400,20 @@ class _MiniExperienceParser:
                             company = potential_company
                             location = potential_location
             
+            # Company-first layouts ("Company \n Title \n Dates") are matched
+            # by title-first multi-line patterns with the two fields swapped.
+            # Swap back when the captured "title" ends like a company name
+            # AND the captured "company" ends like a job title.
+            if title and company:
+                title_last = title.split()[-1].rstrip('.,;:').lower()
+                company_last = company.split()[-1].rstrip('.,;:').lower()
+                title_looks_like_company = any(
+                    s.lower() == title_last for s in self._COMPANY_SUFFIXES)
+                company_looks_like_title = any(
+                    s.lower() == company_last for s in self._TITLE_SUFFIXES)
+                if title_looks_like_company and company_looks_like_title:
+                    title, company = company, title
+
             # Clean up location
             if location:
                 # Remove "Location:" prefix
