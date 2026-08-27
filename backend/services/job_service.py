@@ -193,10 +193,17 @@ class JobService:
         return f"Skills: {skills_text}" if skills_text else ""
     
     def store_job_embeddings(self, db: Session, job_id: int) -> bool:
-        """Neo4j embedding storage removed in Phase 1b Task 4.
-        Reimplemented on pgvector in Phase 1b Task 10."""
-        logger.info(f"store_job_embeddings({job_id}): pgvector storage lands in Task 10; no-op for now")
-        return False
+        """Store a 768-dim pgvector embedding for the job (Phase 1b)."""
+        if not self.llm_service:
+            logger.warning("LLM service not initialized. Cannot store embeddings.")
+            return False
+        try:
+            from backend.services.vector_search_service import VectorSearchService
+            svc = VectorSearchService(embedding_model=self.llm_service.get_embedding_model())
+            return svc.store_job_embedding(db, job_id)
+        except Exception as e:
+            logger.error(f"Error storing job embedding: {e}")
+            return False
 
     async def get_skills_for_comparable_jobs(self, job_title: str) -> List[str]:
         """
@@ -213,10 +220,20 @@ class JobService:
             return []
 
         try:
-            # Neo4j similar-jobs lookup removed in Phase 1b Task 4; the LLM fallback
-            # below (which was already the live path with Neo4j down) takes over.
-            # pgvector-based similar jobs lands in Task 10.
+            # pgvector similar-jobs lookup (Phase 1b). If embeddings are absent or
+            # the query fails, the LLM fallback below takes over.
             similar_jobs: List[Dict[str, Any]] = []
+            try:
+                from backend.utils.database import SessionLocal
+                from backend.services.vector_search_service import VectorSearchService
+                svc = VectorSearchService(embedding_model=self.llm_service.get_embedding_model())
+                _db = SessionLocal()
+                try:
+                    similar_jobs = svc.search_jobs_by_text(_db, job_title, limit=8)
+                finally:
+                    _db.close()
+            except Exception as e:
+                logger.warning(f"pgvector similar-jobs lookup failed, using LLM fallback: {e}")
 
             # Log first 1–2 similar jobs and count total raw skills
             total_jobs = len(similar_jobs)
