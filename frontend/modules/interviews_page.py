@@ -1,6 +1,5 @@
 import streamlit as st
 from datetime import datetime, timedelta
-import time
 import requests
 
 def _get_backend_url():
@@ -23,10 +22,6 @@ def page():
     st.markdown("---")
     st.subheader("Schedule New Interview")
     schedule_new_interview()
-
-    st.markdown("---")
-    st.subheader("Plan Interview Travel (Agentic Zero)")
-    plan_interview_travel_section()
 
 # Async fetch interviews from agentic backend
 def get_interviews_from_backend(filter_today=False, past=False):
@@ -150,48 +145,6 @@ def schedule_new_interview():
             st.success(f"Interview with {candidate} scheduled successfully!")
         else:
             st.error("Failed to schedule interview. Please check backend connectivity.")
-
-# Travel planning section using agentic endpoint
-def plan_interview_travel_section():
-    st.markdown("_Use this tool to plan candidate travel for interviews. Powered by Agentic Zero._")
-    origin = st.text_input("Origin (e.g., candidate's address or city)", key="travel_origin")
-    destination = st.text_input("Destination (e.g., interview location)", key="travel_destination")
-    interview_date = st.date_input("Interview Date", key="travel_date")
-    interview_time = st.time_input("Interview Time", key="travel_time")
-    if st.button("Plan Travel", key="plan_travel_btn"):
-        travel_datetime = datetime.combine(interview_date, interview_time).isoformat()
-        payload = {
-            "origin": origin,
-            "destination": destination,
-            "interview_datetime": travel_datetime,
-        }
-        api_url = _get_backend_url()
-        endpoint = f"{api_url}/api/travel/plan_interview_travel"
-        try:
-            try:
-                from frontend.utils.http_client import get_sync_client
-                client = get_sync_client()
-            except Exception:
-                client = None
-
-            if client is None:
-                resp = requests.post(endpoint, json=payload, timeout=30)
-                resp.raise_for_status()
-                result = resp.json()
-            else:
-                resp = client.post(endpoint, json=payload, timeout=30.0)
-                resp.raise_for_status()
-                result = resp.json()
-        except Exception:
-            result = None
-        if result and result.get("plan"):
-            st.success("Travel plan generated!")
-            # st.json(result["plan"])  # Commented out for production
-            st.write("Travel plan details display disabled for production")
-        else:
-            st.error("Failed to generate travel plan. Please check backend connectivity.")
-        time.sleep(0.1)  # Replaced asyncio.sleep with time.sleep
-        return None  # Return None to simulate backend unavailable
 
 def display_past_interviews():
     """Display a list of completed interviews"""

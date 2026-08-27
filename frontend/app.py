@@ -27,18 +27,18 @@ sys.path.append(os.path.dirname(__file__))
 
 try:
     # Import all module pages
-    from modules import dashboard, resume_upload, metrics, jobs, candidates, assistant
-    from modules import market_intel, communications, candidate_matching, company_policies
-    from modules import candidate_detail, job_detail, enhanced_matching, transformation
-    from modules import candidate_pipeline, tasks_page, interviews_page, cache_management
+    from modules import dashboard, resume_upload, jobs, candidates, assistant
+    from modules import market_intel, candidate_matching
+    from modules import candidate_detail, job_detail, enhanced_matching
+    from modules import candidate_pipeline, tasks_page, interviews_page
     
 except ImportError as e:
     print(f'ImportError occurred: {e}')
     logging.error(f'ImportError occurred: {e}')
     # Create empty module objects if imports fail
     class EmptyModule: pass
-    dashboard = resume_upload = metrics = jobs = candidates = assistant = market_intel = communications = candidate_matching = company_policies = enhanced_matching = transformation = candidate_pipeline = tasks_page = interviews_page = cache_management = EmptyModule()
-    dashboard.page = resume_upload.upload_resume = metrics.page = jobs.page = candidates.page = assistant.page = market_intel.page = communications.page = candidate_matching.page = company_policies.page = enhanced_matching.enhanced_matching_tab = transformation.page = candidate_pipeline.page = tasks_page.page = interviews_page.page = cache_management.page = lambda: None
+    dashboard = resume_upload = jobs = candidates = assistant = market_intel = candidate_matching = enhanced_matching = candidate_pipeline = tasks_page = interviews_page = EmptyModule()
+    dashboard.page = resume_upload.upload_resume = jobs.page = candidates.page = assistant.page = market_intel.page = candidate_matching.page = enhanced_matching.enhanced_matching_tab = candidate_pipeline.page = tasks_page.page = interviews_page.page = lambda: None
     candidate_detail = job_detail = EmptyModule()
     candidate_detail.page = job_detail.page = lambda: None
 
@@ -140,21 +140,16 @@ initialize_session_state()
 page_modules = {
     "dashboard": {"icon": "📊", "title": "Dashboard", "func": dashboard.page},
     "resume_upload": {"icon": "📄", "title": "Resume Upload", "func": resume_upload.upload_resume},
-    "metrics": {"icon": "📈", "title": "Recruitment Analytics", "func": metrics.page},
     "jobs": {"icon": "💼", "title": "Jobs", "func": jobs.page},
     "candidates": {"icon": "👥", "title": "Candidates", "func": candidates.page},
     "assistant": {"icon": "🤖", "title": "AI Assistant", "func": assistant.page},
     "market_intel": {"icon": "🔍", "title": "Market Intelligence", "func": market_intel.page},
-    "communications": {"icon": "📱", "title": "Communications", "func": communications.page},
     "candidate_matching": {"icon": "🔄", "title": "Candidate Matching", "func": candidate_matching.page},
     "enhanced_matching": {"icon": "✨", "title": "Advanced Matching", "func": enhanced_matching.page},
-    "company_policies": {"icon": "📝", "title": "Company Policies", "func": company_policies.page},
-    "transformation": {"icon": "🔄", "title": "Data Transformation", "func": transformation.page},
     "candidate_pipeline": {"icon": "⏩", "title": "Candidate Pipeline", "func": candidate_pipeline.page},
     # New pages for tasks and interviews
     "tasks_page": {"icon": "✅", "title": "Tasks", "func": tasks_page.page},
     "interviews_page": {"icon": "🗓️", "title": "Interviews", "func": interviews_page.page},
-    "cache_management": {"icon": "⚡", "title": "Cache Management", "func": cache_management.page},
     # Detail views (not shown in sidebar)
     "candidate_detail": {"icon": "👤", "title": "Candidate Details", "func": candidate_detail.page, "show_in_sidebar": False},
     "job_detail": {"icon": "🔎", "title": "Job Details", "func": job_detail.page, "show_in_sidebar": False},
@@ -166,22 +161,12 @@ MODULE_CATEGORIES = {
     "core": {
         "icon": "🏢",
         "title": "Core Platform",
-        "modules": ["dashboard", "candidates", "jobs", "resume_upload", "metrics", "candidate_matching", "candidate_pipeline", "tasks_page", "interviews_page"]
-    },
-    "transformation": {
-        "icon": "🔄",
-        "title": "Data Transformation",
-        "modules": ["transformation"]
+        "modules": ["dashboard", "candidates", "jobs", "resume_upload", "candidate_matching", "candidate_pipeline", "tasks_page", "interviews_page"]
     },
     "premium": {
         "icon": "⭐",
         "title": "Premium Features",
         "modules": ["enhanced_matching", "market_intel", "assistant"]
-    },
-    "admin": {
-        "icon": "⚙️",
-        "title": "Administration",
-        "modules": ["communications", "company_policies", "cache_management"]
     }
 }
 
