@@ -126,11 +126,7 @@ async def get_jobs(
 
 
 @router.post("/api/jobs/sync-to-neo4j")
-def sync_jobs_to_neo4j(
-    request_data: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None
-):
+def sync_jobs_to_neo4j():
     """Neo4j sync endpoint removed in Phase 1a - Neo4j store is out of scope."""
     raise HTTPException(
         status_code=410,
