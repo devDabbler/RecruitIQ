@@ -48,6 +48,11 @@ class Settings(BaseSettings):
         default="postgresql://user:password@localhost:5432/ats_db",
         env=["POSTGRES_CONN", "DATABASE_URL"]
     )
+
+    # Embeddings (Ollama over the existing Cloudflare tunnel; spec §4.2)
+    ollama_base_url: str = Field(default=os.getenv("OLLAMA_BASE_URL", "https://ollama.sentienttrader.ai"))
+    ollama_embed_model: str = Field(default=os.getenv("OLLAMA_EMBED_MODEL", "nomic-embed-text"))
+    ollama_embed_timeout: float = Field(default=float(os.getenv("OLLAMA_EMBED_TIMEOUT", "20.0")))
     
     # Redis settings
     redis_host: str = Field(default=os.getenv("REDIS_HOST", "localhost"))
