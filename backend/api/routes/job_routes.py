@@ -16,7 +16,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")
 from backend.utils.database import get_db
 from backend.models.models import Job
 from backend.services.job_service import JobService
-from backend.scripts.sync_jobs_to_neo4j import JobSync
+# Neo4j sync removed - backend.scripts deleted in Phase 1a (Task 6)
 
 # Set up logging
 logging.basicConfig(
@@ -131,103 +131,8 @@ def sync_jobs_to_neo4j(
     db: Session = Depends(get_db),
     background_tasks: BackgroundTasks = None
 ):
-    """
-    Synchronize specific jobs or all jobs from PostgreSQL ATS to Neo4j.
-    
-    Args:
-        request_data: JSON with job_ids (optional)
-        db: Database session
-        background_tasks: FastAPI background tasks
-        
-    Returns:
-        Status of the sync operation
-    """
-    job_ids = request_data.get("job_ids", [])
-    
-    try:
-        # Initialize the JobSync class
-        job_sync = JobSync()
-        
-        # If specific job IDs are provided, sync only those
-        if job_ids:
-            logger.info(f"Syncing specific jobs: {job_ids}")
-            jobs_to_sync = []
-            
-            for job_id in job_ids:
-                job = db.query(Job).filter(Job.id == job_id).first()
-                if job:
-                    # Convert SQLAlchemy object to dictionary
-                    job_dict = {
-                        "id": job.id,
-                        "title": job.title,
-                        "department": job.department,
-                        "job_overview": job.job_overview,
-                        "required_qualifications": job.required_qualifications,
-                        "location": job.location,
-                        "location_type": job.location_type,
-                        "job_type": job.job_type,
-                        "experience_level": job.experience_level,
-                        "status": job.status,
-                        "created_at": job.created_at.isoformat() if job.created_at else None,
-                        "updated_at": job.updated_at.isoformat() if job.updated_at else None
-                    }
-                    
-                    # Extract skills (comma-separated string to list)
-                    if job.skills and isinstance(job.skills, str):
-                        job_dict["skills"] = [skill.strip() for skill in job.skills.split(",") if skill.strip()]
-                    else:
-                        job_dict["skills"] = []
-                    
-                    jobs_to_sync.append(job_dict)
-            
-            # Ensure Neo4j indexes exist
-            job_sync.ensure_neo4j_indexes()
-            
-            # Sync each job
-            results = {"synced": [], "failed": []}
-            for job in jobs_to_sync:
-                success = job_sync.sync_job_to_neo4j(job)
-                if success:
-                    results["synced"].append(job["id"])
-                else:
-                    results["failed"].append(job["id"])
-            
-            job_sync.close()
-            return {
-                "status": "success",
-                "message": f"Synced {len(results['synced'])} jobs, failed {len(results['failed'])} jobs",
-                "details": results
-            }
-        else:
-            # For syncing all jobs, run in background to not block the API
-            def sync_all_jobs_background():
-                try:
-                    counts = job_sync.sync_all_jobs(active_only=True)
-                    job_sync.close()
-                    logger.info(f"Background job sync complete: {counts}")
-                except Exception as e:
-                    logger.error(f"Background job sync failed: {e}")
-            
-            # If background_tasks is available, use it
-            if background_tasks:
-                background_tasks.add_task(sync_all_jobs_background)
-                return {
-                    "status": "success", 
-                    "message": "Job sync started in background"
-                }
-            else:
-                # Otherwise run immediately (but this will block)
-                counts = job_sync.sync_all_jobs(active_only=True)
-                job_sync.close()
-                return {
-                    "status": "success",
-                    "message": f"Synced all active jobs",
-                    "details": counts
-                }
-            
-    except Exception as e:
-        logger.error(f"Error syncing jobs to Neo4j: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Failed to sync jobs to Neo4j: {str(e)}"
-        )
+    """Neo4j sync endpoint removed in Phase 1a - Neo4j store is out of scope."""
+    raise HTTPException(
+        status_code=410,
+        detail="Neo4j sync has been removed. Job search now uses PostgreSQL + pgvector."
+    )
