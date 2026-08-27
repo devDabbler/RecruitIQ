@@ -9,6 +9,12 @@ from alembic import context
 # access to the values within the .ini file in use.
 config = context.config
 
+import os
+
+database_url = os.getenv("POSTGRES_CONN")
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url.replace("postgresql://", "postgresql+psycopg2://", 1))
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:
