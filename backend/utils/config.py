@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     
     # Database settings
     postgres_conn: str = Field(
-        default="postgresql://admin:cadjhosea2024$$@localhost:5432/ats_db",
+        default="postgresql://user:password@localhost:5432/ats_db",
         env=["POSTGRES_CONN", "DATABASE_URL"]
     )
     

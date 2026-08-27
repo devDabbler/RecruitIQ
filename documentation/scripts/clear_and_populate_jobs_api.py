@@ -39,13 +39,13 @@ POSTGRESQL_CONFIG = {
     'port': int(os.environ.get('PG_PORT', '5432')),
     'database': os.environ.get('PG_DATABASE', 'ats_db'),
     'user': os.environ.get('PG_USER', 'admin'),
-    'password': os.environ.get('PG_PASSWORD', 'cadjhosea2024$$')
+    'password': os.environ.get('PG_PASSWORD', '')
 }
 
 NEO4J_CONFIG = {
     'uri': os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
     'user': os.environ.get('NEO4J_USER', 'neo4j'),
-    'password': os.environ.get('NEO4J_PASSWORD', 'cadjhosea2024$$'),
+    'password': os.environ.get('NEO4J_PASSWORD', ''),
     'database': os.environ.get('NEO4J_DATABASE', 'neo4j')
 }
 

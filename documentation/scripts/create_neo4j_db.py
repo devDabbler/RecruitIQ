@@ -1,3 +1,4 @@
+import os
 from neo4j import GraphDatabase
 import logging
 import time
@@ -9,8 +10,8 @@ def create_database():
     try:
         # Connect to Neo4j
         driver = GraphDatabase.driver(
-            "bolt://localhost:7687",
-            auth=("neo4j", "cadjhosea2024$$")
+            os.environ.get('NEO4J_URI', 'bolt://localhost:7687'),
+            auth=(os.environ.get('NEO4J_USER', 'neo4j'), os.environ.get('NEO4J_PASSWORD', ''))
         )
         
         # Create database
