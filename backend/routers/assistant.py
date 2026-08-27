@@ -247,7 +247,7 @@ async def chat_with_assistant(
             raw_assistant_intents = settings.ASSISTANT_META_LLAMA_INTENTS or ""
             assistant_intents = [s.strip() for s in raw_assistant_intents.split(',') if s.strip()]
         except Exception:
-            assistant_intents = ["travel_time", "transportation_options"]
+            assistant_intents = []
 
         # Compute per-request model_override when intent matches assistant intents
         model_override = None
@@ -432,19 +432,6 @@ async def chat_with_assistant(
                 # Generate the response directly
                 # If this direct handler should prefer Meta Llama, pass the configured model
                 model_override = None
-                try:
-                    raw = settings.ASSISTANT_META_LLAMA_INTENTS or ""
-                    assistant_intents = [s.strip() for s in raw.split(',') if s.strip()]
-                except Exception:
-                    assistant_intents = ["travel_time", "transportation_options"]
-
-                if "travel_time" in assistant_intents or "transportation_options" in assistant_intents:
-                    # Only force model override for the chat handler when OpenRouter is enabled
-                    if getattr(settings, 'openrouter_enabled', False):
-                        model_override = settings.openrouter_default_model
-                        logger.info(f"Assistant router: forcing model override for chat handler: {model_override}")
-                    else:
-                        model_override = None
 
                 response = await llm_service.generate_text_async(
                     prompt=prompt,
@@ -532,82 +519,8 @@ async def chat_with_assistant(
             conversation_context["redirected_from"] = original_intent
             logger.info(f"Redirected to web_search intent from {original_intent}")
             
-        # Handle travel-related intents with the travel service
-        if intent in ["travel_time", "transportation_options"]:
-            try:
-                # Process the intent using the new process_intent method (support sync or async)
-                process_call = intent_processor.process_intent(intent, entities, message)
-                if inspect.isawaitable(process_call):
-                    intent_result = await process_call
-                else:
-                    intent_result = process_call
-
-                if intent_result.get("intent_processed", False):
-                    # Use the formatted response from the travel service
-                    formatted_response = intent_result.get("formatted_response", "")
-                    if formatted_response:
-                        formatted_response = _clean_generated_text(formatted_response)
-                        return {
-                            "response": formatted_response,
-                            "conversation_context": conversation_context
-                        }
-                    else:
-                        # Fallback: if the travel service returned structured travel_data but didn't format it,
-                        # ask the LLM to produce a user-friendly summary. Use model_override when configured.
-                        travel_data = intent_result.get("travel_data") or intent_result.get("options_data")
-                        if travel_data:
-                            try:
-                                # Build a neutral prompt that asks the LLM to format structured travel info
-                                prompt = (
-                                    f"The user asked: {message}\n\n"
-                                    f"Format the following travel information into a concise, user-friendly reply.\n\n"
-                                    f"Travel data:\n{json.dumps(travel_data, indent=2)}\n\n"
-                                    "Include duration, options, and cost estimates when available. Keep it practical and actionable."
-                                )
-
-                                logger.info(f"ASSISTANT ROUTER: Formatting travel_data with model_override={model_override}")
-                                formatted = await llm_service.generate_text_async(
-                                    prompt=prompt,
-                                    task_type="chat",
-                                    model=model_override,
-                                    system_message="You are a travel assistant that formats raw travel data into clear, actionable guidance for users."
-                                )
-                                formatted = _clean_generated_text(formatted)
-                                return {
-                                    "response": formatted,
-                                    "conversation_context": conversation_context
-                                }
-                            except Exception as e:
-                                logger.error(f"Error formatting travel data with LLM: {e}")
-                                # Fallback textual message if LLM formatting fails
-                                response = f"I found travel information for {travel_data.get('origin', '')} to {travel_data.get('destination', '')}, but couldn't format it properly."
-                                return {
-                                    "response": response,
-                                    "conversation_context": conversation_context
-                                }
-                        else:
-                            response = "I had trouble getting travel information. Please check your origin and destination and try again."
-                            return {
-                                "response": response,
-                                "conversation_context": conversation_context
-                            }
-                else:
-                    # Handle errors from the travel service
-                    error_msg = intent_result.get("error", "Travel service unavailable")
-                    return {
-                        "response": f"I couldn't get travel information: {error_msg}. Please try rephrasing your question with clear origin and destination cities.",
-                        "conversation_context": conversation_context
-                    }
-
-            except Exception as e:
-                logger.error(f"Error processing travel intent: {e}")
-                return {
-                    "response": "I'm having trouble accessing travel information right now. Please try again later or rephrase your question.",
-                    "conversation_context": conversation_context
-                }
-        
-        # NEW: Process intents that use crawl4ai through the improved intent processor
-        elif intent in ["web_search", "company_info", "job_posting_analysis", "company_research", "market_trends", "minimum_wage", "labor_law", "market_research"]:
+        # Process intents that use crawl4ai through the improved intent processor
+        if intent in ["web_search", "company_info", "job_posting_analysis", "company_research", "market_trends", "minimum_wage", "labor_law", "market_research"]:
             try:
                 # Process the intent using the new process_intent method (support sync or async)
                 process_call = intent_processor.process_intent(intent, entities, message)
@@ -659,12 +572,11 @@ async def chat_with_assistant(
                             Instructions:
                             1. Synthesize the information from multiple sources into a cohesive answer
                             2. Provide specific details and facts where available
-                            3. If the search results contain numerical data (like travel times, distances, costs), include it prominently
+                            3. If the search results contain numerical data (like salaries, counts, costs), include it prominently
                             4. Be informative but conversational
                             5. If the information seems incomplete, acknowledge what might be missing
                             6. Include relevant source links when helpful for verification
-                            7. For travel questions, provide practical information like duration, cost, and booking tips
-                            8. Format the response clearly with bullet points or sections if helpful
+                            7. Format the response clearly with bullet points or sections if helpful
                             
                             Generate a natural, informative response that directly answers the user's question.
                             """

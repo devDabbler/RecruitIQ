@@ -45,16 +45,6 @@ class TestSemanticIntentRouter:
         assert "role" in result["entities"]
     
     @pytest.mark.asyncio
-    async def test_travel_time_pattern(self, router):
-        """Test travel time pattern recognition."""
-        message = "how long does it take to travel from Boston to New York"
-        result = await router.route_intent(message)
-        
-        assert result["intent"] == "travel_time"
-        assert result["confidence"] >= 0.8
-        assert "origin" in result["entities"] or "destination" in result["entities"]
-    
-    @pytest.mark.asyncio
     async def test_llm_classification(self, router, mock_llm_service):
         """Test LLM-based classification."""
         # Mock LLM response
@@ -156,7 +146,6 @@ class TestIntentSchema:
             "candidate_pitch_email", 
             "search_candidates",
             "market_research",
-            "travel_time",
             "general_question"
         ]
         
