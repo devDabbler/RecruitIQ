@@ -49,15 +49,12 @@ class CrawlerService:
         )
         
         # Setup text splitter for chunking content if needed
-        try:
-            from langchain.text_splitter import RecursiveCharacterTextSplitter
-            self.text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=1000,
-                chunk_overlap=200,
-                separators=["\n## ", "\n### ", "\n#### ", "\n", ". ", ", ", " ", ""],
-            )
-        except ImportError:
-            self.text_splitter = None
+        from backend.utils.text_splitter import CustomTextSplitter
+        self.text_splitter = CustomTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            separators=["\n## ", "\n### ", "\n#### ", "\n", ". ", ", ", " ", ""],
+        )
             
         # Maintain visited URLs to avoid duplicate scraping
         self.visited_urls = set()
