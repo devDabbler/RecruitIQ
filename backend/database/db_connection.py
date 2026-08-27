@@ -23,12 +23,12 @@ PG_HOST = os.environ.get('PG_HOST', 'localhost')
 PG_PORT = os.environ.get('PG_PORT', '5432')
 PG_DATABASE = os.environ.get('PG_DATABASE', 'ats_db')
 PG_USER = os.environ.get('PG_USER', 'admin')
-PG_PASSWORD = os.environ.get('PG_PASSWORD', 'cadjhosea2024$$')
+PG_PASSWORD = os.environ.get('PG_PASSWORD', '')
 
 # Neo4j Configuration
 NEO4J_URI = os.environ.get('NEO4J_URI', 'bolt://localhost:7687')
 NEO4J_USER = os.environ.get('NEO4J_USER', 'neo4j')
-NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', 'cadjhosea2024$$')
+NEO4J_PASSWORD = os.environ.get('NEO4J_PASSWORD', '')
 NEO4J_DATABASE = os.environ.get('NEO4J_DATABASE', 'neo4j')
 
 def get_postgres_connection():

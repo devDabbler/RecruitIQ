@@ -3,24 +3,25 @@ Configuration file for the candidate cleanup script.
 Update these settings to match your database configurations.
 """
 
+import os
+
 # PostgreSQL Configuration
 POSTGRESQL_CONFIG = {
     'host': 'localhost',
     'port': 5432,
     'database': 'ats_db',           # Your actual database name
     'user': 'admin',                # Your actual PostgreSQL username
-    'password': 'cadjhosea2024$$'   # Your actual PostgreSQL password
+    'password': os.getenv('POSTGRES_PASSWORD', '')   # Set POSTGRES_PASSWORD env var
 }
 
-# Neo4j Configuration  
+# Neo4j Configuration
 NEO4J_CONFIG = {
     'uri': 'bolt://localhost:7687',  # Your actual Neo4j URI
     'user': 'neo4j',                # Your actual Neo4j username
-    'password': 'cadjhosea2024$$'   # Your actual Neo4j password
+    'password': os.getenv('NEO4J_PASSWORD', '')   # Set NEO4J_PASSWORD env var
 }
 
 # Alternative: Load from environment variables (recommended for production)
-import os
 from dotenv import load_dotenv
 
 # Uncomment these lines to load from .env file instead:
