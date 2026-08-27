@@ -7,7 +7,6 @@ from backend.services.agent_framework.agents.candidate_matching_agent import Can
 from backend.services.agent_framework.agents.job_analysis_agent import JobAnalysisAgent
 from backend.services.agent_framework.agents.communication_agent import CommunicationAgent
 from backend.services.agent_framework.agents.market_intel_agent import MarketIntelAgent
-from backend.services.agent_framework.agents.travel_assistant_agent import TravelAssistantAgent
 
 # Import service registry for proper dependency injection
 from backend.services.service_registry import ServiceRegistry
@@ -19,8 +18,7 @@ class AgentFactory:
         "matching": CandidateMatchingAgent,
         "job": JobAnalysisAgent,
         "communication": CommunicationAgent,
-        "intelligence": MarketIntelAgent,
-        "travel": TravelAssistantAgent
+        "intelligence": MarketIntelAgent
     }
     
     # Singleton service registry instance
@@ -76,13 +74,6 @@ class AgentFactory:
             # CommunicationAgent needs CommunicationsService and LLMService
             return cls._agents[agent_type](
                 communications_service=registry.communications_service,
-                llm_service=registry.llm_service
-            )
-        
-        elif agent_type == "travel":
-            # TravelAssistantAgent needs TravelService and LLMService
-            return cls._agents[agent_type](
-                travel_service=registry.travel_service,
                 llm_service=registry.llm_service
             )
         

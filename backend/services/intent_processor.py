@@ -16,7 +16,6 @@ from backend.services.crawler_service import CrawlerService
 from backend.utils.text_sanitizer import clean_generated_text
 
 # Get the configured service instances
-from .travel_service import TravelService
 from .semantic_intent_router import SemanticIntentRouter
 
 logger = logging.getLogger(__name__)
@@ -36,8 +35,7 @@ class IntentProcessor:
         self._initialized = False
         self.web_search_service = None
         self.crawler_service = None
-        self.travel_service = None  # Add travel service
-        
+
         # Initialize semantic intent router if enabled
         self.semantic_router = None
         if settings.INTENT_ROUTER_MODE in ["semantic", "hybrid"]:
@@ -98,7 +96,7 @@ class IntentProcessor:
                 r"(compare|comparison) (prices|costs|rates) (between|of) (?P<item1>[A-Za-z0-9\s\-\.]+?) (and|vs|versus) (?P<item2>[A-Za-z0-9\s\-\.]+?)(\?|$|\s)"
             ],
             "schedule_info": [
-                # Very specific patterns to avoid conflicts with web_search and travel_time
+                # Very specific patterns to avoid conflicts with web_search
                 r"(what is|what's|when are) the (business hours|operating hours|store hours|office hours|service hours) (for|of) (?P<business>[A-Za-z0-9\s\-\.]+?)(\?|$|\s)",
                 r"(hours|schedule|timing) (of|for) (?P<business>[A-Za-z0-9\s\-\.]+?)(\?|$|\s)",
                 r"(when|what time) (does|do) (?P<business>[A-Za-z0-9\s\-\.]+?) (open|close|operate|run)(\?|$|\s)",
@@ -137,28 +135,6 @@ class IntentProcessor:
                 # Specific fixes for failing test cases - higher priority patterns
                 r"(what's|what is) the (latest|recent|current) (news|information|data|updates|changes) (about|on|regarding) (?P<topic>[A-Za-z0-9\s\-\.]+?)(\?|$|\s)",
                 r"(what's|what is) the (current|latest|recent|today's) (status|situation|state|condition) (of|for) (?P<topic>[A-Za-z0-9\s\-\.]+?)(\?|$|\s)"
-            ],
-            # Travel and commute intents - ENHANCED SECTION
-            "travel_time": [
-                # Specific train schedule patterns first (highest priority)
-                r"(can you give me|show me|get me|find|what is|what's) the (train )?schedule (from|between) (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                r"(train )?schedule (from|between) (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                # More restrictive travel patterns - must include travel/transportation terms
-                r"(how long|what's the|what is the|how much time|travel time|commute time|journey time|trip time|duration|how far|distance)( does it take| is| takes)?( to)? (travel|commute|get|go|drive|fly|take the train|take a train|take the bus|ride|walk|bike|cycle)( from| between)? (?P<origin>[A-Za-z\s,]+?)( to| and| vs| versus)( the)?(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                r"(commute|travel|journey|trip|drive|flight|ride)( time| duration)?( from| between)? (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                r"(distance|how far|how long)( is it)?( from| between)? (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                r"(driving|flight|train|bus|walking|biking|cycling)( time| duration)?( from| between)? (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                r"(what's the best way|how do I get|how to get|directions|route|path)( to)? (travel|commute|get|go|reach|arrive)( from| between)? (?P<origin>[A-Za-z\s,]+?)( to| and)(?P<destination>[A-Za-z\s,]+?)(\?|$)",
-                # City-to-city travel patterns (more restrictive)
-                r"(boston|nyc|new york|san francisco|los angeles|chicago|miami|seattle|denver|atlanta|philadelphia|washington dc|portland|austin|dallas|houston)( to)? (boston|nyc|new york|san francisco|los angeles|chicago|miami|seattle|denver|atlanta|philadelphia|washington dc|portland|austin|dallas|houston)( travel| commute| distance| time| by train| by plane| by car)?",
-                # Enhanced train-specific patterns with better entity extraction
-                r"(train|by train|take.*train|amtrak|rail).*?(from|between|to).*?(?P<origin>boston|nyc|new york|philadelphia|washington|dc|baltimore|providence).*?(?P<destination>boston|nyc|new york|philadelphia|washington|dc|baltimore|providence)",
-                r"(commute|travel|trip).*?(from|between).*?(?P<origin>boston|new york|nyc).*?(by train|train|amtrak).*?(?P<destination>boston|new york|nyc)",
-                r"(how long|time|duration).*?(train|by train|amtrak).*?(?P<origin>boston|nyc|new york|philadelphia).*?(?P<destination>boston|nyc|new york|philadelphia)"
-            ],
-            "transportation_options": [
-                r"(what are the|transportation options|ways to travel|how to get|transport methods|travel options|commute options)( from| between)? (?P<origin>[^?]*?)( to| and)(?P<destination>[^?]*?)(\?|$)",
-                r"(public transport|public transportation|transit options|train schedule|bus schedule|flight options|transportation modes|ways to commute)( from| between)? (?P<origin>[^?]*?)( to| and)(?P<destination>[^?]*?)(\?|$)"
             ],
             # Market research and sourcing viability (HIGH PRIORITY - must come before applications_count)
             "market_research": [
@@ -503,7 +479,7 @@ class IntentProcessor:
             raw = settings.ASSISTANT_META_LLAMA_INTENTS or ""
             self.assistant_meta_llama_intents = [s.strip() for s in raw.split(',') if s.strip()]
         except Exception:
-            self.assistant_meta_llama_intents = ["travel_time", "transportation_options"]
+            self.assistant_meta_llama_intents = []
         
         # Comprehensive synonym mappings for better intent detection
         self.intent_synonyms = {
@@ -523,11 +499,6 @@ class IntentProcessor:
             "recruiter": ["hiring manager", "talent acquisition", "hr", "human resources", "recruitment"],
             "company": ["employer", "organization", "business", "firm", "corporation"],
             
-            # Travel synonyms
-            "travel": ["commute", "journey", "trip", "drive", "ride", "walk", "bike", "cycle"],
-            "time": ["duration", "length", "period", "span"],
-            "distance": ["how far", "length", "span"],
-            
             # Salary synonyms
             "salary": ["compensation", "pay", "earnings", "income", "wages", "remuneration"],
             "how much": ["what", "what is", "what are", "amount", "figure"],
@@ -543,7 +514,6 @@ class IntentProcessor:
         
         # Enhanced fuzzy matching keywords for each intent
         self.intent_keywords = {
-            "travel_time": ["travel", "commute", "journey", "trip", "drive", "fly", "train", "bus", "time", "duration", "how long", "distance", "how far", "from", "to", "between"],
             "search_candidates": ["find", "search", "candidates", "professionals", "developers", "engineers", "scientists", "analysts", "managers", "with", "who have", "skilled", "experienced", "python", "java", "react", "javascript", "r programming", "sql", "database", "are there", "do we have", "do you have"],
             "candidate_count": ["how many", "count", "number of", "total", "are there", "do we have", "candidates", "database", "system"],
             "recruiter_outreach_email": ["recruiter", "outreach", "email", "generate", "create", "write", "draft", "candidates", "prospective", "potential", "hiring", "talent"],
@@ -590,14 +560,6 @@ class IntentProcessor:
             except Exception as e:
                 logger.error(f"IntentProcessor: Failed to initialize crawler service: {e}")
                 self.crawler_service = None
-            
-            # Initialize travel service
-            try:
-                self.travel_service = registry.travel_service
-                logger.info("IntentProcessor: Travel service initialized")
-            except Exception as e:
-                logger.error(f"IntentProcessor: Failed to initialize travel service: {e}")
-                self.travel_service = None
             
             # Initialize communications service
             try:
@@ -1010,10 +972,6 @@ class IntentProcessor:
                 'keywords': ['hire', 'recruit', 'candidate', 'applicant', 'talent', 'sourcing'],
                 'intents': ['search_candidates', 'candidate_sourcing_strategy', 'advanced_matching']
             },
-            'travel': {
-                'keywords': ['travel', 'commute', 'distance', 'route', 'transportation', 'drive', 'fly'],
-                'intents': ['travel_time', 'transportation_options']
-            },
             'compensation': {
                 'keywords': ['salary', 'pay', 'wage', 'compensation', 'earn', 'income', 'money'],
                 'intents': ['salary_info', 'minimum_wage']
@@ -1083,8 +1041,6 @@ class IntentProcessor:
             clarification += "Are you looking to search for candidates, view candidate information, or something else?"
         elif any(word in message_lower for word in ['job', 'position', 'opening']):
             clarification += "Are you asking about job postings, job matching, or job statistics?"
-        elif any(word in message_lower for word in ['travel', 'go', 'get']):
-            clarification += "Are you asking about travel time or transportation options? Please specify the origin and destination."
         else:
             clarification += "Could you please rephrase your question or provide more details?"
         
@@ -1188,7 +1144,6 @@ class IntentProcessor:
         - Finding and searching for candidates
         - Job matching and recruitment strategies
         - Salary and compensation information
-        - Travel and commute information
         - Company research and market trends
         - Writing recruitment emails
         - General HR and recruitment advice
@@ -1318,8 +1273,7 @@ class IntentProcessor:
             "trend_analysis", "performance_metrics",
             # NEW ENHANCED DATA INTENTS
             "cost_of_living", "price_info", "schedule_info", "recent_data",
-            # Travel and transportation intents
-            "travel_time", "transportation_options", "market_research",
+            "market_research",
             # Other recruitment intents
             "candidate_sourcing_strategy", "candidate_outreach",
             "salary_info", 
@@ -1405,11 +1359,6 @@ class IntentProcessor:
                     cleaned_value = self._normalize_company_name(cleaned_value)
                 elif key == 'location':
                     cleaned_value = self._normalize_location(cleaned_value)
-                elif key in ['origin', 'destination']:
-                    # Remove common prefixes that might be captured by regex
-                    cleaned_value = self._clean_travel_entity(cleaned_value)
-                    cleaned_value = self._normalize_place_name(cleaned_value)
-                
                 if cleaned_value and len(cleaned_value) > 2:
                     cleaned_entities[key] = cleaned_value
         
@@ -1424,8 +1373,6 @@ class IntentProcessor:
         Calculate confidence based on entity completeness for the intent.
         """
         required_entities = {
-            'travel_time': ['origin', 'destination'],
-            'transportation_options': ['origin', 'destination'],
             'search_candidates': ['role', 'skills'],  # at least one
             'salary_info': ['role'],
             'company_info': ['company'],
@@ -1624,30 +1571,6 @@ class IntentProcessor:
                 "method": "fuzzy_email_match",
                 "matched_keywords": [kw for kw in email_keywords + email_actions if kw in message_lower]
             }
-        
-        # Enhanced travel detection
-        travel_keywords = ["travel", "commute", "journey", "trip", "drive", "fly", "train", "bus", "time", "duration", "how long", "distance", "how far"]
-        travel_action_count = sum(1 for keyword in travel_keywords if keyword in message_lower)
-        
-        if travel_action_count >= 2:
-            # Check for origin/destination patterns
-            origin_match = re.search(r'from\s+([a-zA-Z\s]+?)(?:\s+to|\s+and)', message_lower)
-            dest_match = re.search(r'to\s+([a-zA-Z\s]+?)(?:\?|$|\s|\.)', message_lower)
-            
-            entities = {}
-            if origin_match:
-                entities['origin'] = origin_match.group(1).strip()
-            if dest_match:
-                entities['destination'] = dest_match.group(1).strip()
-            
-            if entities:
-                return {
-                    "intent": "travel_time",
-                    "confidence": 0.7,
-                    "entities": entities,
-                    "method": "fuzzy_travel_match",
-                    "matched_keywords": [kw for kw in travel_keywords if kw in message_lower]
-                }
         
         # Enhanced search detection
         search_keywords = ["find", "search", "candidates", "professionals", "developers", "engineers", "with", "who have", "skilled", "experienced"]
@@ -1870,95 +1793,6 @@ class IntentProcessor:
         
         return location.title()
 
-    def _clean_travel_entity(self, entity: str) -> str:
-        """
-        Clean travel entities by removing common prefixes and extra words.
-        """
-        entity = entity.strip()
-        
-        # Remove common prefixes that might be captured by regex
-        prefixes_to_remove = [
-            'schedule from',
-            'schedule',
-            'from',
-            'to',
-            'between',
-            'and',
-            'the',
-            'a',
-            'an'
-        ]
-        
-        entity_lower = entity.lower()
-        for prefix in prefixes_to_remove:
-            if entity_lower.startswith(prefix + ' '):
-                entity = entity[len(prefix):].strip()
-                entity_lower = entity.lower()
-        
-        # Remove common suffixes
-        suffixes_to_remove = [
-            ' city',
-            ' area',
-            ' region',
-            ' state'
-        ]
-        
-        for suffix in suffixes_to_remove:
-            if entity_lower.endswith(suffix):
-                entity = entity[:-len(suffix)].strip()
-                entity_lower = entity.lower()
-        
-        # If the entity is still too long, try to extract just the city name
-        words = entity.split()
-        if len(words) > 3:
-            # Look for common city patterns
-            for i, word in enumerate(words):
-                if word.lower() in ['boston', 'nyc', 'new', 'york', 'san', 'francisco', 'los', 'angeles', 'chicago', 'miami', 'seattle', 'denver', 'atlanta', 'philadelphia', 'washington', 'dc', 'portland', 'austin', 'dallas', 'houston']:
-                    # Extract the city name and possibly the next word if it's part of the city name
-                    if word.lower() == 'new' and i + 1 < len(words) and words[i + 1].lower() == 'york':
-                        entity = ' '.join(words[i:i+2])
-                    elif word.lower() == 'san' and i + 1 < len(words) and words[i + 1].lower() == 'francisco':
-                        entity = ' '.join(words[i:i+2])
-                    elif word.lower() == 'los' and i + 1 < len(words) and words[i + 1].lower() == 'angeles':
-                        entity = ' '.join(words[i:i+2])
-                    elif word.lower() == 'washington' and i + 1 < len(words) and words[i + 1].lower() == 'dc':
-                        entity = ' '.join(words[i:i+2])
-                    else:
-                        entity = word
-                    break
-        
-        return entity.strip()
-
-    def _normalize_place_name(self, place: str) -> str:
-        """
-        Normalize place names for travel queries.
-        """
-        # Similar to location normalization but more extensive
-        place_mapping = {
-            'boston': 'Boston, MA',
-            'nyc': 'New York City, NY',
-            'new york': 'New York City, NY',
-            'sf': 'San Francisco, CA',
-            'san fran': 'San Francisco, CA',
-            'la': 'Los Angeles, CA',
-            'chicago': 'Chicago, IL',
-            'miami': 'Miami, FL',
-            'seattle': 'Seattle, WA',
-            'denver': 'Denver, CO',
-            'atlanta': 'Atlanta, GA',
-            'philly': 'Philadelphia, PA',
-            'philadelphia': 'Philadelphia, PA',
-            'dc': 'Washington, DC',
-            'washington dc': 'Washington, DC',
-            'portland': 'Portland, OR',
-            'austin': 'Austin, TX',
-            'dallas': 'Dallas, TX',
-            'houston': 'Houston, TX'
-        }
-        
-        place_lower = place.lower().strip()
-        return place_mapping.get(place_lower, place.title())
-
     def _analyze_conversation_context(self, current_intent: str) -> float:
         """
         Analyze conversation history for context that might boost confidence.
@@ -1977,10 +1811,8 @@ class IntentProcessor:
         
         # Look for related topics in previous queries
         related_terms = {
-            "interview_travel": ["interview", "travel", "office", "arrival"],
             "relocation": ["move", "relocate", "housing", "commute"],
             "office_visit": ["visit", "office", "tour", "building"],
-            "candidate_travel": ["candidate", "travel", "transportation", "arrangements"],
             "search_candidates": ["candidate", "find", "search", "database"],
             "recruiter_outreach_email": ["email", "recruiter", "outreach", "candidate"],
             "candidate_pitch_email": ["email", "pitch", "candidate", "company"],
@@ -2029,15 +1861,7 @@ class IntentProcessor:
         Returns:
             Clarification question string
         """
-        if intent == "travel_time":
-            if "origin" not in entities and "destination" not in entities:
-                return "Could you specify the origin and destination locations?"
-            elif "origin" not in entities:
-                return "Where are you traveling from?"
-            elif "destination" not in entities:
-                return "Where are you traveling to?"
-                
-        elif intent == "search_candidates":
+        if intent == "search_candidates":
             if "role" not in entities and "skills" not in entities:
                 return "What type of candidates are you looking for? (e.g., role, skills, experience)"
                 
@@ -2168,8 +1992,6 @@ class IntentProcessor:
         system_prompt = """
         You are an intent detection AI for a recruiting assistant. Your job is to understand what the user is asking about and categorize their message into one of the following intents, extracting relevant entities:
 
-        - travel_time: Get travel/commute time, distance, or directions between two locations (TRAVEL API - extract 'origin', 'destination', and optionally 'mode')
-        - transportation_options: Get available transportation methods or compare travel modes between two locations (TRAVEL API - extract 'origin', 'destination', and optionally 'mode')
         - candidate_count: Count of candidates in the database (DATABASE QUERY)
         - job_count: Count of jobs in the database (DATABASE QUERY)
         - search_candidates: Search for candidates with specific skills or attributes in the database (DATABASE QUERY)
@@ -2197,8 +2019,6 @@ class IntentProcessor:
         - trend_analysis: Analyze recruitment trends and patterns (DATABASE QUERY - provides department trends, in-demand skills analysis)
         - performance_metrics: Analyze recruitment KPIs and performance indicators (DATABASE QUERY - provides fill rates, utilization metrics, benchmarks)
         - general_question: Any other general query (LLM)
-
-        For travel_time and transportation_options intents, always extract the 'origin' and 'destination' locations, and if the user specifies a mode of transport (e.g., driving, train, flight, walking), include it as 'mode'.
 
         CRITICAL EMAIL INTENT DISAMBIGUATION:
         1. recruiter_outreach_email: When user asks for an email FROM a recruiter TO candidates (e.g., "create a recruiter outreach email sent to prospective candidates")
@@ -2415,10 +2235,6 @@ Do not include any other text, only the JSON response."""
 
         # Intent handlers mapping
         intent_handlers = {
-            # Travel intents
-            "travel_time": self._handle_travel_time,
-            "transportation_options": self._handle_transportation_options,
-            
             # Web search intents
             "web_search": self._handle_web_search,
             "company_info": self._handle_company_info,
@@ -2513,15 +2329,7 @@ Do not include any other text, only the JSON response."""
         recovered_entities = entities.copy()
         
         # Intent-specific recovery rules
-        if intent == "travel_time" and (not entities.get("origin") or not entities.get("destination")):
-            # Try to extract locations from message
-            location_pattern = r'(?:from|between)\s+([A-Za-z\s]+?)\s+(?:to|and)\s+([A-Za-z\s]+?)(?:\?|$|\.)'
-            match = re.search(location_pattern, message, re.IGNORECASE)
-            if match:
-                recovered_entities["origin"] = match.group(1).strip()
-                recovered_entities["destination"] = match.group(2).strip()
-        
-        elif intent in ["salary_info", "recruiter_outreach_email", "candidate_pitch_email"] and not entities.get("role"):
+        if intent in ["salary_info", "recruiter_outreach_email", "candidate_pitch_email"] and not entities.get("role"):
             # Try to extract role
             role = self._extract_role_from_message(message)
             if role:
@@ -2548,9 +2356,7 @@ Do not include any other text, only the JSON response."""
         suggestions = []
         
         if "missing" in error_message.lower() or "required" in error_message.lower():
-            if intent == "travel_time":
-                suggestions.append("Please specify both origin and destination locations")
-            elif intent in ["salary_info", "recruiter_outreach_email"]:
+            if intent in ["salary_info", "recruiter_outreach_email"]:
                 suggestions.append("Please specify the job role you're asking about")
         
         if "service unavailable" in error_message.lower():
@@ -2614,61 +2420,6 @@ Do not include any other text, only the JSON response."""
         }
 
     # Add these handler methods for specific intents:
-
-    async def _handle_travel_time(self, intent: str, entities: Dict[str, Any], message: str) -> Dict[str, Any]:
-        """Enhanced travel time handler with better error handling."""
-        if not self.travel_service:
-            return {
-                "intent_processed": False,
-                "error": "Travel service is not available"
-            }
-        
-        origin = entities.get("origin", "")
-        destination = entities.get("destination", "")
-        
-        if not origin or not destination:
-            # Try to extract from message one more time
-            entities = self._attempt_entity_recovery(intent, entities, message)
-            origin = entities.get("origin", "")
-            destination = entities.get("destination", "")
-            
-            if not origin or not destination:
-                return {
-                    "intent_processed": False,
-                    "error": "Both origin and destination are required for travel time queries",
-                    "missing_entities": ["origin", "destination"] if not origin and not destination else ["origin"] if not origin else ["destination"]
-                }
-        
-        try:
-            travel_data = await self.travel_service.get_travel_info(
-                origin=origin,
-                destination=destination,
-                query=message
-            )
-            
-            if travel_data.get("has_results"):
-                formatted_response = self.travel_service.format_travel_response(travel_data, message)
-                return {
-                    "intent_processed": True,
-                    "response_type": "travel_time",
-                    "travel_data": travel_data,
-                    "formatted_response": formatted_response,
-                    "source": "travel_service"
-                }
-            else:
-                return {
-                    "intent_processed": False,
-                    "error": f"Could not find travel information for {origin} to {destination}",
-                    "suggestion": "Please check the location names and try again"
-                }
-                
-        except Exception as e:
-            logger.error(f"Travel service error: {e}")
-            return {
-                "intent_processed": False,
-                "error": f"Travel service error: {str(e)}",
-                "suggestion": "Please try again later or check your location names"
-            }
 
     async def _handle_web_search(self, intent: str, entities: Dict[str, Any], message: str) -> Dict[str, Any]:
         """Enhanced web search handler."""
@@ -2958,24 +2709,7 @@ Do not include any other text, only the JSON response."""
         entities = {}
         message_lower = message.lower()
         
-        if intent == "travel_time":
-            # Extract origin and destination with better patterns
-            # Look for "from X to Y" pattern more precisely
-            from_to_match = re.search(r'from\s+([A-Za-z\s,]+?)\s+to\s+([A-Za-z\s,]+?)(?:\?|$|\s|\.)', message_lower)
-            if from_to_match:
-                entities['origin'] = from_to_match.group(1).strip()
-                entities['destination'] = from_to_match.group(2).strip()
-            else:
-                # Fallback to individual patterns
-                origin_match = re.search(r'from\s+([A-Za-z\s,]+?)(?:\s+to|\s+and|$)', message_lower)
-                dest_match = re.search(r'to\s+([A-Za-z\s,]+?)(?:\?|$|\s|\.)', message_lower)
-                
-                if origin_match:
-                    entities['origin'] = origin_match.group(1).strip()
-                if dest_match:
-                    entities['destination'] = dest_match.group(1).strip()
-                
-        elif intent in ["search_candidates", "recruiter_outreach_email", "candidate_pitch_email"]:
+        if intent in ["search_candidates", "recruiter_outreach_email", "candidate_pitch_email"]:
             # Priority 1: Extract skills from "with X experience" patterns
             skills_match = re.search(r'with\s+([^?]*?)\s+(?:experience|skills?|knowledge|expertise)', message_lower)
             if skills_match:
@@ -3041,67 +2775,6 @@ Do not include any other text, only the JSON response."""
                 entities['company'] = company_match.group(1).strip()
         
         return entities
-
-    async def _handle_transportation_options(self, intent: str, entities: Dict[str, Any], message: str) -> Dict[str, Any]:
-        """
-        Handle transportation options intent.
-        """
-        try:
-            origin = entities.get('origin', '')
-            destination = entities.get('destination', '')
-            
-            if not origin or not destination:
-                return {
-                    "intent_processed": False,
-                    "error": "Missing origin or destination",
-                    "suggestion": "Please specify both origin and destination cities"
-                }
-            
-            # Use travel service to get transportation options
-            if self.travel_service:
-                options_data = await self.travel_service.get_transportation_options(origin, destination)
-                
-                if options_data and options_data.get('options'):
-                    formatted_response = f"Transportation options from {origin} to {destination}:\n\n"
-                    
-                    for option in options_data['options']:
-                        mode = option.get('mode', 'Unknown')
-                        duration = option.get('duration', 'Unknown')
-                        cost = option.get('cost', 'Unknown')
-                        
-                        formatted_response += f"**{mode}**: {duration} duration"
-                        if cost != 'Unknown':
-                            formatted_response += f", {cost}"
-                        formatted_response += "\n"
-                    
-                    return {
-                        "intent_processed": True,
-                        "response_type": "transportation_options",
-                        "formatted_response": formatted_response,
-                        "options_data": options_data,
-                        "origin": origin,
-                        "destination": destination
-                    }
-                else:
-                    return {
-                        "intent_processed": False,
-                        "error": "No transportation options found",
-                        "suggestion": "Please check the city names and try again"
-                    }
-            else:
-                return {
-                    "intent_processed": False,
-                    "error": "Travel service not available",
-                    "suggestion": "Please try again later"
-                }
-                
-        except Exception as e:
-            logger.error(f"Error handling transportation options: {e}")
-            return {
-                "intent_processed": False,
-                "error": f"Could not get transportation options: {str(e)}",
-                "suggestion": "Please try again or check your input"
-            }
 
     async def _handle_recruiter_outreach_email(self, intent: str, entities: Dict[str, Any], message: str) -> Dict[str, Any]:
         """
