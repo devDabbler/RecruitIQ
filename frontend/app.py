@@ -38,7 +38,7 @@ except ImportError as e:
     # Create empty module objects if imports fail
     class EmptyModule: pass
     dashboard = resume_upload = jobs = candidates = assistant = market_intel = candidate_matching = enhanced_matching = candidate_pipeline = tasks_page = interviews_page = EmptyModule()
-    dashboard.page = resume_upload.upload_resume = jobs.page = candidates.page = assistant.page = market_intel.page = candidate_matching.page = enhanced_matching.enhanced_matching_tab = candidate_pipeline.page = tasks_page.page = interviews_page.page = lambda: None
+    dashboard.page = resume_upload.upload_resume = jobs.page = candidates.page = assistant.page = market_intel.page = candidate_matching.page = enhanced_matching.page = candidate_pipeline.page = tasks_page.page = interviews_page.page = lambda: None
     candidate_detail = job_detail = EmptyModule()
     candidate_detail.page = job_detail.page = lambda: None
 
