@@ -1,248 +1,113 @@
 # RecruitIQ
 
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python](https://img.shields.io/badge/Python-3.9%2B-blue)](https://www.python.org/)
-[![Documentation Status](https://img.shields.io/badge/docs-latest-brightgreen.svg?style=flat)](./docs/README.md)
+**Your ATS is a graveyard of qualified candidates you already paid to source.**
 
-RecruitIQ is an AI-powered recruiting platform that helps teams quickly screen resumes, match candidates to live roles, and surface insights from existing talent pools.
+Every agency and in-house team I have worked on sits on thousands of resumes
+that were good enough to interview and never got called again. The candidate
+was real, the skills were real, the money to source them was already spent.
+Then the req closed and they vanished into a search index that only matches on
+keywords.
 
-## Features
+RecruitIQ is my attempt to fix that: parse what is already in the pile,
+represent it properly, and match against live roles semantically instead of by
+string.
 
-- **Candidate Management** - Track candidates through the recruitment pipeline
-- **Resume Parsing** - Automatically extract key information from resumes
-- **Job Management** - Create and manage job postings
-- **AI Matching** - Match candidates to jobs using semantic search and embeddings
-- **AI Assistant** - Get help with job descriptions, interview questions and more
-- **Market Intelligence** - Analyze job market trends and salary data
-- **Communication Tools** - Manage candidate communications and templates
+I am a recruiter, not a software engineer by training. I have been building
+toward this problem for two years.
 
-## Value Proposition
+---
 
-- **Frustrated with your ATS?**
-- **Have a database of valuable resumes and applications trapped in your ATS—candidates who could be hired now if you only knew about them?**
-- **Does your current search tool waste your time surfacing unqualified or previously rejected candidates?**
+## The lineage
 
-RecruitIQ unlocks the value of your existing talent pool—no migration required. Whether you switch platforms or stay with your current ATS, our solution delivers actionable insights and ROI from day one.
+This repository is the eleventh iteration. The arc matters more than any single
+repo:
 
-## Feature Flags & Subscription Tiers
+| # | Repo | What it added |
+|---|---|---|
+| 1 | `py_to_mysql_resparser` (Mar 2024) | Regex parsing into MySQL |
+| 2 | `RezParser` | Structured extraction |
+| 3 | `Resume-Cupidv1` | First matching attempt |
+| 4 | `Resume-Cupid-RAG-Test` | Retrieval-augmented matching |
+| 5 | `Resume_Cupid_CrewAI_HF_Llama3` | Multi-agent orchestration |
+| 6 | `Resume-Cupid_Multi-Option-LLM` | Provider abstraction |
+| 7 | `Resume-Cupid-Full-Stack` | End-to-end application |
+| 8 | `Resumatch-AI` | Matching as the product |
+| 9 | `Recruiter-Dashboard` | Recruiter-facing workflow |
+| 10 | `Recruiting-Dashboard` | Pipeline management |
+| 11 | **RecruitIQ** | Graph + vector matching, agent framework |
 
-RecruitIQ supports feature flag controls to enable or restrict features based on the user's subscription tier (e.g., `basic` vs `premium`).
+MySQL regex parser to CrewAI to RAG to a graph-backed platform. Each one taught
+me what the previous one got wrong.
 
-- The frontend uses a `user_tier` value in Streamlit's `st.session_state` to control access to premium features.
-- By default, this is set to `basic`. Change to `premium` for testing premium features:
+---
 
-```python
-st.session_state.user_tier = "premium"
-```
+## What is actually here
 
-- Each panel/component checks the user tier and:
-  - Hides or greys out premium features for basic users
-  - Shows an upgrade prompt/button for features requiring a higher tier
-  - See inline TODOs in the code for where to integrate real user profile/tier logic from backend
+A FastAPI backend (95 routes) and a Streamlit frontend, backed by PostgreSQL.
 
-## Backend Integration (Panels)
+**The resume parsing pipeline** is the part I am most confident in. LLM
+structured extraction against a Pydantic contract, falling back to a regex
+extractor, with a dedicated extractor for military service — because veteran
+resumes describe experience in a format civilian parsers reliably mangle.
 
-- **Jobs/Candidates**: Fully wired to backend APIs (async fetch pattern)
-- **Interviews/Tasks/Notifications**: Use demo data by default. Async fetch placeholders and TODOs are present for easy backend integration when endpoints are ready.
-- All panels include error handling, loading states, and fallback logic for backend downtime.
+**Candidate-job matching** scores role fit, skill overlap and experience
+independently, then applies cross-domain penalties. A pre-K teacher does not
+rank for a Data Engineer role just because both mention "leadership".
 
-## Technical Overview
+---
 
-RecruitIQ consists of:
+## Honest status
 
-1. **Frontend** - A Streamlit-based web interface
-2. **Backend API** - A FastAPI application providing RESTful endpoints
-3. **Database** - SQLAlchemy with PostgreSQL for data storage
-4. **AI Services** - Language models for resume parsing, embeddings, and assistant features
-5. **Vector Database** - Neo4j for storing and querying vector embeddings
-6. **Storage** - MinIO for document storage
+This is a portfolio piece under active renovation, not a product. Being
+specific about what is broken is more useful to you than a feature list:
 
-## Recruiting Database Transformation Service
+- **Neo4j is being removed.** It holds 48 nodes and its vector indexes are
+  misconfigured — 384-dimension indexes against 1536-dimension stored vectors.
+  It is the single biggest barrier to anyone running this project, and it is
+  being folded into Postgres with `pgvector`.
+- **The Nebius API key is dead (HTTP 401)** and it is still the primary
+  provider, so AI-dependent paths fail until the provider chain is rebuilt.
+- **`intent_processor.py` is 4,338 lines of hand-written regex** across 30+
+  intents. It is being replaced with ~8 tool definitions.
+- **The test suite:** 50 passing, 9 failing, 92 skipped. The failures are
+  real defects, left visible on purpose. See
+  [documentation/TESTING.md](documentation/TESTING.md).
 
-RecruitIQ offers a comprehensive service to transform legacy recruiting databases into AI-powered talent intelligence platforms. This service leverages advanced RAG (Retrieval-Augmented Generation), semantic search, and data enrichment to unlock actionable insights from existing candidate data.
+Full assessment and plan:
+[docs/superpowers/specs/2026-08-26-recruitiq-portfolio-revival-design.md](docs/superpowers/specs/2026-08-26-recruitiq-portfolio-revival-design.md).
 
-### Key Strengths
-- **Advanced Candidate-Job Matching**: Sophisticated algorithms using skills, experience, and vector-based semantic search (Neo4j).
-- **RAG Implementation**: Specialized vector stores, context compression, and query classification for relevant, routed results.
-- **Comprehensive Dashboard**: Multi-module frontend, AI assistant, resume parsing, and data extraction.
+---
 
-### Service Phases
-1. **Assessment & Audit**: Analyze the client’s ATS/database, identify data quality gaps, and estimate ROI. _Deliverable: Data Transformation Roadmap._
-2. **Data Transformation Service**: Connect to databases, parse/normalize resumes, extract entities/skills, and generate embeddings. _Deliverable: Enriched, AI-ready candidate database._
-3. **Platform License**: SaaS offering with tiered pricing, optional add-on modules, and recurring revenue model.
+## Running it
 
-### Add-on Modules
-- **Advanced Matching Engine**: Skill gap analysis, culture fit, experience level matching, and explainable job-candidate matching.
-- **Market Intelligence Suite**: Salary benchmarking, competitive analysis, hiring timeline estimation, skill demand forecasting.
-- **AI Recruiting Assistant**: Candidate summarization, chat-based insights, and automated recruiter workflows.
+Requires **Python 3.11+**, Poetry and PostgreSQL. Neo4j, Redis and MinIO are
+optional — the app degrades gracefully without them.
 
-### Pricing Model
-- **Data Transformation Service**: One-time fee based on database size/complexity.
-- **Platform License**: Recurring fee based on features and database size.
-
-## Enhanced Resume Parsing & Matching System
-
-RecruitIQ features a newly enhanced hybrid resume processing system that combines locally trained models with optional API-based matching capabilities.
-
-### Key Enhancements
-
-#### 1. Hybrid Architecture
-
-- **Local Resume Parsing**: Uses a locally trained model for all resume parsing (data privacy, speed, reliability)
-- **Optional API-Based Matching**: Can use external APIs for advanced matching while integrating local model data
-- **Smart Fallback**: Automatically falls back to local matching if API calls fail
-
-#### 2. Parser Improvements
-
-- **Enhanced Pattern Recognition**: Integrated 11,449 patterns from training data for improved section detection
-- **Education Extraction Improvements**:
-  - Fixed date formatting to convert datetime objects to properly formatted strings
-  - Improved degree and institution extraction
-- **Experience Description Completeness**: Increased character limit from 400-500 to 1000 characters for more comprehensive job descriptions
-- **Military Experience Detection**: Added better patterns for military service recognition and extraction
-
-#### 3. Component Separation
-
-- **EnhancedResumeParser**: Focused solely on accurate data extraction
-- **CandidateAnalyzer**: Handles all AI-powered analysis and job matching
-- **Clear API Boundaries**: Well-defined interfaces between components
-
-#### 4. Database Integration
-
-- **PostgreSQL** (`ats_db`): Stores parsed resume data and job information
-- **Neo4j** (`neograph`): Powers graph-based skill relationships and semantic search
-
-### Using the System
-
-```python
-# Basic parsing and matching
-from backend.utils.enhanced_resume_parser import EnhancedResumeParser
-from backend.utils.candidate_analyzer import CandidateAnalyzer
-
-# Initialize components
-parser = EnhancedResumeParser()
-analyzer = CandidateAnalyzer(use_api=False)  # Local-only mode
-
-# Parse a resume
-resume_data = parser.parse_resume("path/to/resume.pdf")
-
-# Match to a job
-job_data = {
-    'title': 'Software Engineer',
-    'required_skills': ['Python', 'SQL', 'JavaScript'],
-    'preferred_skills': ['AWS', 'Docker'],
-    'min_years_experience': 3
-}
-
-match_results = analyzer.match_to_job(resume_data, job_data)
-```
-
-For full documentation, see `README-HYBRID-SYSTEM.md`.
-
-## Requirements
-
-- Python 3.9+
-- Poetry (for dependency management)
-- PostgreSQL
-- MinIO (optional)
-- Redis (optional)
-- Neo4j (optional)
-
-## Installation
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/RecruitIQ.git
-cd RecruitIQ
-```
-
-2. Install dependencies:
 ```bash
 poetry install
+cp .env.example .env        # fill in POSTGRES_* at minimum
 ```
-
-3. Set up environment variables (create a `.env` file):
-```
-DATABASE_URL=postgresql://user:password@localhost/recruitiq
-API_VERSION=v1
-ENABLE_SWAGGER=true
-MINIO_ENDPOINT=localhost:9000
-MINIO_ACCESS_KEY=minioadmin
-MINIO_SECRET_KEY=minioadmin
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=neo4j
-```
-
-## Running the Application
-
-### Option 1: Run both frontend and backend with a single command
 
 ```bash
-poetry run python run.py
-```
+# Terminal 1 - backend on :8000
+poetry run python -m uvicorn main:app --host 127.0.0.1 --port 8000 --app-dir backend
 
-### Option 2: Run each component separately
-
-Run the backend server:
-```bash
-poetry run uvicorn backend.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-Run the frontend:
-```bash
+# Terminal 2 - frontend on :8501
 poetry run streamlit run frontend/app.py
 ```
 
-Then open your browser to http://localhost:8501
+API docs at `http://localhost:8000/docs`.
 
-## API Documentation
+The first request takes around 30 seconds while spaCy and the OCR models load.
+Subsequent requests are around 300 ms.
 
-When the backend server is running, API documentation is available at:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+---
 
-## Development
+## Data
 
-### Project Structure
-
-```
-RecruitIQ/
-├── backend/                   # Backend API
-│   ├── models/                # Database and data models
-│   ├── routers/               # API routes
-│   ├── services/              # Business logic (intent detection, web search, LLM, crawling, storage, etc.)
-│   │   ├── intent_processor.py        # Intent detection and processing for chatbot
-│   │   ├── web_search_service.py      # Web search integration for dynamic queries
-│   │   ├── job_service.py             # Job service for embedding generation and storage
-│   │   ├── resume_service.py          # Resume service for parsing and embedding generation
-│   │   ├── graph_service.py           # Neo4j integration for vector storage and search
-│   │   ├── rag_service.py             # Retrieval-augmented generation for semantic search
-│   ├── utils/                 # Utility functions
-│   ├── scripts/               # Helper scripts
-│   └── main.py                # Application entry point
-├── frontend/                  # Streamlit frontend
-│   ├── modules/               # Frontend page modules
-│   ├── components/            # Reusable UI components
-│   ├── static/                # Static assets
-│   └── app.py                 # Frontend entry point
-├── data/                      # Sample data and fixtures
-├── docs/                      # Documentation
-├── tests/                     # Tests
-├── run.py                     # Script to run the full application
-└── pyproject.toml            # Project dependencies
-```
-
-## Testing
-
-Run tests with:
-```bash
-poetry run pytest
-```
+All candidate data in this repository is **synthetic**. Real resumes are
+excluded by `.gitignore` and are never committed.
 
 ## License
 
-[MIT License](LICENSE)
+[MIT](LICENSE)
