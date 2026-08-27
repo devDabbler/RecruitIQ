@@ -296,46 +296,6 @@ class IntentRegistry:
             confidence_threshold=0.6
         ))
         
-        # Travel Time Intent
-        self.register_intent(IntentDefinition(
-            name="travel_time",
-            description="Calculate travel time between locations",
-            synonyms=[
-                "travel duration", "commute time", "distance", "how long to travel",
-                "travel estimate", "journey time", "drive time"
-            ],
-            required_slots=[],
-            optional_slots=[
-                SlotDefinition(
-                    name="origin",
-                    type=SlotType.LOCATION,
-                    description="Starting location",
-                    required=False
-                ),
-                SlotDefinition(
-                    name="destination",
-                    type=SlotType.LOCATION,
-                    description="Destination location",
-                    required=False
-                ),
-                SlotDefinition(
-                    name="transport_mode",
-                    type=SlotType.TEXT,
-                    description="Mode of transportation",
-                    required=False,
-                    options=["driving", "walking", "transit", "cycling"]
-                )
-            ],
-            patterns=[
-                r"(?i)(?:how long|travel time|commute).*(?:from|to).*(\w+).*(?:to|from).*(\w+)",
-                r"(?i)(?:distance|time).*between.*(\w+).*(?:and|to).*(\w+)",
-                r"(?i)(?:drive|travel).*time.*(\w+).*(\w+)"
-            ],
-            negative_keywords=["candidates", "email", "search", "hire"],
-            priority=5,
-            confidence_threshold=0.8
-        ))
-        
         # Job Analysis Intent
         self.register_intent(IntentDefinition(
             name="job_analysis",
