@@ -7,13 +7,11 @@ import logging
 import os
 import httpx
 import random
-from functools import lru_cache
 from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 import urllib.parse
 
 # Set cache directory for sentence transformers to avoid re-downloading
-os.environ['SENTENCE_TRANSFORMERS_HOME'] = './models/sentence_transformers'
 
 # Direct implementation of Nebius AI to avoid circular imports
 class DirectNebiusAI:
@@ -165,25 +163,6 @@ class ModelType(Enum):
     NEBIUS_PHI4 = "microsoft/phi-4"
 
 
-@lru_cache(maxsize=1)
-def _load_sentence_transformer_model(model_name: str):
-    """
-    Loads and caches the sentence transformer model.
-    This function is cached to ensure the model is loaded only once.
-    """
-    try:
-        from sentence_transformers import SentenceTransformer
-        logger.info(f"Loading sentence transformer model: {model_name}")
-        # The model will be downloaded to the cache directory set by SENTENCE_TRANSFORMERS_HOME
-        return SentenceTransformer(model_name)
-    except ImportError:
-        logger.error("sentence_transformers package not found. Please install it to use embedding models.")
-        return None
-    except Exception as e:
-        logger.error(f"Failed to load sentence transformer model '{model_name}': {e}")
-        return None
-
-
 class LLMService:
     """
     Service for handling interactions with various LLM providers like Google's Gemini and Cohere.
@@ -272,61 +251,15 @@ class LLMService:
             return False
     
     def get_embedding_model(self):
-        """
-        Get the embedding model, loading it if necessary.
-        This method ensures the model is loaded only once and cached.
-        """
+        """Return the shared 768-dim Ollama embedding adapter (loaded once)."""
         if not self._embedding_model_loaded:
-            # Use the cached loading function
-            self.embedding_model = _load_sentence_transformer_model("sentence-transformers/all-MiniLM-L6-v2")
-            
-            if self.embedding_model is None:
-                # Fallback to simple embedding adapter if sentence transformers fails
-                logger.warning("Falling back to simple embedding adapter")
-                class SimpleEmbeddingAdapter:
-                    def embed_documents(self, texts):
-                        # Simple fallback - return random embeddings
-                        import numpy as np
-                        return [np.random.rand(384).tolist() for _ in texts]
-                    
-                    def embed_query(self, text):
-                        import numpy as np
-                        return np.random.rand(384).tolist()
-                    
-                    def encode(self, text):
-                        """Direct encode method for compatibility with cache_utils"""
-                        import numpy as np
-                        if isinstance(text, str):
-                            return np.random.rand(384)
-                        else:
-                            return np.array([np.random.rand(384) for _ in text])
-                
-                self.embedding_model = SimpleEmbeddingAdapter()
-            else:
-                # Wrap the sentence transformer in a consistent interface
-                class SentenceTransformerAdapter:
-                    def __init__(self, model):
-                        self.model = model
-                    
-                    def embed_documents(self, texts):
-                        return self.model.encode(texts).tolist()
-                    
-                    def embed_query(self, text):
-                        return self.model.encode([text])[0].tolist()
-                    
-                    def encode(self, text):
-                        """Direct encode method for compatibility with cache_utils"""
-                        if isinstance(text, str):
-                            # Return numpy array for single string (needed for cache_utils)
-                            return self.model.encode([text])[0]
-                        else:
-                            # Return numpy array for list of strings
-                            return self.model.encode(text)
-                
-                self.embedding_model = SentenceTransformerAdapter(self.embedding_model)
-            
+            from backend.services.ollama_embeddings import OllamaEmbeddingAdapter
+            self.embedding_model = OllamaEmbeddingAdapter(
+                base_url=getattr(self.settings, "ollama_base_url", "https://ollama.sentienttrader.ai"),
+                model=getattr(self.settings, "ollama_embed_model", "nomic-embed-text"),
+                timeout=getattr(self.settings, "ollama_embed_timeout", 20.0),
+            )
             self._embedding_model_loaded = True
-        
         return self.embedding_model
     
     def get_llm(self, model_name):
