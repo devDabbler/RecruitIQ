@@ -1,14 +1,14 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, AsyncMock
 from backend.utils.cache.cache_utils import cache_result
 
 @pytest.mark.asyncio
 async def test_cache_result_decorator():
     # Mock the cache
     with patch('backend.utils.cache.cache_utils.cache') as mock_cache:
-        # Set up mock return values
-        mock_cache.get.return_value = None  # No cached value initially
-        mock_cache.set = MagicMock()
+        # The real cache exposes async get/set, so the mocks must be awaitable
+        mock_cache.get = AsyncMock(return_value=None)  # No cached value initially
+        mock_cache.set = AsyncMock()
         
         # Create a test function with the decorator
         @cache_result(expiry=3600)
@@ -29,8 +29,9 @@ async def test_cache_result_decorator():
 async def test_cache_result_decorator_with_cached_value():
     # Mock the cache to return a cached value
     with patch('backend.utils.cache.cache_utils.cache') as mock_cache:
-        # Set up mock return values
-        mock_cache.get.return_value = '{"result": "cached_result"}'
+        # The real cache exposes async get/set, so the mocks must be awaitable
+        mock_cache.get = AsyncMock(return_value='{"result": "cached_result"}')
+        mock_cache.set = AsyncMock()
         
         # Create a test function with the decorator
         @cache_result(expiry=3600)
@@ -46,3 +47,4 @@ async def test_cache_result_decorator_with_cached_value():
         # Verify cache get was called but set was not
         mock_cache.get.assert_called_once()
         # set should not be called since we got a cached value
+        mock_cache.set.assert_not_called()
