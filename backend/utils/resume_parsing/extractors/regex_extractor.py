@@ -231,7 +231,9 @@ class RegexExtractor:
         return info
 
     _DEGREE_RE = re.compile(r"\b(?:B\.?[AS]\.?|Bachelor(?:'s)?|M\.?[AS]\.?|Master(?:'s)?|MBA|Ph\.?D\.?|Doctorate|Associate|Diploma|Certificate)\b", re.I)
-    _INSTITUTION_RE = re.compile(r"\b(?:[A-Z][A-Za-z.&'() -]{0,40}?(?:University|College|Institute|School|Academy|Uni)[A-Za-z.&'() -]*\b|MIT|UCLA|NYU|NYIT|Caltech|CalTech)\b", re.I)
+    # The name prefix is optional so keyword-first institutions
+    # ("University of California") match, not just "Stanford University".
+    _INSTITUTION_RE = re.compile(r"\b(?:(?:[A-Z][A-Za-z.&'() -]{0,40}? )?(?:University|College|Institute|School|Academy|Uni)\b[A-Za-z.&'() -]*|MIT|UCLA|NYU|NYIT|Caltech|CalTech)\b", re.I)
     _BULLET_OR_COMMA = re.compile(r"(?:[\n•\-\*]\s*|,\s*)")
     _EDUCATION_SECTION_RE = re.compile(r'(?i)(?:education|academic background|degrees?|qualifications?|academics?)[\s\-:]+')
 
@@ -301,9 +303,10 @@ class RegexExtractor:
         section_match = self._EDUCATION_SECTION_RE.search(text)
         if section_match:
             section_start = section_match.end()
-            section_end = text.find('\n\n', section_start)
-            if section_end == -1:
-                section_end = len(text)
+            # Blank lines separate entries within the section, so the section
+            # only ends at the next ALL-CAPS header (or end of text).
+            next_header = re.search(r'^[A-Z][A-Z\s&/-]{3,}$', text[section_start:], re.M)
+            section_end = section_start + next_header.start() if next_header else len(text)
             section_text = text[section_start:section_end].strip()
             lines = section_text.split('\n')
         else:
