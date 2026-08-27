@@ -9,9 +9,11 @@ Thumbs.db
 .vscode/
 .cursor/
 
-# ==== Environment ====
+# ==== Secrets ====
+# .env holds live API keys. .env.example is committed and MUST stay visible.
 .env
 .env.*
+!.env.example
 .python-version
 
 # ==== Python ====
@@ -25,14 +27,10 @@ __pycache__/
 .cache/
 .coverage
 htmlcov/
-
-# Virtual envs
 .venv/
 venv/
 env/
 ENV/
-
-# Build artifacts
 build/
 dist/
 *.egg-info/
@@ -42,69 +40,45 @@ logs/
 *.log
 *.tmp
 *.bak
+*.orig
+*.rej
+*.backup
 
-# ==== Databases & Data ====
+# ==== Databases & dumps ====
 *.db
 *.sqlite
 *.sqlite3
 *.db-journal
+**/*.sql
+**/*.dump
+**/*.sql.gz
+**/*.sql.zip
 
-# ==== Large model files ====
+# ==== Large model weights ====
+# An 86.7 MB model.safetensors was committed once. Never again.
 *.pt
 *.pth
 *.onnx
 *.tflite
 *.bin
 *.safetensors
-sentence_transformers/
-models/
+backend/models/sentence_transformers/
 
-# ==== Frontend (if any) ====
+# ==== Node ====
 node_modules/
 .npm/
 .yarn/
 
-# ==== Tests (exclude all test files) ====
-tests/
-**/tests/
-**/test_*.py
-**/*_test.py
-
-# ==== Project-specific ====
-# Backups and legacy folders
-backend/z_ollama_backup/
-
-# Resume files in project root only
-/*.pdf
-/*.doc
-/*.docx
-/*.rtf
-/*.txt
-# Common resume naming in root
-/resume*
-/Resume*
-
-# ==== Additional cleanup rules (2025-08-08) ====
-# Documentation Markdown (repo-wide) except any README variants
-**/*.md
-!**/README.md
-!**/Readme.md
-!**/readme.md
-
-# MCP (Model Context Protocol) files
-mcp_*.py
-MCP_*.md
-working_mcp_launcher.py
-
-# Development and debug files
-dev.py
-backend/dev.py
-*.log
-navigation_debug.log
-frontend.log
-resume_parser_test.log
-
-# Resume/CV documents repo-wide (common doc formats)
+# ==== PII: real resumes and uploads ====
+# This project ships synthetic data only. Real candidate documents must never
+# be tracked. These rules are load-bearing - do not relax them.
+storage/
+backend/storage/
+data/resumes/
+data/results/
+exports/
+backups/
+training_data/
 **/[Rr]esume*.pdf
 **/[Rr]esume*.doc
 **/[Rr]esume*.docx
@@ -120,39 +94,14 @@ resume_parser_test.log
 **/[Cc][Vv]*.docx
 **/[Cc][Vv]*.rtf
 **/[Cc][Vv]*.txt
+# Untracked 4.87 MB pitch deck - not a resume, so named explicitly.
+data/Recruiting Solution POC.pdf
 
-# Uploaded/storage artifacts
-backend/storage/
+# ==== Legacy / dead ====
+backend/z_ollama_backup/
+working_mcp_launcher.py
 
-# SQL and dump files (repo-wide)
-**/*.sql
-**/*.dump
-**/*.sql.gz
-**/*.sql.zip
-
-# Ignore storage uploads directory at repo root
-storage/
-
-# ==== Dataset, exports, backups (2025-08-08) ====
-data/resumes/
-data/results/
-exports/
-backups/
-
-# Common patch/backup artifacts
-*.orig
-*.rej
-*.backup
-
-# Ignore entire training dataset
-training_data/
-
-# Ignore .gitignore backup files
-.gitignore.backup-*
-
-# Ignore backend scripts
-backend/scripts/
-
-# ==== Images ====
-# Ignore PNG images in documentation
-docs/image/RECRUITER_QUESTIONS_GUIDE/*.png
+# ==== Deliberately NOT ignored ====
+# Markdown: the old rule `**/*.md` hid all 19 documentation/ files from GitHub.
+# Tests: the old rules `tests/`, `**/tests/`, `**/test_*.py`, `**/*_test.py`
+# hid 138 test files. Both are now visible.
