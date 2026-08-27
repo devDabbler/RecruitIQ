@@ -6,6 +6,23 @@ poetry run pytest
 
 ## Current state
 
+**65 passed, 0 failed, 86 skipped** (plus 1 xfail, 1 xpass) as of Phase 1b
+(2026-08-27). CI runs ruff (error-class rules) and the full suite against a
+`pgvector/pgvector:pg16` service container on every PR — data-dependent and
+network-dependent tests skip cleanly there.
+
+Phase 1b changes to the suite:
+
+- **Added:** adapter tests for the Ollama embedding client (mocked HTTP, plus
+  a deterministic offline-fallback contract) and DB-integration tests for
+  pgvector storage, similar-jobs, and natural-language semantic search (these
+  skip unless Postgres has the `vector` extension).
+- **Deleted:** seven legacy script-style files that constructed the removed
+  Neo4j `RAGService` directly. They tested an architecture that no longer
+  exists; three of their assertions were passing trivially.
+
+## History
+
 This suite was gitignored until 2026-08-27 — 138 test files existed on disk
 and one was tracked. Un-ignoring them exposed real rot, which was triaged
 rather than hidden:
@@ -24,7 +41,7 @@ rather than hidden:
 ## Recently fixed
 
 The nine failures left visible after Phase 0 were debugged and fixed in
-Phase 1a. The suite is now 58 passed, 0 failed, 93 skipped. Root causes:
+Phase 1a (which ended at 58 passed, 0 failed, 93 skipped). Root causes:
 
 - **Character corruption in experience parsing** — encoding-corrupted
   regex character classes consumed a character after quotes:

@@ -1,6 +1,7 @@
 """
-Custom implementation of text splitting functionality similar to langchain's RecursiveCharacterTextSplitter.
-This avoids dependency issues with langchain and pydantic versions.
+In-repo text splitter. API-compatible with the RecursiveCharacterTextSplitter
+interface popularized by langchain (removed from this project in Phase 1b),
+without the dependency.
 """
 import re
 from typing import List, Optional, Dict, Any, Callable
