@@ -1,5 +1,5 @@
-# Import patches first to ensure cross-platform compatibility
-from backend.patches import *
+# Windows compatibility (mock Unix-only pwd module) must load before deps that need it
+import backend.utils.win_compat  # noqa: F401
 
 import logging
 import time

@@ -1,5 +1,5 @@
-"""Intent detection and processing for chatbot interactions."""
-import backend.patches  # Windows compatibility patches
+﻿"""Intent detection and processing for chatbot interactions."""
+import backend.utils.win_compat  # noqa: F401 - Windows compatibility (pwd mock)
 
 import logging
 import re
@@ -150,14 +150,14 @@ class IntentProcessor:
                 # Two-city comparison
                 r"(externally[, ]+)?(compare|compare the viability of) (sourcing )?(?P<seniority>senior|mid|entry|lead|principal)? ?(?P<role>[^ ]+[^,]*) in (?P<non_tech_city>[^ ]+(?: [^ ]+)*?) vs (?P<tech_hub_city>[^ ]+(?: [^ ]+)*)",
                 r"(externally[, ]+)?(how does|how do) hiring (?P<role>[^ ]+[^,]*) in (?P<non_tech_city>[^ ]+(?: [^ ]+)*?) compare to (?P<tech_hub_city>[^ ]+(?: [^ ]+)*)",
-                # Shortlist non–tech hubs
-                r"(externally[, ]+)?(identify|find|list) the top (?P<num_cities>\d+) non–?tech hub (us|u\.s\.) cities to source (?P<role>[^.]+)",
-                r"(externally[, ]+)?(what are|which are) the best non–?tech hub cities for hiring (?P<role>[^ ]+[^,]*)",
+                # Shortlist nonâ€“tech hubs
+                r"(externally[, ]+)?(identify|find|list) the top (?P<num_cities>\d+) nonâ€“?tech hub (us|u\.s\.) cities to source (?P<role>[^.]+)",
+                r"(externally[, ]+)?(what are|which are) the best nonâ€“?tech hub cities for hiring (?P<role>[^ ]+[^,]*)",
                 # Sourcing plan
                 r"(externally[, ]+)?(create|generate|develop) a sourcing plan for (?P<role>[^ ]+[^,]*) in (?P<city>[^:]+)",
-                # Hiring‑manager briefing
+                # Hiringâ€‘manager briefing
                 r"(externally[, ]+)?(prepare|create|generate) (a |an )?(briefing|executive briefing) (for hiring managers|for managers) on (hiring challenges|the challenges of hiring) (?P<role>[^ ]+[^,]*) in (?P<city>[^:]+)",
-                # Data‑only JSON for dashboards
+                # Dataâ€‘only JSON for dashboards
                 r"(externally[, ]+)?(return|generate|provide) only valid json for (?P<role>[^ ]+[^,]*) in (?P<city>[^ ]+[^,]*)(?: .*?last (?P<time_range>[^.]+))?"
             ],
             # Database query intents
@@ -2033,11 +2033,11 @@ class IntentProcessor:
         8. ONLY use 'advanced_matching' if the query explicitly asks to 'find', 'match', 'show', 'identify', 'consider', or 'find the best/ideal' CANDIDATES for a specific JOB or role description. General questions about roles or skills are NOT 'advanced_matching'.
         9. For email generation, carefully distinguish between recruiter outreach (recruiter TO candidates) and candidate pitch (candidate TO company)
         10. For database analysis queries, use specific analysis intents:
-            - "analyze our jobs", "job breakdown", "job statistics" → job_analysis
-            - "pipeline insights", "candidate flow", "recruitment pipeline" → pipeline_insights
-            - "comprehensive analysis", "full overview", "system analysis" → comprehensive_analysis
-            - "trends", "patterns", "changes over time" → trend_analysis
-            - "performance metrics", "KPIs", "efficiency" → performance_metrics
+            - "analyze our jobs", "job breakdown", "job statistics" â†’ job_analysis
+            - "pipeline insights", "candidate flow", "recruitment pipeline" â†’ pipeline_insights
+            - "comprehensive analysis", "full overview", "system analysis" â†’ comprehensive_analysis
+            - "trends", "patterns", "changes over time" â†’ trend_analysis
+            - "performance metrics", "KPIs", "efficiency" â†’ performance_metrics
 
         For each intent, extract relevant entities mentioned in the message.
         Your response should be valid JSON with the following format:
@@ -3674,18 +3674,18 @@ Do not include any other text, only the JSON response."""
                 
                 report += f"**Benchmarks**:\n"
                 if fill_rate >= 80:
-                    report += "- ✅ Fill Rate: Excellent performance\n"
+                    report += "- âœ… Fill Rate: Excellent performance\n"
                 elif fill_rate >= 60:
-                    report += "- ⚠️ Fill Rate: Good performance\n"
+                    report += "- âš ï¸ Fill Rate: Good performance\n"
                 else:
-                    report += "- ❌ Fill Rate: Needs improvement\n"
+                    report += "- âŒ Fill Rate: Needs improvement\n"
                 
                 if candidate_utilization >= 70:
-                    report += "- ✅ Candidate Utilization: Good pipeline health\n"
+                    report += "- âœ… Candidate Utilization: Good pipeline health\n"
                 elif candidate_utilization >= 50:
-                    report += "- ⚠️ Candidate Utilization: Moderate pipeline health\n"
+                    report += "- âš ï¸ Candidate Utilization: Moderate pipeline health\n"
                 else:
-                    report += "- ❌ Candidate Utilization: Pipeline needs attention\n"
+                    report += "- âŒ Candidate Utilization: Pipeline needs attention\n"
                 
                 return {
                     "intent_processed": True,
