@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     openrouter_api_key: str = Field(default=os.getenv("OPENROUTER_API_KEY", ""))
     openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.3-8b-instruct:free"))
-    openrouter_base_url: str = Field(default=os.getenv("OPENROUTER_BASE_URL", "https://api.openrouter.ai/v1"))
+    openrouter_base_url: str = Field(default=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"))
     openrouter_timeout: float = Field(default=float(os.getenv("OPENROUTER_TIMEOUT", "60.0")))
     openrouter_max_retries: int = Field(default=int(os.getenv("OPENROUTER_MAX_RETRIES", "3")))
     openrouter_backoff_factor: float = Field(default=float(os.getenv("OPENROUTER_BACKOFF_FACTOR", "0.8")))
@@ -34,14 +34,18 @@ class Settings(BaseSettings):
     meta_llama_timeout: float = Field(default=float(os.getenv("META_LLAMA_TIMEOUT", "30.0")))
     meta_llama_api_key: str = Field(default=os.getenv("META_LLAMA_API_KEY", ""))
     
-    # Nebius AI Configuration
-    nebius_enabled: bool = Field(default=os.getenv("NEBIUS_ENABLED", "false").lower() == "true")
-    nebius_api_key: str = Field(default=os.getenv("NEBIUS_API_KEY", ""))
-    nebius_base_url: str = Field(default=os.getenv("NEBIUS_BASE_URL", "https://api.studio.nebius.com/v1/"))
-    nebius_model: str = Field(default=os.getenv("NEBIUS_MODEL", "microsoft/phi-3-mini-4k-instruct"))
-    nebius_timeout: float = Field(default=float(os.getenv("NEBIUS_TIMEOUT", "30.0")))
-    nebius_temperature: float = Field(default=float(os.getenv("NEBIUS_TEMPERATURE", "0.1")))
-    nebius_max_tokens: int = Field(default=int(os.getenv("NEBIUS_MAX_TOKENS", "500")))
+    # Anthropic (Claude) — benchmark reference / final fallback tier (spec §4.3)
+    anthropic_enabled: bool = Field(default=os.getenv("ANTHROPIC_ENABLED", "true").lower() == "true")
+    anthropic_api_key: str = Field(default=os.getenv("ANTHROPIC_API_KEY", ""))
+    anthropic_model: str = Field(default=os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5"))
+
+    # Local chat tier (qwen3:8b on the existing Ollama box; spec §4.3-4.4)
+    ollama_chat_enabled: bool = Field(default=os.getenv("OLLAMA_CHAT_ENABLED", "true").lower() == "true")
+    ollama_chat_model: str = Field(default=os.getenv("OLLAMA_CHAT_MODEL", "qwen3:8b"))
+    ollama_chat_timeout: float = Field(default=float(os.getenv("OLLAMA_CHAT_TIMEOUT", "20.0")))
+
+    # Provider chain order (comma-separated; unknown/unconfigured names are skipped)
+    llm_provider_order: str = Field(default=os.getenv("LLM_PROVIDER_ORDER", "ollama,openrouter,anthropic"))
     
     # Database settings
     postgres_conn: str = Field(
@@ -101,11 +105,4 @@ def get_settings():
         env_path = find_dotenv()
         logging.info(f"Loading Settings from .env: '{env_path or 'not found'}'")
         _settings = Settings()
-        # Masked visibility for sensitive keys
-        try:
-            key = getattr(_settings, 'nebius_api_key', '')
-            masked = f"{key[:4]}...{key[-4:]}" if isinstance(key, str) and len(key) > 8 else ("set" if key else "<empty>")
-            logging.info(f"Settings.nebius_api_key: {masked}")
-        except Exception:
-            logging.info("Settings.nebius_api_key: <unavailable>")
     return _settings

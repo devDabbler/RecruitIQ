@@ -13,153 +13,62 @@ from .processors.base_processor import BaseProcessor
 from .processors.ocr_processor import OCRProcessor
 from .processors.markdown_processor import MarkdownProcessor
 from .processors.section_classifier_processor import SectionClassifierProcessor
-from backend.utils.resume_parsing.nebius_ai_parser import NebiusAIParser      
 
 from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
 
-def create_compatible_parser(service: Any, config_path: Optional[str] = None) -> "NebiusAIParser":
-    """
-    Create a compatible parser that works with any service that has generate_text method.
-    PREFERRED: Use Nebius AI service for resume parsing.
-
-    Args:
-        service: Any service that has a nebius_ai_service attribute or is a NebiusAIService itself
-        config_path: Optional path to configuration file
-
-    Returns:
-        NebiusAIParser instance
-    """
-    logger = logging.getLogger(__name__)
-
-    # First, try to get nebius_ai_service from the provided service
-    if hasattr(service, 'nebius_ai_service') and service.nebius_ai_service:   
-        logger.info(f"Using nebius_ai_service from {type(service).__name__}") 
-        return NebiusAIParser()
-
-    # If service is already a NebiusAIService, use it directly
-    from backend.services.nebius_ai_service import NebiusAIService
-    if isinstance(service, NebiusAIService):
-        logger.info(f"Using service directly as it's already a NebiusAIService")
-        return NebiusAIParser()
-
-    # If we don't have Nebius AI available, try to initialize it
-    try:
-        from backend.services.nebius_ai_service import get_nebius_ai_service  
-        logger.info("Attempting to initialize Nebius AI service directly")    
-        nebius_service = get_nebius_ai_service()
-        if nebius_service:
-            logger.info("Successfully initialized Nebius AI service") 
-        return NebiusAIParser()
-    except Exception as e:
-        logger.warning(f"Failed to initialize Nebius AI service directly: {e}")
-
-        # CRITICAL: We no longer allow any fallbacks to non-Nebius services   
-        # This is based on the user's explicit preference to use only Nebius AI (Phi-4)
-
-        # Instead of silently allowing fallback, raise an error to ensure proper configuration
-        error_msg = f"Service {type(service).__name__} cannot be used for resume parsing. Nebius AI service required."
-        logger.critical(error_msg)
-        print(f"\n\nCRITICAL ERROR: {error_msg}\n\n")
-        raise ValueError(error_msg)
-
 class ResumeParser:
     """
-    Main resume parser orchestrator that coordinates between different parsing strategies.
-    IMPORTANT: This parser uses Nebius AI (Phi-4) exclusively as the preferred backend.
+    Main resume parser orchestrator.
+
+    Primary extraction goes through the StructuredExtractor, which calls the
+    LLM provider chain (Ollama -> OpenRouter -> Claude) with the ResumeV2
+    schema. spaCy/regex extractors remain as non-LLM fallbacks.
     """
     def __init__(self, *args, **kwargs):
         """
         Initialize the resume parser.
 
-        IMPORTANT: This system is configured to use ONLY Nebius AI (Phi-4) for resume parsing.
-        Other LLM models (Ollama, mixtral-resume) are no longer supported.    
+        Supports multiple interface styles for backward compatibility:
 
-        This constructor supports multiple interface styles for backward compatibility:
-
-        - New style: ResumeParser(llm_service=llm_service, parser=parser, verbose=False)
-        - Old style: ResumeParser(storage_service=storage_service, llm_service=llm_service, ollama_service=None)
-
-        In all cases, only Nebius AI is used for parsing regardless of what services are passed.
+        - New style: ResumeParser(llm_service=llm_service, verbose=False)
+        - Old style: ResumeParser(storage_service=storage_service, llm_service=llm_service)
         """
         self.logger = logging.getLogger(__name__)
 
         # Extract parameters with backward compatibility
         storage_service = kwargs.get('storage_service', None)  # For old-style compatibility
         llm_service = kwargs.get('llm_service', None)
-        parser = kwargs.get('parser', None)
-        ollama_service = kwargs.get('ollama_service', None)  # Ignored, but accepted for compatibility
         self.verbose = kwargs.get('verbose', False)
 
         # Handle positional arguments for backward compatibility
+        # (old signature: ResumeParser(storage_service, llm_service, config_path))
         if args:
-            if len(args) >= 1 and llm_service is None:
-                # First positional arg could be llm_service or storage_service
-                if hasattr(args[0], 'nebius_ai_service'):
-                    llm_service = args[0]
-                else:
-                    storage_service = args[0]
-
             if len(args) >= 2 and llm_service is None:
                 llm_service = args[1]
+            elif len(args) == 1 and llm_service is None and hasattr(args[0], 'generate_text_async'):
+                llm_service = args[0]
 
         # Get service from registry if not provided
         if llm_service is None:
-            from backend.services.service_registry import provide_llm_service 
+            from backend.services.service_registry import provide_llm_service
             llm_service = provide_llm_service()
-            self.logger.info("Using LLM service from service registry")       
+            self.logger.info("Using LLM service from service registry")
 
         self.llm_service = llm_service
 
-        # Use provided parser or create one
-        if parser is not None:
-            # Verify the provided parser is actually using Nebius AI
-            parser_class = parser.__class__.__name__
-            if parser_class != "NebiusAIParser":
-                error_msg = f"Invalid parser class: {parser_class}. Only NebiusAIParser is supported."
-                self.logger.critical(error_msg)
-                raise ValueError(error_msg)
-
-            self.logger.info(f"Using provided {parser_class} for resume parsing")
-            self.parser = parser
-        else:
-            # Force Nebius AI initialization if needed
-            if not hasattr(llm_service, 'nebius_ai_service') or llm_service.nebius_ai_service is None:
-                self.logger.info("Nebius AI service not initialized in LLM service. Forcing initialization...")
-                # Force initialization - this will raise an exception if it fails
-                if hasattr(llm_service, '_initialize_nebius_ai'):
-                    success = llm_service._initialize_nebius_ai()
-                    if not success:
-                        raise RuntimeError("Failed to initialize Nebius AI - cannot proceed with resume parsing")
-                else:
-                    # Attempt to create directly using Nebius AI factory      
-                    try:
-                        from backend.services.nebius_ai_service import get_nebius_ai_service
-                        nebius_service = get_nebius_ai_service()
-                        if nebius_service:
-                            # Add it to the llm_service for future reference  
-                            llm_service.nebius_ai_service = nebius_service    
-                        else:
-                            raise RuntimeError("Failed to initialize Nebius AI service")
-                    except Exception as e:
-                        raise RuntimeError(f"Failed to initialize Nebius AI - cannot proceed with resume parsing: {e}")
-
-            self.logger.info("Creating parser with Nebius AI service")        
-            self.parser = create_compatible_parser(llm_service.nebius_ai_service)
-        # Log the actual service being used
-        parser_type = type(self.parser).__name__
-        self.logger.info(f"Resume parser initialized with: {parser_type}")    
+        from .extractors.structured_extractor import StructuredExtractor
+        self.structured_extractor = StructuredExtractor(llm_service)
+        self.logger.info("Resume parser initialized with StructuredExtractor (provider chain)")
 
         self.processors = [
             OCRProcessor(),
             MarkdownProcessor(),
             SectionClassifierProcessor()
         ]
-        # Legacy extractors are no longer used directly by the parser.        
-        # The nebius_ai_parser encapsulates the entire extraction process.    
-        # Secondary and tertiary extractors
+        # Secondary and tertiary (non-LLM) extractors
         from .extractors.nlp_extractor import NLPExtractor
         from .extractors.regex_extractor import RegexExtractor
         self.extractors = [
@@ -221,36 +130,43 @@ class ResumeParser:
             self.logger.info(f"Extracted {len(text)} characters from {file_path}")
 
             # ----------------------------------------------------------------
-            # Primary: Nebius AI parser
+            # Primary: LLM structured extraction via the provider chain
             # ----------------------------------------------------------------
             try:
-                nebius_result = await self.parser.parse_resume(text, file_path)
-                # Convert dictionary result to ResumeData object
-                if nebius_result and isinstance(nebius_result, dict):
-                    # Import Military for military data processing
+                llm_result = await self.structured_extractor.extract(text, file_path)
+                if llm_result and isinstance(llm_result, dict):
                     from backend.utils.resume_parsing.models.resume_schema import Military
-                    
+
+                    personal = llm_result.get('personal_info') or {}
+                    experiences = []
+                    for e in llm_result.get('experience', []):
+                        exp = dict(e)
+                        # ResumeV2 uses `responsibilities`; schema Experience uses `highlights`
+                        if exp.get('responsibilities') and not exp.get('highlights'):
+                            exp['highlights'] = exp['responsibilities']
+                        experiences.append(Experience(**exp))
+
                     resume_data = ResumeData(
                         personal_info=PersonalInfo(
-                            name=nebius_result.get('name', ''),
-                            email=nebius_result.get('email', ''),
-                            phone=nebius_result.get('phone', ''),
-                            location=nebius_result.get('location', ''),       
-                            linkedin=nebius_result.get('linkedin') or nebius_result.get('linkedin_url', '')
+                            name=personal.get('name', ''),
+                            email=personal.get('email', ''),
+                            phone=personal.get('phone', ''),
+                            location=personal.get('location', ''),
+                            linkedin=personal.get('linkedin') or personal.get('linkedin_url', ''),
                         ),
-                        education=[Education(**e) for e in nebius_result.get('education', [])],
-                        experience=[Experience(**e) for e in nebius_result.get('experience', [])],
-                        skills=[Skill(name=s['name'] if isinstance(s, dict) else s, category=s.get('category') if isinstance(s, dict) else None) for s in nebius_result.get('skills', [])],
+                        education=[Education(**e) for e in llm_result.get('education', [])],
+                        experience=experiences,
+                        skills=[Skill(name=s['name'] if isinstance(s, dict) else s, category=s.get('category') if isinstance(s, dict) else None) for s in llm_result.get('skills', [])],
                         projects=[],
                         certifications=[],
                         languages=[],
-                        military=[Military(**m) for m in nebius_result.get('military', [])],
+                        military=[Military(**m) for m in llm_result.get('military', [])],
                         raw_text=text,
                     )
                 else:
                     resume_data = None
-            except Exception as nebius_exc:
-                self.logger.error(f"Nebius AI parser failed: {nebius_exc}")   
+            except Exception as llm_exc:
+                self.logger.error(f"LLM structured extraction failed: {llm_exc}")
                 resume_data = None
 
             # ----------------------------------------------------------------
@@ -258,7 +174,7 @@ class ResumeParser:
             # ----------------------------------------------------------------
             MIN_EXP = 2
             if (not resume_data) or (not resume_data.experience) or (len(resume_data.experience) < MIN_EXP):
-                self.logger.info("Invoking secondary extractors due to incomplete Nebius result")
+                self.logger.info("Invoking secondary extractors due to incomplete LLM result")
                 aggregate: Dict[str, Any] = {}
                 for extractor in self.extractors:
                     try:
