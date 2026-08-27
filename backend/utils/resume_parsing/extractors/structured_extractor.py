@@ -24,12 +24,12 @@ class StructuredExtractor(BaseExtractor):
     """
 
     def __init__(self, llm_service: Optional[LLMService] = None):
-        # Prefer the unified LLMService (OpenRouter primary) and override model per call
+        # Uses the provider chain (Ollama -> OpenRouter -> Claude) via LLMService
         if llm_service is None:
             self.llm_service = get_llm_service()
         else:
             self.llm_service = llm_service
-        logger.info("StructuredExtractor initialized with LLMService (OpenRouter primary)")
+        logger.info("StructuredExtractor initialized with LLMService (provider chain)")
 
     @property
     def name(self) -> str:
@@ -56,19 +56,30 @@ class StructuredExtractor(BaseExtractor):
         # Create the prompt for the LLM
         prompt = self._create_prompt(raw_text, schema)
         
+        response_text = ""
+        extracted_data: Dict[str, Any] = {}
         try:
-            # Call the LLM service to get the structured data (explicit resume task type)
-            # Use a more reasonable token limit to avoid hitting model limits
-            # Route strictly via Nebius by signaling task_type; model override removed
-            response_text = await self.llm_service.generate_text_async(
-                prompt,
-                system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
-                max_tokens=8192,
-                task_type="resume_parsing"
-            )
-
-            # Parse the LLM's response
-            extracted_data = self._parse_llm_response(response_text)
+            # Call the provider chain with the ResumeV2 schema. Providers with
+            # native schema support (Ollama format param, Claude messages.parse)
+            # enforce conformance server-side; OpenAI-compatible providers get a
+            # JSON instruction plus the repair layer in generate_structured.
+            if hasattr(self.llm_service, "generate_structured"):
+                extracted_data = await self.llm_service.generate_structured(
+                    prompt,
+                    contract,
+                    system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
+                    max_tokens=8192,
+                    task_type="resume_parsing",
+                )
+            else:
+                # Fallback for callers injecting a legacy/plain-text service
+                response_text = await self.llm_service.generate_text_async(
+                    prompt,
+                    system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
+                    max_tokens=8192,
+                    task_type="resume_parsing",
+                )
+                extracted_data = self._parse_llm_response(response_text)
 
             # Validate the data against the contract
             try:
