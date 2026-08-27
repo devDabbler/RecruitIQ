@@ -674,7 +674,6 @@ def page():
                 <ul>
                     <li><b>Research</b> candidates, companies, and markets instantly</li>
                     <li><b>Create compelling pitches</b> for top talent</li>
-                    <li><b>Answer travel, commute, and relocation questions</b> for candidates (cost, neighborhoods, quality of life, commute trade-offs)</li>
                     <li><b>Analyze salaries</b> and market compensation</li>
                     <li><b>Assess skills</b> and suggest upskilling paths</li>
                     <li><b>Learn about technologies, tools, or industries</b> on demand</li>
@@ -1862,7 +1861,7 @@ def save_candidate_pitch(pitch_content, user_id=None, candidate_id=None, job_id=
                 response = requests.post(api_url, json=payload)
                 
                 if response.status_code == 200:
-                    st.success(" Pitch saved successfully! You can view it in the Communications tab.")
+                    st.success(" Pitch saved successfully!")
                     return {"success": True, "message": "Pitch saved successfully"}
                 else:
                     st.error(f"Failed to save pitch: {response.text}")
