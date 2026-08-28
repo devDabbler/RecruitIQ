@@ -136,10 +136,142 @@ NEW_JOBS = [
         "max_salary": 245000,
         "skills": "Leadership,Distributed Systems,Kubernetes,Terraform,Hiring,Mentorship",
     },
+    # The six below existed only in the original dev database, which made a
+    # fresh install seed 2 jobs instead of 8 (found deploying Phase 4). Ported
+    # here verbatim, plus salary bands the legacy rows never had.
+    {
+        "title": "Senior Data Scientist",
+        "department": "Data Science",
+        "job_overview": (
+            "Lead advanced analytics and machine learning projects. Mentor junior "
+            "data scientists and drive business impact through data-driven insights."
+        ),
+        "required_qualifications": (
+            "PhD or MS in Computer Science, Statistics, or related field\n"
+            "5+ years experience in data science or machine learning\n"
+            "Expertise in Python, SQL, and ML frameworks (TensorFlow, PyTorch)\n"
+            "Strong communication and leadership skills"
+        ),
+        "location": "Austin, TX",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "senior",
+        "min_salary": 155000,
+        "max_salary": 195000,
+        "skills": "Python,Machine Learning,Deep Learning,SQL,TensorFlow,PyTorch,Statistics,Data Visualization",
+    },
+    {
+        "title": "Junior Data Scientist",
+        "department": "Data Science",
+        "job_overview": (
+            "Support data analysis and model development. Work with senior team "
+            "members to deliver actionable insights."
+        ),
+        "required_qualifications": (
+            "BS or MS in Computer Science, Math, or related field\n"
+            "0-2 years experience in data analysis or machine learning\n"
+            "Proficiency in Python and data analysis libraries\n"
+            "Eagerness to learn and grow in a fast-paced environment"
+        ),
+        "location": "Miami, FL",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "entry",
+        "min_salary": 85000,
+        "max_salary": 110000,
+        "skills": "Python,Pandas,Scikit-learn,SQL,Data Cleaning,Data Visualization",
+    },
+    {
+        "title": "Software Development Engineer",
+        "department": "Engineering",
+        "job_overview": (
+            "Design, develop, and maintain scalable software solutions. Collaborate "
+            "with cross-functional teams to deliver high-quality products."
+        ),
+        "required_qualifications": (
+            "BS in Computer Science or related field\n"
+            "2+ years experience in software development\n"
+            "Experience with modern software engineering practices\n"
+            "Strong problem-solving and teamwork skills"
+        ),
+        "location": "San Francisco, CA",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "mid",
+        "min_salary": 140000,
+        "max_salary": 180000,
+        "skills": "Python,Java,C++,REST APIs,Docker,CI/CD,Agile,Git",
+    },
+    {
+        "title": "Product Manager",
+        "department": "Product",
+        "job_overview": (
+            "Own the product lifecycle from ideation to launch. Work closely with "
+            "engineering, design, and business teams to deliver value to users."
+        ),
+        "required_qualifications": (
+            "BS/BA in Business, Engineering, or related field\n"
+            "3+ years experience in product management\n"
+            "Strong communication and organizational skills\n"
+            "Experience with Agile methodologies"
+        ),
+        "location": "San Francisco, CA",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "mid",
+        "min_salary": 145000,
+        "max_salary": 185000,
+        "skills": "Product Management,Agile,User Research,Roadmapping,Stakeholder Management,Data Analysis",
+    },
+    {
+        "title": "Gen AI Engineer",
+        "department": "AI Research",
+        "job_overview": (
+            "Develop and deploy generative AI models for real-world applications. "
+            "Collaborate with research and engineering teams to push the boundaries of AI."
+        ),
+        "required_qualifications": (
+            "MS or PhD in Computer Science, AI, or related field\n"
+            "3+ years experience with deep learning and NLP\n"
+            "Hands-on experience with LLMs and generative models\n"
+            "Strong publication record or open-source contributions a plus"
+        ),
+        "location": "Boston, MA",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "senior",
+        "min_salary": 175000,
+        "max_salary": 225000,
+        "skills": "Python,Large Language Models,NLP,Deep Learning,Prompt Engineering,PyTorch,Transformers",
+    },
+    {
+        "title": "Data Engineer",
+        "department": "Data Engineering",
+        "job_overview": (
+            "Build and maintain robust data pipelines and infrastructure. Ensure "
+            "data quality and availability for analytics and machine learning."
+        ),
+        "required_qualifications": (
+            "BS in Computer Science, Engineering, or related field\n"
+            "2+ years experience in data engineering\n"
+            "Experience with cloud platforms and big data tools\n"
+            "Strong SQL and programming skills"
+        ),
+        "location": "Seattle, WA",
+        "location_type": "on_site",
+        "job_type": "full_time",
+        "experience_level": "mid",
+        "min_salary": 130000,
+        "max_salary": 170000,
+        "skills": "Python,SQL,ETL,Data Warehousing,Airflow,AWS,Spark,Docker",
+    },
 ]
 
-# 17 candidates to bring the existing 23 up to 40. Positions deliberately span
-# all eight jobs so the Matching screen has plausible pairings to rank.
+# All 40 candidates, entirely synthetic. The original script only carried 17
+# and leaned on 23 legacy rows in the dev database - rows that included real
+# parsed resumes, which the spec (§6) bars from the public demo, and which a
+# fresh install does not have anyway. Positions deliberately span all eight
+# jobs so the Matching screen has plausible pairings to rank.
 NEW_CANDIDATES = [
     ("Priya", "Raghavan", "Seattle, WA", "ML Engineer scaling recsys to 40M users",
      "Machine Learning Engineer", "Senior ML Engineer", "Instacart",
@@ -192,6 +324,75 @@ NEW_CANDIDATES = [
     ("Isabel", "Moreau", "Chicago, IL", "Data platform engineer, lakehouse migrations",
      "Data Engineer", "Data Platform Engineer", "McDonald's",
      ["Python", "Spark", "Delta Lake", "Airflow", "AWS", "Terraform"]),
+    ("Aisha", "Karim", "Boston, MA", "LLM applications engineer, agents and tool use",
+     "Gen AI Engineer", "Machine Learning Engineer", "HubSpot",
+     ["Python", "Large Language Models", "Prompt Engineering", "LangChain", "Deep Learning", "Transformers"]),
+    ("Viktor", "Novak", "Seattle, WA", "Streaming infrastructure, Kafka at petabyte scale",
+     "Data Engineer", "Staff Data Engineer", "Netflix",
+     ["Python", "Kafka", "Spark", "ETL", "AWS", "Data Warehousing"]),
+    ("Fatima", "El-Sayed", "Austin, TX", "Applied ML for pricing and demand forecasting",
+     "Senior Data Scientist", "Senior Data Scientist", "Expedia",
+     ["Python", "Machine Learning", "Statistics", "SQL", "TensorFlow", "Data Visualization"]),
+    ("Ben", "Castellano", "San Francisco, CA", "Backend generalist, Go and Postgres",
+     "Software Development Engineer", "Software Engineer II", "DoorDash",
+     ["Go", "Python", "REST APIs", "Docker", "CI/CD", "PostgreSQL"]),
+    ("Ingrid", "Sorensen", "Remote, US", "PM for data products, ex-analyst",
+     "Product Manager", "Product Manager", "Tableau",
+     ["Product Management", "Data Analysis", "User Research", "Roadmapping", "SQL", "Agile"]),
+    ("Kwame", "Boateng", "New York, NY", "Quant turned ML engineer, risk models",
+     "Machine Learning Engineer", "Quantitative Developer", "Two Sigma",
+     ["Python", "PyTorch", "Feature Engineering", "AWS", "SQL", "Statistics"]),
+    ("Lucia", "Ferrari", "Boston, MA", "PhD NLP, evaluation harnesses for LLMs",
+     "Gen AI Engineer", "Research Scientist", "Allen Institute for AI",
+     ["Python", "NLP", "Transformers", "Large Language Models", "Deep Learning", "Hugging Face"]),
+    ("Derek", "Osei", "Chicago, IL", "Analytics engineer moving to platform work",
+     "Data Engineer", "Analytics Engineer", "United Airlines",
+     ["SQL", "dbt", "Airflow", "Python", "Snowflake", "Data Warehousing"]),
+    ("Maya", "Lindholm", "Denver, CO", "Experimentation platform DS, ex-consultant",
+     "Senior Data Scientist", "Data Science Manager", "Slack",
+     ["Python", "Experimentation", "Statistics", "SQL", "Machine Learning", "Causal Inference"]),
+    ("Ravi", "Chandran", "San Francisco, CA", "Distributed systems, service mesh migrations",
+     "Engineering Manager, Platform", "Senior Staff Engineer", "LinkedIn",
+     ["Distributed Systems", "Kubernetes", "Terraform", "Go", "Leadership", "Mentorship"]),
+    ("Sofia", "Reyes", "Miami, FL", "Bootcamp grad, strong SQL portfolio",
+     "Junior Data Scientist", "Business Analyst", "Royal Caribbean",
+     ["Python", "SQL", "Pandas", "Data Visualization", "Data Cleaning"]),
+    ("Ethan", "Caldwell", "Portland, OR", "Full stack with ML feature integration",
+     "Software Development Engineer", "Software Engineer", "New Relic",
+     ["TypeScript", "React", "Python", "REST APIs", "Docker", "Git"]),
+    ("Zara", "Hussain", "Remote, US", "Platform PM, internal tooling and DX",
+     "Product Manager", "Associate Product Manager", "GitLab",
+     ["Product Management", "Developer Experience", "Agile", "User Stories", "Data Analysis"]),
+    ("Anders", "Vik", "Seattle, WA", "Model serving at the edge, ONNX and Triton",
+     "Machine Learning Engineer", "ML Infrastructure Engineer", "Adobe",
+     ["Python", "Kubernetes", "MLflow", "AWS", "CI/CD", "Feature Engineering"]),
+    ("Camille", "Dubois", "New York, NY", "Data scientist, marketing mix and attribution",
+     "Senior Data Scientist", "Senior Analyst", "McKinsey",
+     ["Python", "R", "Statistics", "SQL", "Machine Learning", "Data Visualization"]),
+    ("Jamal", "Winters", "Atlanta, GA", "Kafka-centric pipelines, CDC and lakehouse",
+     "Data Engineer", "Data Engineer", "Home Depot",
+     ["Python", "Kafka", "Spark", "Airflow", "AWS", "Docker"]),
+    ("Rin", "Nakamura", "San Francisco, CA", "Agents and retrieval, shipped two LLM products",
+     "Gen AI Engineer", "Senior Software Engineer", "Replit",
+     ["Python", "Large Language Models", "RAG", "Prompt Engineering", "PostgreSQL", "Docker"]),
+    ("Olive", "Bennett", "Boston, MA", "MS CS, undergrad TA, one fintech internship",
+     "Junior Data Scientist", "Graduate Student", "Northeastern University",
+     ["Python", "Scikit-learn", "Pandas", "SQL", "Statistics"]),
+    ("Hugo", "Almeida", "Austin, TX", "SRE-flavored platform lead",
+     "Engineering Manager, Platform", "Site Reliability Manager", "Cloudflare",
+     ["Leadership", "Kubernetes", "Terraform", "Distributed Systems", "Hiring", "CI/CD"]),
+    ("Talia", "Rosen", "Chicago, IL", "Growth PM with experimentation depth",
+     "Product Manager", "Growth Product Manager", "Duolingo",
+     ["Product Management", "A/B Testing", "User Research", "Roadmapping", "Stakeholder Management"]),
+    ("George", "Antoniou", "Denver, CO", "C++ systems engineer exploring services",
+     "Software Development Engineer", "Systems Engineer", "Garmin",
+     ["C++", "Python", "REST APIs", "Git", "Agile", "Docker"]),
+    ("Leilani", "Kahale", "Remote, US", "Operations analyst pivoting into data science",
+     "Junior Data Scientist", "Operations Analyst", "Hawaiian Airlines",
+     ["SQL", "Python", "Data Visualization", "Pandas", "Data Cleaning"]),
+    ("Stefan", "Weber", "Seattle, WA", "Recommender systems, embeddings and ranking",
+     "Machine Learning Engineer", "Applied Scientist", "Amazon",
+     ["Python", "PyTorch", "Feature Engineering", "MLflow", "AWS", "SQL"]),
 ]
 
 EMAIL_DOMAIN = "demo.recruitiq.dev"
