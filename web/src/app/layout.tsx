@@ -1,0 +1,52 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { Geist, Geist_Mono } from "next/font/google";
+
+import { Nav } from "@/components/nav";
+import { SessionBadge } from "@/components/session-badge";
+import "./globals.css";
+
+const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+
+export const metadata: Metadata = {
+  title: "RecruitIQ",
+  description: "AI-assisted applicant tracking, built by a recruiter.",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="flex min-h-full flex-col bg-slate-50 text-slate-900">
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
+          <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
+            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+              <span className="grid h-8 w-8 place-items-center rounded-lg bg-slate-900 text-sm font-bold text-white">
+                R
+              </span>
+              <span className="hidden sm:inline">RecruitIQ</span>
+            </Link>
+            <div className="flex-1">
+              <Nav />
+            </div>
+            <SessionBadge />
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6">{children}</main>
+
+        <footer className="border-t border-slate-200 bg-white">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:px-6">
+            <span>RecruitIQ — a portfolio demo. Data is seeded and read-only.</span>
+            <a href="/docs" className="font-medium text-slate-700 hover:underline">
+              API docs
+            </a>
+          </div>
+        </footer>
+      </body>
+    </html>
+  );
+}
