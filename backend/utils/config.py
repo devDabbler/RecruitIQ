@@ -76,6 +76,13 @@ class Settings(BaseSettings):
     redis_host: str = Field(default=os.getenv("REDIS_HOST", "localhost"))
     redis_port: int = Field(default=int(os.getenv("REDIS_PORT", "6379")))
     redis_password: Optional[str] = Field(default=os.getenv("REDIS_PASSWORD", None))
+    # Logical database index. Production shares a Redis server with another
+    # system that owns db 0, so this MUST be honored wherever a client is built.
+    redis_db: int = Field(default=int(os.getenv("REDIS_DB", "0")))
+
+    # Demo abuse cap: parses per IP per day on the public parse endpoints.
+    # The per-minute rate limit lives in nginx; this bounds the daily total.
+    parse_daily_limit: int = Field(default=int(os.getenv("PARSE_DAILY_LIMIT", "20")))
     
     # MinIO settings
     minio_endpoint: str = Field(default=os.getenv("MINIO_ENDPOINT", "localhost:9000"))

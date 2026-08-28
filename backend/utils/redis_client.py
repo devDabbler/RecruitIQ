@@ -29,8 +29,10 @@ async def get_redis_client() -> redis_asyncio.Redis:
         
     settings = get_settings()
     
-    # Force connection without password as Redis server doesn't have authentication configured
-    redis_url = f"redis://{settings.redis_host}:{settings.redis_port}"
+    # No password: the servers this runs against don't have auth configured.
+    # The db index is load-bearing in production, where db 0 belongs to a
+    # different system on the same Redis server.
+    redis_url = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
     
     try:
         _redis_client = redis_asyncio.from_url(
