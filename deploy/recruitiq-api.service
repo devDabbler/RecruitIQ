@@ -9,7 +9,10 @@ User=recruitiq
 Group=recruitiq
 WorkingDirectory=/opt/recruitiq/app
 EnvironmentFile=/etc/recruitiq/env
-ExecStart=/opt/recruitiq/app/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8020 --workers 1
+# Two workers: endpoints doing sync DB work on the event loop can wedge a
+# worker under parallel load; the second keeps the API answering while the
+# first recovers (see ADR 0003 and backend/utils/database.py).
+ExecStart=/opt/recruitiq/app/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8020 --workers 2
 Restart=on-failure
 RestartSec=3
 
