@@ -1,0 +1,355 @@
+{
+  "candidates.create": {
+    "shape": {
+      "candidate_notes": [],
+      "created_at": "str",
+      "current_company": "null",
+      "current_position": "null",
+      "education": [],
+      "email": "str",
+      "first_name": "str",
+      "headline": "null",
+      "id": "str",
+      "interactions": [],
+      "job_id": "null",
+      "last_name": "str",
+      "location": "null",
+      "notes": "null",
+      "parsed_data": "null",
+      "phone": "null",
+      "position_applied": "null",
+      "resume_id": "null",
+      "skills": [],
+      "source": "null",
+      "status": "str",
+      "updated_at": "str",
+      "work_experience": []
+    },
+    "status": 200
+  },
+  "candidates.delete": {
+    "shape": {
+      "message": "str"
+    },
+    "status": 200
+  },
+  "candidates.detail": {
+    "shape": {
+      "candidate_notes": [],
+      "created_at": "str",
+      "current_company": "str",
+      "current_position": "str",
+      "education": [],
+      "email": "str",
+      "first_name": "str",
+      "headline": "str",
+      "id": "str",
+      "interactions": [],
+      "job_id": "int",
+      "last_name": "str",
+      "location": "str",
+      "notes": "str",
+      "parsed_data": {
+        "education": [],
+        "experience": [
+          {
+            "bullet_count": "int",
+            "bullet_points": [
+              "str"
+            ],
+            "company": "str",
+            "description": "str",
+            "end_date": "str",
+            "start_date": "str",
+            "title": "str"
+          }
+        ],
+        "personal_info": {
+          "email": "str",
+          "location": "str",
+          "name": "str"
+        },
+        "skills": [
+          "str"
+        ],
+        "summary": "str"
+      },
+      "phone": "str",
+      "position_applied": "str",
+      "resume_id": "int",
+      "skills": [
+        "str"
+      ],
+      "source": "str",
+      "status": "str",
+      "updated_at": "str",
+      "work_experience": []
+    },
+    "status": 200
+  },
+  "candidates.resumes": {
+    "shape": {
+      "candidate_id": "str",
+      "resumes": [
+        {
+          "created_at": "str",
+          "file_name": "str",
+          "file_type": "str",
+          "id": "int"
+        }
+      ]
+    },
+    "status": 200
+  },
+  "candidates.search": {
+    "shape": {
+      "page": "int",
+      "page_size": "int",
+      "results": [
+        {
+          "candidate_notes": [],
+          "created_at": "str",
+          "current_company": "str",
+          "current_position": "str",
+          "education": [],
+          "email": "str",
+          "first_name": "str",
+          "headline": "str",
+          "id": "str",
+          "interactions": [],
+          "job_id": "int",
+          "last_name": "str",
+          "location": "str",
+          "notes": "str",
+          "parsed_data": "null",
+          "phone": "str",
+          "position_applied": "str",
+          "resume_id": "null",
+          "skills": [
+            "str"
+          ],
+          "source": "str",
+          "status": "str",
+          "updated_at": "str",
+          "work_experience": []
+        }
+      ],
+      "total": "int"
+    },
+    "status": 200
+  },
+  "candidates.skills_breakdown": {
+    "shape": {
+      "<dynamic-keys>": "str"
+    },
+    "status": 404
+  },
+  "health": {
+    "shape": {
+      "status": "str"
+    },
+    "status": 200
+  },
+  "jobs.applications_for_candidate": {
+    "shape": {
+      "detail": [
+        {
+          "input": "str",
+          "loc": [
+            "str"
+          ],
+          "msg": "str",
+          "type": "str"
+        }
+      ]
+    },
+    "status": 422
+  },
+  "jobs.apply": {
+    "shape": {
+      "applied_at": "str",
+      "candidate_id": "str",
+      "id": "int",
+      "job_id": "int",
+      "source": "str",
+      "status": "str"
+    },
+    "status": 200
+  },
+  "jobs.candidates": {
+    "shape": [
+      {
+        "created_at": "str",
+        "email": "str",
+        "first_name": "str",
+        "id": "str",
+        "last_name": "str",
+        "status": "str"
+      }
+    ],
+    "status": 200
+  },
+  "jobs.create": {
+    "shape": {
+      "application_deadline": "null",
+      "applications": "int",
+      "created_at": "str",
+      "department": "str",
+      "experience_level": "str",
+      "hiring_manager": "null",
+      "id": "int",
+      "job_metadata": {},
+      "job_overview": "str",
+      "job_type": "str",
+      "location": "str",
+      "location_type": "str",
+      "max_salary": "null",
+      "min_salary": "null",
+      "recruiter": "null",
+      "required_qualifications": "str",
+      "skills": [],
+      "start_date": "null",
+      "status": "str",
+      "title": "str",
+      "updated_at": "str",
+      "views": "int"
+    },
+    "status": 201
+  },
+  "jobs.delete": {
+    "shape": {
+      "message": "str"
+    },
+    "status": 200
+  },
+  "jobs.detail": {
+    "shape": {
+      "application_deadline": "null",
+      "applications": "int",
+      "created_at": "str",
+      "department": "str",
+      "experience_level": "str",
+      "hiring_manager": "str",
+      "id": "int",
+      "job_metadata": {},
+      "job_overview": "str",
+      "job_type": "str",
+      "location": "str",
+      "location_type": "str",
+      "max_salary": "int",
+      "min_salary": "int",
+      "recruiter": "str",
+      "required_qualifications": "str",
+      "skills": [
+        "str"
+      ],
+      "start_date": "null",
+      "status": "str",
+      "title": "str",
+      "updated_at": "str",
+      "views": "int"
+    },
+    "status": 200
+  },
+  "jobs.save": {
+    "shape": {
+      "candidate_id": "str",
+      "id": "int",
+      "job_id": "int",
+      "notes": "str",
+      "saved_at": "str"
+    },
+    "status": 200
+  },
+  "jobs.saved_for_candidate": {
+    "shape": {
+      "detail": [
+        {
+          "input": "str",
+          "loc": [
+            "str"
+          ],
+          "msg": "str",
+          "type": "str"
+        }
+      ]
+    },
+    "status": 422
+  },
+  "jobs.search": {
+    "shape": {
+      "page": "int",
+      "page_size": "int",
+      "results": [
+        {
+          "application_deadline": "null",
+          "applications": "int",
+          "created_at": "str",
+          "department": "str",
+          "experience_level": "str",
+          "hiring_manager": "str",
+          "id": "int",
+          "job_metadata": {},
+          "job_overview": "str",
+          "job_type": "str",
+          "location": "str",
+          "location_type": "str",
+          "max_salary": "int",
+          "min_salary": "int",
+          "recruiter": "str",
+          "required_qualifications": "str",
+          "skills": [
+            "str"
+          ],
+          "start_date": "null",
+          "status": "str",
+          "title": "str",
+          "updated_at": "str",
+          "views": "int"
+        }
+      ],
+      "total": "int"
+    },
+    "status": 200
+  },
+  "jobs.track_view": {
+    "shape": {
+      "message": "str",
+      "total_views": "int"
+    },
+    "status": 200
+  },
+  "jobs.update": {
+    "shape": {
+      "application_deadline": "null",
+      "applications": "int",
+      "created_at": "str",
+      "department": "str",
+      "experience_level": "str",
+      "hiring_manager": "null",
+      "id": "int",
+      "job_metadata": {},
+      "job_overview": "str",
+      "job_type": "str",
+      "location": "str",
+      "location_type": "str",
+      "max_salary": "null",
+      "min_salary": "null",
+      "recruiter": "null",
+      "required_qualifications": "str",
+      "skills": [],
+      "start_date": "null",
+      "status": "str",
+      "title": "str",
+      "updated_at": "str",
+      "views": "int"
+    },
+    "status": 200
+  },
+  "resume.detail": {
+    "shape": {
+      "detail": "str"
+    },
+    "status": 404
+  }
+}
