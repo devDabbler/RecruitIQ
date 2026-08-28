@@ -361,6 +361,9 @@
         }
       ],
       "file_id": "null",
+      "hiring_recommendation": "null",
+      "job_fit_score": "null",
+      "market_alignment": "null",
       "message": "str",
       "military": "null",
       "parsed_data": "null",
@@ -375,7 +378,9 @@
         "summary": "null",
         "website": "null"
       },
+      "quality_assessment": "null",
       "resume_id": "int",
+      "skill_suggestions": "null",
       "skills": [
         {
           "category": "str",

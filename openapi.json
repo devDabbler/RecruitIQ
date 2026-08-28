@@ -196,6 +196,36 @@
         "title": "Body_parse_resume_direct_api_resume_parse_direct_post",
         "type": "object"
       },
+      "Body_save_candidate_from_parse_api_resume_save_candidate_post": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          },
+          "parsed_data": {
+            "title": "Parsed Data",
+            "type": "string"
+          },
+          "position_applied": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position Applied"
+          }
+        },
+        "required": [
+          "file",
+          "parsed_data"
+        ],
+        "title": "Body_save_candidate_from_parse_api_resume_save_candidate_post",
+        "type": "object"
+      },
       "Body_save_candidate_pitch_api_pitches_save_post": {
         "properties": {
           "candidate_id": {
@@ -2597,6 +2627,39 @@
             ],
             "title": "File Id"
           },
+          "hiring_recommendation": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hiring Recommendation"
+          },
+          "job_fit_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Fit Score"
+          },
+          "market_alignment": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Alignment"
+          },
           "message": {
             "default": "Resume parsed successfully",
             "title": "Message",
@@ -2638,6 +2701,17 @@
             ],
             "title": "Personal Info"
           },
+          "quality_assessment": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quality Assessment"
+          },
           "resume_id": {
             "anyOf": [
               {
@@ -2648,6 +2722,17 @@
               }
             ],
             "title": "Resume Id"
+          },
+          "skill_suggestions": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skill Suggestions"
           },
           "skills": {
             "anyOf": [
@@ -2728,6 +2813,45 @@
           "location"
         ],
         "title": "SalaryBenchmarkRequest",
+        "type": "object"
+      },
+      "SaveCandidateResponse": {
+        "description": "API response model for saving a reviewed parse as a candidate.",
+        "properties": {
+          "candidate_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Id"
+          },
+          "message": {
+            "default": "Candidate saved",
+            "title": "Message",
+            "type": "string"
+          },
+          "resume_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resume Id"
+          },
+          "success": {
+            "default": true,
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "title": "SaveCandidateResponse",
         "type": "object"
       },
       "SavedJobCreate": {
@@ -6924,6 +7048,49 @@
           }
         },
         "summary": "Parse Resume Direct",
+        "tags": [
+          "resume",
+          "resume"
+        ]
+      }
+    },
+    "/api/resume/save-candidate": {
+      "post": {
+        "description": "Persist a reviewed parse: upsert the candidate, store the file, save the resume.\n\nTakes the parse the client already has instead of re-running the model, so a\nsave is a few hundred milliseconds rather than another LLM round trip.\n\nDeliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`\ngate refuses anonymous callers (401) and the demo role (403) before this\nhandler runs, so only an administrator can reach it.",
+        "operationId": "save_candidate_from_parse_api_resume_save_candidate_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_save_candidate_from_parse_api_resume_save_candidate_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SaveCandidateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Candidate From Parse",
         "tags": [
           "resume",
           "resume"

@@ -1220,6 +1220,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/resume/save-candidate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Save Candidate From Parse
+         * @description Persist a reviewed parse: upsert the candidate, store the file, save the resume.
+         *
+         *     Takes the parse the client already has instead of re-running the model, so a
+         *     save is a few hundred milliseconds rather than another LLM round trip.
+         *
+         *     Deliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`
+         *     gate refuses anonymous callers (401) and the demo role (403) before this
+         *     handler runs, so only an administrator can reach it.
+         */
+        post: operations["save_candidate_from_parse_api_resume_save_candidate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resume/test": {
         parameters: {
             query?: never;
@@ -1665,6 +1692,18 @@ export interface components {
              * @default false
              */
             save_to_db: boolean;
+        };
+        /** Body_save_candidate_from_parse_api_resume_save_candidate_post */
+        Body_save_candidate_from_parse_api_resume_save_candidate_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /** Parsed Data */
+            parsed_data: string;
+            /** Position Applied */
+            position_applied?: string | null;
         };
         /** Body_save_candidate_pitch_api_pitches_save_post */
         Body_save_candidate_pitch_api_pitches_save_post: {
@@ -2431,6 +2470,12 @@ export interface components {
             experience?: Record<string, never>[] | null;
             /** File Id */
             file_id?: string | null;
+            /** Hiring Recommendation */
+            hiring_recommendation?: Record<string, never> | null;
+            /** Job Fit Score */
+            job_fit_score?: number | null;
+            /** Market Alignment */
+            market_alignment?: Record<string, never> | null;
             /**
              * Message
              * @default Resume parsed successfully
@@ -2442,8 +2487,12 @@ export interface components {
             parsed_data?: Record<string, never> | null;
             /** Personal Info */
             personal_info?: Record<string, never> | null;
+            /** Quality Assessment */
+            quality_assessment?: Record<string, never> | null;
             /** Resume Id */
             resume_id?: number | null;
+            /** Skill Suggestions */
+            skill_suggestions?: Record<string, never> | null;
             /** Skills */
             skills?: Record<string, never>[] | null;
             /**
@@ -2469,6 +2518,26 @@ export interface components {
             job_title: string;
             /** Location */
             location: string;
+        };
+        /**
+         * SaveCandidateResponse
+         * @description API response model for saving a reviewed parse as a candidate.
+         */
+        SaveCandidateResponse: {
+            /** Candidate Id */
+            candidate_id?: string | null;
+            /**
+             * Message
+             * @default Candidate saved
+             */
+            message: string;
+            /** Resume Id */
+            resume_id?: number | null;
+            /**
+             * Success
+             * @default true
+             */
+            success: boolean;
         };
         /**
          * SavedJobCreate
@@ -4931,6 +5000,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ResumeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_candidate_from_parse_api_resume_save_candidate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_save_candidate_from_parse_api_resume_save_candidate_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SaveCandidateResponse"];
                 };
             };
             /** @description Validation Error */
