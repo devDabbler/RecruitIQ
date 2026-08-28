@@ -1,0 +1,12 @@
+Dmitri Volkov | Boston, MA | d.volkov@example.com | 555-455-8821
+
+Machine learning engineer specializing in NLP systems.
+
+PROFESSIONAL EXPERIENCE
+Beacon Language AI | Machine Learning Engineer | 2021-Present
+ * Fine-tune and deploy transformer models for document classification; Built evaluation harness cutting model regression escapes to zero
+Harborlight Insurance | Data Scientist | 2018-2021
+ * Developed claims-fraud detection models saving $2M annually
+
+EDUCATION: MS, Computer Science, Northeastern University 2018 / BS, Statistics, Boston University 2016
+CORE SKILLS: Python - PyTorch - Transformers - spaCy - MLflow - AWS SageMaker

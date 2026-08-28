@@ -1,0 +1,25 @@
+{
+  "name": "Omar Haddad",
+  "email": "omar.haddad@example.com",
+  "phone": "555-517-2098",
+  "location": "Chicago, IL",
+  "experience_titles": [
+    "Analytics Engineer",
+    "Senior Financial Analyst"
+  ],
+  "experience_companies": [
+    "Wacker Street Capital",
+    "Lakeview Holdings"
+  ],
+  "skills": [
+    "SQL",
+    "dbt",
+    "Looker",
+    "Python",
+    "Financial Modeling",
+    "Excel"
+  ],
+  "education_institutions": [
+    "University of Illinois Urbana-Champaign"
+  ]
+}

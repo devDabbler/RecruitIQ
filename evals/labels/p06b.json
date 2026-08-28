@@ -1,0 +1,26 @@
+{
+  "name": "Dmitri Volkov",
+  "email": "d.volkov@example.com",
+  "phone": "555-455-8821",
+  "location": "Boston, MA",
+  "experience_titles": [
+    "Machine Learning Engineer",
+    "Data Scientist"
+  ],
+  "experience_companies": [
+    "Beacon Language AI",
+    "Harborlight Insurance"
+  ],
+  "skills": [
+    "Python",
+    "PyTorch",
+    "Transformers",
+    "spaCy",
+    "MLflow",
+    "AWS SageMaker"
+  ],
+  "education_institutions": [
+    "Northeastern University",
+    "Boston University"
+  ]
+}

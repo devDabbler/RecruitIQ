@@ -1,0 +1,27 @@
+PRIYA RAGHAVAN-WELLS
+Austin, TX
+Email: priya.rw@example.com
+Phone: +1 (555) 640-2211
+
+WORK HISTORY
+2021 to Present
+Software Engineer II
+Hillstone Software
+* Ship features across a React/TypeScript frontend and Node microservices
+* Reduced p95 API latency from 900ms to 220ms via query batching
+
+2019 to 2021
+Junior Web Developer
+Bluebonnet Digital
+* Built marketing sites and internal dashboards for 20+ clients
+
+EDUCATION
+2019  BA Mathematics, University of Texas at Austin
+
+TECHNICAL SKILLS
+* JavaScript
+* TypeScript
+* React
+* Node.js
+* PostgreSQL
+* Docker

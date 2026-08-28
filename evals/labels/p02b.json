@@ -1,0 +1,24 @@
+{
+  "name": "Marcus Boone",
+  "email": "marcus.boone@example.com",
+  "phone": "555-882-4410",
+  "location": "Fayetteville, NC",
+  "experience_titles": [
+    "Operations Supervisor",
+    "Logistics NCO (92A)"
+  ],
+  "experience_companies": [
+    "Coastal Freight Systems",
+    "US Army"
+  ],
+  "skills": [
+    "Inventory Management",
+    "GCSS-Army",
+    "Forklift Operation",
+    "Microsoft Excel",
+    "Team Leadership"
+  ],
+  "education_institutions": [
+    "Fayetteville Technical Community College"
+  ]
+}

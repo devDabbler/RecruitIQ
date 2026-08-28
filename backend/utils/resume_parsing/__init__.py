@@ -10,12 +10,8 @@ Provides a modular, robust resume parsing implementation with:
 """
 
 # Main parser and factory functions
-# Unified public import – always use Nebius-backed parser
-from .parser import ResumeParser
+from .resume_parser_main import ResumeParser
 from .parser_factory import create_resume_parser
-
-# Nebius AI-based parser
-from .nebius_ai_parser import NebiusAIParser
 
 # Data models
 from .models.resume_schema import (
@@ -37,8 +33,7 @@ from .extractors import (
 __all__ = [
     # Main parser
     'ResumeParser', 'create_resume_parser',
-    'NebiusAIParser',
-    
+
     # Data models
     'ResumeData', 'PersonalInfo', 'Education', 'Experience',
     'Skill', 'Project', 'Certification', 'Language',

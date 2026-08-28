@@ -1,0 +1,28 @@
+MAYA CHEN
+Seattle, WA
+Email: maya.chen@example.com
+Phone: 555-201-3345
+
+WORK HISTORY
+2022 to Present
+Senior Data Engineer
+Cascadia Analytics
+* Designed Airflow DAGs orchestrating 40+ daily ETL jobs into Snowflake
+* Cut pipeline failure rate 60% by adding data quality checks with Great Expectations
+
+2019 to 2022
+Data Engineer
+Pugetworks
+* Built Kafka streaming ingestion for clickstream events at 50k msg/s
+* Migrated legacy SQL Server warehouse to BigQuery
+
+EDUCATION
+2019  BS Informatics, University of Washington
+
+TECHNICAL SKILLS
+* Python
+* SQL
+* Airflow
+* Snowflake
+* Kafka
+* dbt

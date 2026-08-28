@@ -1,0 +1,25 @@
+{
+  "name": "Priya Raghavan-Wells",
+  "email": "priya.rw@example.com",
+  "phone": "+1 (555) 640-2211",
+  "location": "Austin, TX",
+  "experience_titles": [
+    "Software Engineer II",
+    "Junior Web Developer"
+  ],
+  "experience_companies": [
+    "Hillstone Software",
+    "Bluebonnet Digital"
+  ],
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "Node.js",
+    "PostgreSQL",
+    "Docker"
+  ],
+  "education_institutions": [
+    "University of Texas at Austin"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Tom Okafor",
+  "email": "t.okafor@example.com",
+  "phone": "555-113-9902",
+  "location": "Columbus, OH",
+  "experience_titles": [
+    "ICU Registered Nurse",
+    "Med-Surg Nurse"
+  ],
+  "experience_companies": [
+    "Scioto Valley Medical Center",
+    "Franklin General Hospital"
+  ],
+  "skills": [
+    "Critical Care",
+    "Epic EHR",
+    "IV Therapy",
+    "Patient Education",
+    "BLS",
+    "ACLS"
+  ],
+  "education_institutions": [
+    "Ohio State University"
+  ]
+}
