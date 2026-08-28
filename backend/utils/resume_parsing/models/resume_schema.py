@@ -4,7 +4,7 @@ Defines Pydantic models for structured resume data
 """
 from typing import List, Optional, Dict, Any, Union
 from datetime import date as datetime_date
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, model_validator, validator
 import re
 
 
@@ -80,7 +80,12 @@ class PersonalInfo(BaseModel):
 
 class Education(BaseModel):
     """Education information"""
-    institution: str
+    # Optional, not required: these describe what a parser *extracted* from a
+    # PDF, and a parser misses fields. Eight of the thirty resumes in the
+    # development database have experience entries with no title, and a required
+    # field turned each of those into a 404 from GET /api/resume/{id} — the
+    # whole record lost because one line of it was incomplete.
+    institution: Optional[str] = None
     degree: Optional[str] = None
     field_of_study: Optional[str] = None
     start_date: Optional[Union[str, datetime_date]] = None
@@ -113,8 +118,8 @@ class Education(BaseModel):
 
 class Experience(BaseModel):
     """Work experience information"""
-    company: str
-    title: str
+    company: Optional[str] = None
+    title: Optional[str] = None
     start_date: Optional[Union[str, datetime_date]] = None
     end_date: Optional[Union[str, datetime_date]] = None
     location: Optional[str] = None
@@ -227,7 +232,19 @@ class Skill(BaseModel):
     category: Optional[str] = None
     level: Optional[str] = None
     keywords: Optional[List[str]] = None
-    
+
+    @model_validator(mode="before")
+    @classmethod
+    def accept_bare_string(cls, value):
+        """Some stored resumes hold skills as ["Python"], not [{"name": ...}].
+
+        Both shapes exist in the database. Rejecting the plain-string form threw
+        away the entire resume rather than one skill.
+        """
+        if isinstance(value, str):
+            return {"name": value}
+        return value
+
     @validator('category', pre=True, always=True)
     def categorize_skill(cls, v, values):
         """Automatically categorize skills if not provided"""

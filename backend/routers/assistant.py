@@ -8,11 +8,14 @@ tool loop (services/tool_loop.py) executes them against the database.
 The /chat contract is unchanged: {message, conversation_history,
 conversation_context} -> {response, conversation_context}.
 """
+import asyncio
 import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -32,13 +35,35 @@ applicant tracking system. You have tools that read live data: candidate search
 salary benchmarks, pipeline stats, and parsed resumes.
 
 Rules:
-- When the answer depends on ATS data, call a tool — never invent candidates,
+- When the answer depends on ATS data, call a tool. Never invent candidates,
   jobs, scores, or counts. If a tool returns an error or nothing, say so plainly.
 - Answer from conversation context alone for greetings or general recruiting
   questions that need no data.
 - Be concise and recruiter-friendly: short paragraphs or tight bullet lists,
   names bolded, scores as percentages. No preamble.
+- Never use em dashes. Use a period, comma, or colon instead.
 """
+
+MAX_MESSAGE_CHARS = 2000
+
+# Shared by /chat and /chat/stream so the two never drift apart in wording.
+EMPTY_MESSAGE_REPLY = (
+    "I need a question or request to assist you. Could you please provide more "
+    "details about what you're looking for?"
+)
+TOO_LONG_REPLY = "Your message is too long. Please try a shorter query (under 2000 characters)."
+DB_DOWN_REPLY = (
+    "I'm having trouble connecting to the database at the moment. Please try again shortly."
+)
+PROVIDERS_DOWN_REPLY = (
+    "I'm having trouble reaching my AI service right now. Please try again in a moment."
+)
+
+
+class ChatResponse(BaseModel):
+    """The /chat contract, unchanged since Phase 2 — now merely written down."""
+    response: str
+    conversation_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BufferedFileWrapper:
@@ -137,7 +162,7 @@ async def get_task_status(
         raise HTTPException(status_code=500, detail="Error fetching task status.")
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat_with_assistant(
     message: str = Body(..., embed=True),
     conversation_history: Optional[List[Dict[str, str]]] = Body(default=[], embed=True),
@@ -148,14 +173,14 @@ async def chat_with_assistant(
 
     if not message or message.strip() == "":
         return {
-            "response": "I need a question or request to assist you. Could you please provide more details about what you're looking for?",
+            "response": EMPTY_MESSAGE_REPLY,
             "conversation_context": conversation_context,
         }
 
-    if len(message) > 2000:
+    if len(message) > MAX_MESSAGE_CHARS:
         logger.warning(f"Received excessively long message of {len(message)} characters")
         return {
-            "response": "Your message is too long. Please try a shorter query (under 2000 characters).",
+            "response": TOO_LONG_REPLY,
             "conversation_context": conversation_context,
         }
 
@@ -166,7 +191,7 @@ async def chat_with_assistant(
         logger.error(f"Database connection error: {db_error}")
         conversation_context["db_available"] = False
         return {
-            "response": "I'm having trouble connecting to the database at the moment. Please try again shortly.",
+            "response": DB_DOWN_REPLY,
             "conversation_context": conversation_context,
         }
 
@@ -183,7 +208,7 @@ async def chat_with_assistant(
     except ToolLoopError as e:
         logger.error(f"Assistant tool loop failed: {e}")
         return {
-            "response": "I'm having trouble reaching my AI service right now. Please try again in a moment.",
+            "response": PROVIDERS_DOWN_REPLY,
             "conversation_context": conversation_context,
         }
 
@@ -200,3 +225,117 @@ async def chat_with_assistant(
         "response": result.text,
         "conversation_context": conversation_context,
     }
+
+
+def _sse(event: dict) -> str:
+    """Format one Server-Sent Event. The `type` key doubles as the event name."""
+    payload = dict(event)
+    name = payload.pop("type", "message")
+    return f"event: {name}\ndata: {json.dumps(payload, default=str)}\n\n"
+
+
+@router.post("/chat/stream")
+async def chat_with_assistant_streaming(
+    message: str = Body(..., embed=True),
+    conversation_history: Optional[List[Dict[str, str]]] = Body(default=[], embed=True),
+    conversation_context: Optional[Dict[str, Any]] = Body(default={}, embed=True),
+    db: Session = Depends(get_db),
+):
+    """The same answer as /chat, with the tool calls narrated as they happen.
+
+    A turn is typically three model calls plus database work, and only the last
+    one produces prose — so streaming tokens would cover about the final fifth of
+    the wait and leave the rest as dead air. Streaming the *tool activity* covers
+    all of it, and shows the thing worth showing: that the assistant is querying
+    real ATS data rather than inventing it (spec §5).
+
+    /chat is untouched. Phase 2's contract and its tests stand.
+    """
+    context = dict(conversation_context or {})
+
+    async def event_stream():
+        if not message or not message.strip():
+            yield _sse({"type": "message", "response": EMPTY_MESSAGE_REPLY, "conversation_context": context})
+            return
+
+        if len(message) > MAX_MESSAGE_CHARS:
+            logger.warning("Received excessively long message of %d characters", len(message))
+            yield _sse({"type": "message", "response": TOO_LONG_REPLY, "conversation_context": context})
+            return
+
+        try:
+            db.execute(text("SELECT 1")).fetchone()
+            context["db_available"] = True
+        except Exception as db_error:  # noqa: BLE001
+            logger.error(f"Database connection error: {db_error}")
+            context["db_available"] = False
+            yield _sse({"type": "message", "response": DB_DOWN_REPLY, "conversation_context": context})
+            return
+
+        logger.info("ASSISTANT: stream query: %r (history=%d)", message, len(conversation_history or []))
+
+        # The tool loop pushes events onto the queue from its own task while
+        # this generator drains it, so a tool_start reaches the browser the
+        # moment it happens rather than when the whole turn finishes.
+        queue: asyncio.Queue = asyncio.Queue()
+        done = object()
+
+        async def sink(event: dict) -> None:
+            await queue.put(event)
+
+        async def drive() -> None:
+            try:
+                result = await run_tool_loop(
+                    get_settings(),
+                    system=SYSTEM_PROMPT,
+                    message=message,
+                    history=conversation_history,
+                    tools=build_assistant_tools(db),
+                    on_event=sink,
+                )
+                context["last_provider"] = result.provider
+                context["last_tools_used"] = [t["tool"] for t in result.tool_trace]
+                logger.info(
+                    "ASSISTANT: streamed by %s (%s) in %d ms, tools=%s",
+                    result.provider,
+                    result.model,
+                    result.latency_ms,
+                    [t["tool"] for t in result.tool_trace],
+                )
+                await queue.put(
+                    {"type": "message", "response": result.text, "conversation_context": context}
+                )
+            except ToolLoopError as e:
+                logger.error(f"Assistant tool loop failed: {e}")
+                await queue.put({"type": "error", "detail": PROVIDERS_DOWN_REPLY})
+            except Exception as e:  # noqa: BLE001
+                logger.exception("Unexpected failure in the streaming assistant")
+                await queue.put({"type": "error", "detail": str(e)})
+            finally:
+                await queue.put(done)
+
+        task = asyncio.create_task(drive())
+        try:
+            while True:
+                event = await queue.get()
+                if event is done:
+                    break
+                yield _sse(event)
+        finally:
+            if not task.done():
+                task.cancel()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            # nginx buffers proxied responses by default, which would deliver
+            # the whole stream in one lump and make the feature invisible. The
+            # site config sets proxy_buffering off for this location; this
+            # header says the same thing from the application side so a
+            # misconfigured proxy cannot silently undo it.
+            "X-Accel-Buffering": "no",
+        },
+    )

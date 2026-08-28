@@ -14,11 +14,29 @@ from pydantic import BaseModel
 from ..services.service_registry import provide_storage_service, provide_minio_storage_service, provide_resume_service
 from backend.services.agent_framework.agent_factory import AgentFactory
 from ..utils.resume_parsing import ResumeData
+from backend.utils.auth import ROLE_ADMIN, get_optional_user
 from backend.utils.database import get_db
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 logger = logging.getLogger(__name__)
+
+
+def require_write_access_for_save(save_to_db: bool, current_user) -> None:
+    """Guard the one write hiding inside an otherwise read-only endpoint.
+
+    `/parse` is on the read-only allowlist in `utils/auth.py` because parsing a
+    resume touches nothing — unless `save_to_db=true`, which a multipart form
+    field the path-based gate cannot see. So the check lives here instead.
+    """
+    if not save_to_db:
+        return
+    if current_user is not None and current_user.role == ROLE_ADMIN:
+        return
+    raise HTTPException(
+        status_code=403 if current_user is not None else 401,
+        detail="Saving a parsed resume requires an administrator account.",
+    )
 
 
 class PreviewUrlResponse(BaseModel):
@@ -41,6 +59,14 @@ class ResumeResponse(BaseModel):
     skills: Optional[List[Dict[str, Any]]] = None
     parsed_data: Optional[Dict[str, Any]] = None
     military: Optional[List[Dict[str, Any]]] = None
+    # Target-role analysis. Populated only when the caller supplied a job title;
+    # the agent computed these all along, but until Phase 3c the router dropped
+    # them and the fit scoring was invisible to the UI.
+    job_fit_score: Optional[float] = None
+    hiring_recommendation: Optional[Dict[str, Any]] = None
+    market_alignment: Optional[Dict[str, Any]] = None
+    quality_assessment: Optional[Dict[str, Any]] = None
+    skill_suggestions: Optional[Dict[str, Any]] = None
     success: bool = True
     message: str = "Resume parsed successfully"
 
@@ -164,14 +190,16 @@ async def get_resume_preview(
 
 @router.post("/parse", response_model=ResumeResponse)
 async def parse_resume(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     candidate_id: Optional[str] = Form(None),
     save_to_db: bool = Form(False),
     target_job_title: Optional[str] = Form(None),
     candidate_context: Optional[str] = Form(None),
     db: Session = Depends(get_db),
+    current_user = Depends(get_optional_user),
 ):
     """Parse a resume file and optionally save to database, now using Agentic Zero agent"""
+    require_write_access_for_save(save_to_db, current_user)
     try:
         # Check file extension
         _, file_extension = os.path.splitext(file.filename)
@@ -234,6 +262,11 @@ async def parse_resume(
             experience=result.get("parsed_data", {}).get("experience") if isinstance(result.get("parsed_data"), dict) else None,
             skills=result.get("parsed_data", {}).get("skills") if isinstance(result.get("parsed_data"), dict) else None,
             military=result.get("parsed_data", {}).get("military") if isinstance(result.get("parsed_data"), dict) else None,
+            job_fit_score=result.get("job_fit_score") if job_title else None,
+            hiring_recommendation=result.get("hiring_recommendation") if job_title else None,
+            market_alignment=result.get("market_alignment"),
+            quality_assessment=result.get("quality_assessment"),
+            skill_suggestions=result.get("skill_suggestions"),
             success=True,
             message="Resume parsed successfully"
         )
@@ -264,13 +297,15 @@ async def parse_resume(
 
 @router.post("/parse-direct", response_model=ResumeResponse)
 async def parse_resume_direct(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     candidate_id: Optional[str] = Form(None),
     save_to_db: bool = Form(False),
     db: Session = Depends(get_db),
-    resume_service = Depends(provide_resume_service)
+    resume_service = Depends(provide_resume_service),
+    current_user = Depends(get_optional_user),
 ):
     """Parse a resume file using direct resume service (no agent)"""
+    require_write_access_for_save(save_to_db, current_user)
     try:
         # Check file extension
         _, file_extension = os.path.splitext(file.filename)
@@ -313,6 +348,108 @@ async def parse_resume_direct(
                 "message": f"Error parsing resume: {str(e)}"
             }
         )
+
+
+class SaveCandidateResponse(BaseModel):
+    """API response model for saving a reviewed parse as a candidate."""
+    success: bool = True
+    candidate_id: Optional[str] = None
+    resume_id: Optional[int] = None
+    message: str = "Candidate saved"
+
+
+@router.post("/save-candidate", response_model=SaveCandidateResponse)
+async def save_candidate_from_parse(
+    file: UploadFile = File(...),
+    parsed_data: str = Form(...),
+    position_applied: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    resume_service = Depends(provide_resume_service),
+):
+    """Persist a reviewed parse: upsert the candidate, store the file, save the resume.
+
+    Takes the parse the client already has instead of re-running the model, so a
+    save is a few hundred milliseconds rather than another LLM round trip.
+
+    Deliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`
+    gate refuses anonymous callers (401) and the demo role (403) before this
+    handler runs, so only an administrator can reach it.
+    """
+    import tempfile
+
+    from sqlalchemy import text as sql_text
+
+    try:
+        data = json.loads(parsed_data)
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+        resume_model = ResumeData.model_validate(data)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"parsed_data is not a valid parse payload: {e}")
+
+    _, extension = os.path.splitext(file.filename or "")
+    file_type = extension.lstrip(".").lower()
+    supported_formats = ["pdf", "docx", "doc", "txt", "jpg", "jpeg", "png"]
+    if file_type not in supported_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format: {extension}. Supported formats: {', '.join(supported_formats)}",
+        )
+
+    # Store the original file so the profile's resume list can preview it.
+    content = await file.read()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        file_id = await resume_service.storage_service.store_document(
+            file_path=tmp_path,
+            file_name=file.filename,
+            content_type=resume_service._get_content_type(file_type),
+            metadata={},
+        )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    try:
+        resume_id = resume_service.save_resume(
+            resume_data=resume_model,
+            db_session=db,
+            file_id=file_id,
+            file_name=file.filename,
+            file_type=file_type,
+        )
+    except Exception as e:
+        logger.error(f"Saving candidate from parse failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Could not save the candidate: {e}")
+
+    row = db.execute(
+        sql_text("SELECT candidate_id FROM resumes WHERE id = :id"), {"id": resume_id}
+    ).fetchone()
+    candidate_id = row[0] if row else None
+
+    # The role the recruiter parsed against is the role they are considering
+    # the person for; record it unless the candidate already has one.
+    if candidate_id and position_applied and position_applied.strip():
+        db.execute(
+            sql_text(
+                "UPDATE candidates SET position_applied = :position "
+                "WHERE id = :id AND (position_applied IS NULL OR position_applied = '')"
+            ),
+            {"position": position_applied.strip(), "id": candidate_id},
+        )
+    db.commit()
+
+    return SaveCandidateResponse(
+        candidate_id=candidate_id,
+        resume_id=resume_id,
+        message="Candidate saved to the pipeline",
+    )
 
 
 @router.post("/confirm", response_model=ResumeConfirmResponse)
@@ -414,10 +551,25 @@ async def get_resume(resume_id: int, db: Session = Depends(get_db), resume_servi
     try:
         # Get the resume from database
         resume_data = await resume_service.get_resume(db, resume_id)
-        
+
         if not resume_data:
+            # get_resume() returns None both for "no such row" and for "the row
+            # is there but its parsed_data will not load". Those want different
+            # answers: a 404 on a resume the Candidate Detail screen just linked
+            # to reads as a broken link rather than as bad stored data.
+            from backend.models.models import Resume as ResumeRow
+
+            exists = db.query(ResumeRow.id).filter(ResumeRow.id == resume_id).first()
+            if exists:
+                logger.error(
+                    "Resume %s exists but its parsed_data could not be loaded", resume_id
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Resume {resume_id} is stored but its parsed data is unreadable",
+                )
             raise HTTPException(status_code=404, detail=f"Resume with ID {resume_id} not found")
-        
+
         # Convert to response model
         response = ResumeResponse(
             resume_id=resume_id,
@@ -450,7 +602,13 @@ async def get_resume(resume_id: int, db: Session = Depends(get_db), resume_servi
         raise HTTPException(status_code=500, detail=f"Error retrieving resume: {str(e)}")
 
 
-@router.api_route("/{resume_id}/view", methods=["GET", "HEAD"])
+# Registered as two routes rather than api_route(methods=["GET", "HEAD"]).
+# FastAPI derives one operationId from whichever method it pops off that set
+# first and then gives it to both operations, so the id collided *and* changed
+# between processes with Python's hash seed — which made openapi.json
+# non-reproducible and broke the CI drift check before it was even written.
+@router.get("/{resume_id}/view", operation_id="view_resume_pdf")
+@router.head("/{resume_id}/view", operation_id="head_resume_pdf")
 async def view_resume_pdf(
     resume_id: int,
     request: Request,

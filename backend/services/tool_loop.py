@@ -14,7 +14,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import httpx
 
@@ -23,6 +23,8 @@ from backend.services.assistant_tools import Tool, execute_tool
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 5
+
+EventSink = Callable[[dict], Awaitable[None]]
 
 
 @dataclass
@@ -36,6 +38,59 @@ class ToolLoopResult:
 
 class ToolLoopError(Exception):
     pass
+
+
+def _summarize(result: Any) -> str:
+    """A short, human-readable description of what a tool came back with.
+
+    This is what the user sees streaming past — "found 12 candidates" — so it
+    should read like progress, not like a debug dump.
+    """
+    if isinstance(result, dict):
+        if "error" in result:
+            return str(result["error"])[:200]
+        for key, value in result.items():
+            if isinstance(value, list):
+                return f"{len(value)} {key}"
+        return ", ".join(list(result)[:4])
+    if isinstance(result, list):
+        return f"{len(result)} results"
+    return str(result)[:200]
+
+
+class ToolTrace(list):
+    """The loop's tool trace, which can also report each call as it happens.
+
+    A plain list of completed calls, exactly as before — `run_tool_loop` already
+    collected these and simply threw the timing away. Passing an `on_event` sink
+    additionally streams `tool_start`/`tool_end` while the loop runs, which is
+    what /chat/stream turns into SSE. Subclassing list keeps every existing
+    `trace.append(...)` caller working untouched.
+    """
+
+    def __init__(self, on_event: Optional[EventSink] = None):
+        super().__init__()
+        self._on_event = on_event
+
+    async def _emit(self, event: dict) -> None:
+        if self._on_event is None:
+            return
+        try:
+            await self._on_event(event)
+        except Exception:  # noqa: BLE001
+            # A consumer that has gone away (browser tab closed) must not take
+            # the tool loop down with it.
+            logger.debug("Tool event sink raised; continuing", exc_info=True)
+
+    async def tool_started(self, tool: str, arguments: dict) -> None:
+        await self._emit({"type": "tool_start", "tool": tool, "arguments": arguments})
+
+    async def tool_finished(self, tool: str, arguments: dict, result: Any) -> None:
+        ok = not (isinstance(result, dict) and "error" in result)
+        self.append({"tool": tool, "arguments": arguments, "ok": ok})
+        await self._emit(
+            {"type": "tool_end", "tool": tool, "ok": ok, "summary": _summarize(result)}
+        )
 
 
 def _openai_tool_spec(tools: List[Tool]) -> list:
@@ -90,8 +145,9 @@ async def _run_ollama(settings, system: str, messages: List[dict], tools: List[T
             args = fn.get("arguments") or {}
             if isinstance(args, str):
                 args = json.loads(args or "{}")
+            await trace.tool_started(name, args)
             result = await execute_tool(tools, name, args)
-            trace.append({"tool": name, "arguments": args, "ok": "error" not in result})
+            await trace.tool_finished(name, args, result)
             convo.append({"role": "tool", "tool_name": name, "content": _json_dumps(result)})
     raise ToolLoopError("ollama: exceeded max tool iterations")
 
@@ -127,8 +183,9 @@ async def _run_openrouter(settings, system: str, messages: List[dict], tools: Li
                 args = json.loads(fn.get("arguments") or "{}")
             except json.JSONDecodeError:
                 args = {}
+            await trace.tool_started(name, args)
             result = await execute_tool(tools, name, args)
-            trace.append({"tool": name, "arguments": args, "ok": "error" not in result})
+            await trace.tool_finished(name, args, result)
             convo.append(
                 {"role": "tool", "tool_call_id": call.get("id", ""), "content": _json_dumps(result)}
             )
@@ -159,8 +216,10 @@ async def _run_anthropic(settings, system: str, messages: List[dict], tools: Lis
         convo.append({"role": "assistant", "content": response.content})
         results = []
         for block in tool_uses:
-            result = await execute_tool(tools, block.name, dict(block.input or {}))
-            trace.append({"tool": block.name, "arguments": dict(block.input or {}), "ok": "error" not in result})
+            args = dict(block.input or {})
+            await trace.tool_started(block.name, args)
+            result = await execute_tool(tools, block.name, args)
+            await trace.tool_finished(block.name, args, result)
             results.append(
                 {"type": "tool_result", "tool_use_id": block.id, "content": _json_dumps(result)}
             )
@@ -203,8 +262,14 @@ async def run_tool_loop(
     message: str,
     history: Optional[List[Dict[str, str]]] = None,
     tools: List[Tool],
+    on_event: Optional[EventSink] = None,
 ) -> ToolLoopResult:
-    """Run one assistant turn with tool calling, falling through provider tiers."""
+    """Run one assistant turn with tool calling, falling through provider tiers.
+
+    `on_event`, if given, is awaited with a `tool_start`/`tool_end` dict as each
+    tool runs. The loop's behaviour is otherwise identical, so /chat and its
+    Phase 2 tests are untouched.
+    """
     messages: List[dict] = []
     for turn in history or []:
         role = turn.get("role")
@@ -219,7 +284,7 @@ async def run_tool_loop(
 
     errors = []
     for name in providers:
-        trace: List[dict] = []
+        trace = ToolTrace(on_event)
         started = time.monotonic()
         try:
             text = await _RUNNERS[name](settings, system, messages, tools, trace)

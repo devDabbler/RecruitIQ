@@ -381,6 +381,27 @@ class AgentMemory(Base):
     def __repr__(self):
         return f"<AgentMemory(id={self.id}, agent='{self.agent_name}', type='{self.memory_type}')>"
 
+
+class User(Base):
+    """An operator of the platform.
+
+    Two roles only: `admin` can write, `demo` cannot. The demo row is created on
+    demand by POST /auth/demo so a visitor following a link never meets a login
+    screen. Registration, password reset, and refresh-token rotation are out of
+    scope for a portfolio demo (Phase 3 spec §2).
+    """
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=True)  # null for the demo user
+    role = Column(String(20), nullable=False, default="demo")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<User(email='{self.email}', role='{self.role}')>"
+
+
 # Job Applications model
 class JobApplication(Base):
     """Model for job applications."""
