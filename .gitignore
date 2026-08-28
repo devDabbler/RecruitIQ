@@ -113,3 +113,6 @@ working_mcp_launcher.py
 # Markdown: the old rule `**/*.md` hid all 19 documentation/ files from GitHub.
 # Tests: the old rules `tests/`, `**/tests/`, `**/test_*.py`, `**/*_test.py`
 # hid 138 test files. Both are now visible.
+
+# scratch file used to pass multi-line commit messages to git on Windows
+_commitmsg.txt

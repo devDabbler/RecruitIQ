@@ -64,6 +64,7 @@
             "title": "str"
           }
         ],
+        "file_name": "str",
         "personal_info": {
           "email": "str",
           "location": "str",
@@ -140,9 +141,9 @@
   },
   "candidates.skills_breakdown": {
     "shape": {
-      "<dynamic-keys>": "str"
+      "<dynamic-keys>": "int"
     },
-    "status": 404
+    "status": 200
   },
   "health": {
     "shape": {
@@ -151,19 +152,18 @@
     "status": 200
   },
   "jobs.applications_for_candidate": {
-    "shape": {
-      "detail": [
-        {
-          "input": "str",
-          "loc": [
-            "str"
-          ],
-          "msg": "str",
-          "type": "str"
-        }
-      ]
-    },
-    "status": 422
+    "shape": [
+      {
+        "applied_at": "str",
+        "id": "int",
+        "job_department": "str",
+        "job_id": "int",
+        "job_title": "str",
+        "source": "str",
+        "status": "str"
+      }
+    ],
+    "status": 200
   },
   "jobs.apply": {
     "shape": {
@@ -262,19 +262,18 @@
     "status": 200
   },
   "jobs.saved_for_candidate": {
-    "shape": {
-      "detail": [
-        {
-          "input": "str",
-          "loc": [
-            "str"
-          ],
-          "msg": "str",
-          "type": "str"
-        }
-      ]
-    },
-    "status": 422
+    "shape": [
+      {
+        "id": "int",
+        "job_department": "str",
+        "job_id": "int",
+        "job_location": "str",
+        "job_title": "str",
+        "notes": "str",
+        "saved_at": "str"
+      }
+    ],
+    "status": 200
   },
   "jobs.search": {
     "shape": {
@@ -348,8 +347,45 @@
   },
   "resume.detail": {
     "shape": {
-      "detail": "str"
+      "candidate_id": "null",
+      "education": "null",
+      "experience": [
+        {
+          "company": "str",
+          "description": "str",
+          "end_date": "str",
+          "highlights": "null",
+          "location": "null",
+          "start_date": "str",
+          "title": "str"
+        }
+      ],
+      "file_id": "null",
+      "message": "str",
+      "military": "null",
+      "parsed_data": "null",
+      "personal_info": {
+        "address": "null",
+        "email": "str",
+        "github": "null",
+        "linkedin": "null",
+        "location": "str",
+        "name": "str",
+        "phone": "null",
+        "summary": "null",
+        "website": "null"
+      },
+      "resume_id": "int",
+      "skills": [
+        {
+          "category": "str",
+          "keywords": "null",
+          "level": "null",
+          "name": "str"
+        }
+      ],
+      "success": "bool"
     },
-    "status": 404
+    "status": 200
   }
 }
