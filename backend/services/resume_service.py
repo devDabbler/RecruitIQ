@@ -283,61 +283,6 @@ class ResumeService:
             self.logger.error(f"Error parsing resume for analysis: {str(e)}")
             raise
     
-    def _ensure_tables_exist(self, conn):
-        """Ensure that all required database tables exist"""
-        with conn.cursor() as cur:
-            try:
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS candidate_education (
-                        id SERIAL PRIMARY KEY,
-                        candidate_id UUID NOT NULL,
-                        institution VARCHAR(255),
-                        degree VARCHAR(255),
-                        field_of_study VARCHAR(255),
-                        start_date DATE,
-                        end_date DATE,
-                        description TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
-                    )
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS candidate_experience (
-                        id SERIAL PRIMARY KEY,
-                        candidate_id UUID NOT NULL,
-                        company VARCHAR(255),
-                        position VARCHAR(255),
-                        location VARCHAR(255),
-                        start_date DATE,
-                        end_date DATE,
-                        current BOOLEAN,
-                        description TEXT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
-                    )
-                """)
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS candidate_skills (
-                        id SERIAL PRIMARY KEY,
-                        candidate_id UUID NOT NULL,
-                        skill_name VARCHAR(255) NOT NULL,
-                        proficiency VARCHAR(50),
-                        years_of_experience INT,
-                        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-                        FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
-                        CONSTRAINT unique_candidate_skill UNIQUE (candidate_id, skill_name)
-                    )
-                """)
-                conn.commit()
-                self.logger.info("Ensured all required database tables exist")
-            except Exception as e:
-                conn.rollback()
-                self.logger.error(f"Error ensuring tables exist: {str(e)}")
-                raise
-    
     def save_resume(self, resume_data: ResumeData, db_session: Session, candidate_id: Optional[str] = None, file_id: Optional[str] = None, file_name: Optional[str] = None, file_type: Optional[str] = None) -> int:
         """
         Save parsed resume data to the database.
@@ -346,9 +291,6 @@ class ResumeService:
         try:
             self.logger.info("Using database session for resume storage...")
             
-            # Ensure tables exist (if needed, handled by migrations in production)
-            # self._ensure_tables_exist(db_session)
-            # Get candidate data from resume
             # Get candidate data from resume
             personal_info = resume_data.personal_info
             name = personal_info.name if personal_info else "N/A"
