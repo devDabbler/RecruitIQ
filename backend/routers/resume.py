@@ -487,7 +487,13 @@ async def get_resume(resume_id: int, db: Session = Depends(get_db), resume_servi
         raise HTTPException(status_code=500, detail=f"Error retrieving resume: {str(e)}")
 
 
-@router.api_route("/{resume_id}/view", methods=["GET", "HEAD"])
+# Registered as two routes rather than api_route(methods=["GET", "HEAD"]).
+# FastAPI derives one operationId from whichever method it pops off that set
+# first and then gives it to both operations, so the id collided *and* changed
+# between processes with Python's hash seed — which made openapi.json
+# non-reproducible and broke the CI drift check before it was even written.
+@router.get("/{resume_id}/view", operation_id="view_resume_pdf")
+@router.head("/{resume_id}/view", operation_id="head_resume_pdf")
 async def view_resume_pdf(
     resume_id: int,
     request: Request,
