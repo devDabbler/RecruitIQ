@@ -64,4 +64,4 @@ for i in $(seq 1 15); do
 done
 echo "    web: ok"
 
-echo "==> deployed $(git -C $APP rev-parse --short HEAD)"
+echo "==> deployed $(as_app "git -C $APP rev-parse --short HEAD")"
