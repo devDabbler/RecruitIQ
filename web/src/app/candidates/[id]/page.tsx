@@ -57,7 +57,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
           <Card>
             <CardContent className="space-y-4 p-6">
               <div className="flex items-center gap-3">
-                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-indigo-600 text-sm font-semibold text-white">
                   {initials(candidate)}
                 </span>
                 <span className="min-w-0">
@@ -159,7 +159,8 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
                       <MatchScore score={job.match_score} />
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {[job.department, job.location].filter(Boolean).join(" · ") || "—"}
+                      {[job.department, job.location].filter(Boolean).join(" · ") ||
+                        "No department or location listed"}
                     </p>
                     <p className="mt-2 text-sm text-slate-600">{job.match_explanation}</p>
                     <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">

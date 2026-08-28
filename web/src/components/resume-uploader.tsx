@@ -83,7 +83,9 @@ export function ResumeUploader() {
             onClick={() => input.current?.click()}
             className={cn(
               "grid cursor-pointer place-items-center gap-2 rounded-lg border-2 border-dashed p-10 text-center transition-colors",
-              dragging ? "border-slate-900 bg-slate-50" : "border-slate-300 hover:border-slate-400",
+              dragging
+                ? "border-indigo-500 bg-indigo-50/50"
+                : "border-slate-300 hover:border-indigo-400",
             )}
           >
             <Upload className="h-6 w-6 text-slate-400" aria-hidden />
@@ -91,7 +93,7 @@ export function ResumeUploader() {
               <>
                 <p className="font-medium text-slate-800">{file.name}</p>
                 <p className="text-xs text-slate-500">
-                  {(file.size / 1024).toFixed(0)} KB — click to choose a different file
+                  {(file.size / 1024).toFixed(0)} KB. Click to choose a different file.
                 </p>
               </>
             ) : (
@@ -118,7 +120,7 @@ export function ResumeUploader() {
               value={targetJob}
               onChange={(e) => setTargetJob(e.target.value)}
               placeholder="Senior Backend Engineer"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             />
             <span className="mt-1 block text-xs text-slate-500">
               Given a role, the parser also scores fit against it.
@@ -249,7 +251,7 @@ function Entries({
         {rows.map((row, i) => (
           <li key={i} className="rounded border border-slate-200 p-3">
             <p className="font-medium text-slate-800">
-              {String(row[primary] ?? row.name ?? "—")}
+              {String(row[primary] ?? row.name ?? "Untitled")}
             </p>
             <p className="text-xs text-slate-500">
               {[row[secondary], row.dates ?? row.duration ?? row.year]

@@ -116,7 +116,7 @@ async function Results({ jobId }: { jobId: number }) {
                   candidate.email,
                 ]
                   .filter(Boolean)
-                  .join(" · ") || "—"}
+                  .join(" · ") || "No details on file"}
               </p>
               <p className="mt-2 text-sm text-slate-600">{candidate.match_explanation}</p>
 

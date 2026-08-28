@@ -42,7 +42,7 @@ export function JobPicker({
         <SelectContent>
           {jobs.map((job) => (
             <SelectItem key={job.id} value={String(job.id)}>
-              {job.title} — {job.department}
+              {job.title} · {job.department}
             </SelectItem>
           ))}
         </SelectContent>

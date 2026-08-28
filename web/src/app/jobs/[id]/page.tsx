@@ -148,7 +148,7 @@ async function Matches({ jobId }: { jobId: number }) {
                 : candidate.experience_level,
             ]
               .filter(Boolean)
-              .join(" · ") || "—"}
+              .join(" · ") || "No details on file"}
           </p>
           <p className="mt-2 text-sm text-slate-600">{candidate.match_explanation}</p>
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
@@ -176,7 +176,7 @@ function Detail({ label, value }: { label: string; value: string | null | undefi
   return (
     <div className="flex items-baseline justify-between gap-3">
       <dt className="shrink-0 text-slate-500">{label}</dt>
-      <dd className="text-right font-medium text-slate-800">{value || "—"}</dd>
+      <dd className="text-right font-medium text-slate-800">{value || "Not specified"}</dd>
     </div>
   );
 }

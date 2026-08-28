@@ -28,8 +28,8 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: "on-first-retry",
-    // Nav labels are `hidden lg:inline`, so anything narrower than the lg
-    // breakpoint (1024px) leaves getByRole("link", {name}) matching nothing.
+    // Nav labels are `hidden md:inline`, so anything narrower than the md
+    // breakpoint (768px) leaves getByRole("link", {name}) matching nothing.
     viewport: { width: 1440, height: 900 },
   },
 
