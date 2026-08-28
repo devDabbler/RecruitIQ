@@ -133,6 +133,13 @@ export async function apiFetch<T>(
   }
 
   if (!response.ok) {
+    // A 401 with a token means the cookie outlived its signing secret (the
+    // backend mints a random one per process when JWT_SECRET is unset). Every
+    // screen the demo can see also answers anonymously, so behave as signed
+    // out rather than stranding the visitor until they clear cookies.
+    if (response.status === 401 && token) {
+      return apiFetch<T>(path, { body, query, token: null, headers, ...init });
+    }
     throw new ApiError(response.status, await extractDetail(response), String(path));
   }
 

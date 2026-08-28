@@ -19,9 +19,11 @@ interface DemoTokenResponse {
 }
 
 export const config = {
-  // Everything except Next's own assets and the favicon. Running on static
-  // chunks would issue a token per asset request and slow every page load.
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  // Everything except Next's own internals and the favicon. All of /_next is
+  // excluded, not just static assets: the dev server's HMR websocket lives at
+  // /_next/hmr, and running the proxy on its upgrade request breaks the
+  // handshake, which kills hydration in development.
+  matcher: ["/((?!_next/|favicon.ico|.*\\.svg$).*)"],
 };
 
 export async function proxy(request: NextRequest) {
