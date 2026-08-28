@@ -24,13 +24,12 @@ export async function POST(request: NextRequest) {
   const body = await request.text();
   const token = await getToken();
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
+  async function send(bearer: string | null): Promise<Response> {
+    return fetch(`${API_BASE_URL}/api/assistant/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       },
       body,
       // Abort the upstream turn when the user navigates away, rather than
@@ -41,6 +40,17 @@ export async function POST(request: NextRequest) {
       // needed the moment the payload grows past a single chunk.
       duplex: "half",
     } as RequestInit & { duplex: "half" });
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await send(token);
+    // A stale session cookie (signing secret rotated) should not kill the chat;
+    // the stream endpoint is allowlisted for anonymous callers, so retry
+    // signed out.
+    if (upstream.status === 401 && token) {
+      upstream = await send(null);
+    }
   } catch {
     return NextResponse.json(
       { detail: `Cannot reach the API at ${API_BASE_URL}. Is uvicorn running?` },

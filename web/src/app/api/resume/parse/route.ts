@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { API_BASE_URL } from "@/lib/config";
+import { API_BASE_URL, SESSION_COOKIE } from "@/lib/config";
 import { getToken } from "@/lib/session";
 
 /**
@@ -42,17 +42,29 @@ export async function POST(request: NextRequest) {
 
   const token = await getToken();
 
-  let upstream: Response;
-  try {
-    upstream = await fetch(`${API_BASE_URL}/api/resume/parse`, {
+  async function send(bearer: string | null): Promise<Response> {
+    return fetch(`${API_BASE_URL}/api/resume/parse`, {
       method: "POST",
       // Content-Type is deliberately unset: fetch generates the multipart
       // boundary itself, and setting the header by hand omits it, which the
       // server then cannot parse.
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
       body: outgoing,
       cache: "no-store",
     });
+  }
+
+  let staleToken = false;
+  let upstream: Response;
+  try {
+    upstream = await send(token);
+    // A 401 with a token means the session cookie outlived its signing secret.
+    // Parsing is allowlisted for anonymous callers, so retry signed out instead
+    // of showing the visitor a bare "Invalid token".
+    if (upstream.status === 401 && token) {
+      staleToken = true;
+      upstream = await send(null);
+    }
   } catch {
     return NextResponse.json(
       { detail: `Cannot reach the API at ${API_BASE_URL}. Is uvicorn running?` },
@@ -61,8 +73,11 @@ export async function POST(request: NextRequest) {
   }
 
   const text = await upstream.text();
-  return new NextResponse(text, {
+  const response = new NextResponse(text, {
     status: upstream.status,
     headers: { "Content-Type": "application/json" },
   });
+  // Drop the dead cookie so the proxy mints a fresh demo token next navigation.
+  if (staleToken) response.cookies.delete(SESSION_COOKIE);
+  return response;
 }

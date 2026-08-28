@@ -45,7 +45,7 @@ export default async function MatchingPage({ searchParams }: PageProps<"/matchin
     <>
       <PageHeader
         title="Matching"
-        description="Semantic ranking over pgvector embeddings, with the sub-scores that produced each number."
+        description="Semantic ranking over pgvector embeddings, with the sub-scores that produced each number. Scoring runs live and takes about ten seconds."
       />
 
       {choices.length === 0 ? (
