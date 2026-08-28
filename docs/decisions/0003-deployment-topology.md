@@ -61,3 +61,24 @@ the memory fence, migrates, restarts, health-checks.
   `scripts/deploy.sh`.
 - If the neighbor's footprint grows further, the escape hatch is building in
   GitHub Actions and shipping the artifact, removing the last RAM spike.
+
+## Amendment: first-hour incident (2026-08-28)
+
+Within an hour of going live the API froze completely, /health included, and
+every page 504'd. py-spy showed the event loop blocked inside a synchronous
+SQLAlchemy pool checkout: ~35 endpoints are `async def` but use the sync
+engine, so ORM calls run on the event loop. One dashboard view fans out ~8
+parallel API calls; the default pool (5+10, 30s checkout timeout) exhausted,
+parked coroutines held their transactions, and the loop froze 30s per
+checkout in a death spiral. Dev never surfaced this: one developer clicking
+around rarely wins the race, and dev servers restart constantly.
+
+Mitigations shipped (the async-hygiene refactor is deliberately future work):
+
+1. Pool 10+20 with `pool_timeout=5` - exhaustion becomes rare, and when it
+   happens the request 500s in 5s and the loop moves on; self-recovering.
+2. uvicorn `--workers 2` - a wedged worker no longer takes the API down.
+3. The Next demo-login fetch got `AbortSignal.timeout(3000)` - a stalled API
+   renders pages anonymous instead of turning every first visit into a 504.
+4. Postgres role backstop: `idle_in_transaction_session_timeout = 60s` for
+   the app role - the database kills abandoned transactions itself.
