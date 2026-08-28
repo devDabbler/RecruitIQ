@@ -1,4 +1,5 @@
 import os
+import secrets
 from typing import Optional, ClassVar
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict, DotEnvSettingsSource
@@ -84,6 +85,16 @@ class Settings(BaseSettings):
     # Application settings
     api_version: str = Field(default=os.getenv("API_VERSION", "v1"))
     enable_swagger: bool = Field(default=os.getenv("ENABLE_SWAGGER", "true").lower() == "true")
+
+    # Auth (spec §2). No JWT_SECRET in the environment means a fresh random
+    # secret per process: every token dies on restart, which is inconvenient but
+    # never insecure. A shipped default would be the opposite trade.
+    jwt_secret: str = Field(
+        default_factory=lambda: os.getenv("JWT_SECRET") or secrets.token_urlsafe(48)
+    )
+    jwt_algorithm: str = Field(default=os.getenv("JWT_ALGORITHM", "HS256"))
+    jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
+    demo_user_email: str = Field(default=os.getenv("DEMO_USER_EMAIL", "demo@recruitiq.local"))
     
     # Resume parser settings
     LLM_VALIDATE_ADDRESSES: bool = Field(default=os.getenv("LLM_VALIDATE_ADDRESSES", "false").lower() == "true")
