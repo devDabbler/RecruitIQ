@@ -1,0 +1,22 @@
+[Unit]
+Description=RecruitIQ web (Next.js standalone on 127.0.0.1:3001)
+After=network-online.target recruitiq-api.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=recruitiq
+Group=recruitiq
+WorkingDirectory=/opt/recruitiq/app/web
+Environment=NODE_ENV=production
+Environment=API_BASE_URL=http://127.0.0.1:8020
+ExecStart=/usr/bin/node scripts/start-standalone.mjs 3001
+Restart=on-failure
+RestartSec=3
+
+MemoryHigh=384M
+MemoryMax=512M
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

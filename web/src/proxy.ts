@@ -38,6 +38,10 @@ export async function proxy(request: NextRequest) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
+      // A stalled API must not stall every page. Without this, a wedged
+      // backend turned each first visit into a 60s nginx 504 (2026-08-28);
+      // with it, the page renders anonymous and the next request retries.
+      signal: AbortSignal.timeout(3000),
     });
     if (response.ok) {
       const data = (await response.json()) as DemoTokenResponse;

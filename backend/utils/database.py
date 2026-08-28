@@ -8,8 +8,21 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 SQLALCHEMY_DATABASE_URL = settings.postgres_conn
 
+# Pool sizing is a production-incident lesson (2026-08-28, first hour live):
+# many endpoints are `async def` but use this sync engine, so ORM calls run on
+# the event loop. One dashboard view fans out ~8 parallel API calls; with the
+# default pool (5+10) and 30s pool_timeout, exhaustion blocked the event loop
+# itself on checkout and froze the whole server, /health included. A larger
+# pool makes exhaustion rare; the short pool_timeout makes it survivable - the
+# stalled request 500s in 5s and the loop moves on, instead of a death spiral.
+# The real fix (async sessions or sync endpoints) is future work.
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_timeout=5,
+    pool_recycle=1800,
+    pool_pre_ping=True,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
