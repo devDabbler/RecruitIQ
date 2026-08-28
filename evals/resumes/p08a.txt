@@ -1,0 +1,19 @@
+Jake Sherwood
+jake.sherwood@example.com | 555-909-1276 | Remote
+
+SUMMARY
+DevOps engineer, career-changed from audio engineering.
+
+EXPERIENCE
+DevOps Engineer, Driftwood Cloud | 2022 - Present
+- Maintain Terraform-managed AWS infrastructure across 3 environments
+- Moved CI from Jenkins to GitHub Actions cutting build times 40%
+
+Audio Engineer, Redline Studios | 2014 - 2021
+- Engineered live and studio sessions; managed studio signal infrastructure
+
+EDUCATION
+Full Sail University - BS in Audio Engineering (2014)
+
+SKILLS
+AWS, Terraform, Kubernetes, GitHub Actions, Linux, Bash

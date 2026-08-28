@@ -7,6 +7,7 @@ import json
 
 from backend.services.llm_service import get_llm_service
 from backend.utils.resume_parsing.contracts.resume_contract import ResumeV2
+from backend.utils.resume_parsing.extractors.structured_extractor import ExtractionContract
 
 FAKE_RESUME = """
 Jordan Rivera
@@ -33,7 +34,7 @@ async def main():
     service = get_llm_service()
     data = await service.generate_structured(
         f"Extract this resume into the JSON schema.\n\nRESUME:\n{FAKE_RESUME}",
-        ResumeV2,
+        ExtractionContract,
         system_message="You are a resume parsing specialist AI.",
         max_tokens=4096,
     )

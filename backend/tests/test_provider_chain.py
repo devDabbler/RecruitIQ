@@ -126,6 +126,51 @@ class TestBuildChain:
         assert ollama.timeout == 20.0  # spec §4.4: hard cap, never block the GPU
 
 
+class TestTaskRouting:
+    """Per-task chain orders (ADR 0002): `provider:model` specs, same vocabulary
+    as evals/run_eval.py --providers."""
+
+    def test_order_spec_with_model_override(self):
+        settings = _Settings()
+        chain = build_chain(settings, order="openrouter:google/gemini-2.5-flash-lite,ollama")
+        assert [p.name for p in chain.providers] == ["openrouter", "ollama"]
+        assert chain.providers[0].model == "google/gemini-2.5-flash-lite"
+
+    def test_ollama_model_spec_survives_colons(self):
+        chain = build_chain(_Settings(), order="ollama:qwen3:32b")
+        assert chain.providers[0].model == "qwen3:32b"
+
+    def test_spec_without_model_keeps_configured_default(self):
+        chain = build_chain(_Settings(), order="openrouter")
+        assert chain.providers[0].model == _Settings.openrouter_default_model
+
+    def test_resume_parsing_routes_to_eval_winner(self):
+        from backend.services.llm_service import LLMService
+
+        settings = _Settings()
+        settings.llm_provider_order_resume_parsing = (
+            "openrouter:google/gemini-2.5-flash-lite,anthropic,ollama"
+        )
+        service = LLMService(settings=settings)
+        chain = service.chain_for("resume_parsing")
+        assert [p.name for p in chain.providers] == ["openrouter", "anthropic", "ollama"]
+        assert chain.providers[0].model == "google/gemini-2.5-flash-lite"
+
+    def test_unrouted_task_uses_default_chain(self):
+        from backend.services.llm_service import LLMService
+
+        service = LLMService(settings=_Settings())
+        assert service.chain_for("chat") is service.chain
+
+    def test_routed_chain_is_cached(self):
+        from backend.services.llm_service import LLMService
+
+        settings = _Settings()
+        settings.llm_provider_order_resume_parsing = "anthropic,ollama"
+        service = LLMService(settings=settings)
+        assert service.chain_for("resume_parsing") is service.chain_for("resume_parsing")
+
+
 class TestLLMServiceFacade:
     def test_generate_text_async_returns_fallback_when_all_fail(self):
         from backend.services.llm_service import LLMService

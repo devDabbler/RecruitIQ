@@ -10,6 +10,25 @@ from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
+
+def _try_strict_parse(text: str):
+    """Return the parsed dict if `text` is already valid JSON, else None.
+
+    Only dicts count as success: a bare list or scalar is not a resume document,
+    and letting one through here would skip the repair path that can recover one.
+    """
+    if not text:
+        return None
+    try:
+        parsed = json.loads(text)
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if isinstance(parsed, dict):
+        logger.info("Parsed clean JSON directly (no repair needed)")
+        return parsed
+    return None
+
+
 def extract_json_from_llm_response(response_text: str) -> Dict[str, Any]:
     """
     Extract JSON from LLM response text with extensive cleanup and repair.
@@ -39,7 +58,16 @@ def extract_json_from_llm_response(response_text: str) -> Dict[str, Any]:
     
     # If the response starts with 'Here is the output in valid JSON format:' or similar, remove it
     response_text = re.sub(r'^[^{\[]*', '', response_text, flags=re.DOTALL).strip()
-    
+
+    # Strict parse FIRST. Capable models usually return clean JSON, and the repair
+    # heuristics below must never touch it: the permissive regex a few lines down
+    # cannot match an object containing nested objects, so it falls back to the
+    # longest *inner* match — silently returning one experience entry instead of
+    # the whole resume. Found by evals 2026-08-27.
+    parsed = _try_strict_parse(response_text)
+    if parsed is not None:
+        return parsed
+
     # If we have multiple JSON objects, try to find the most complete one
     if response_text.count('{') > 1:
         # Find all JSON objects
@@ -63,7 +91,13 @@ def extract_json_from_llm_response(response_text: str) -> Dict[str, Any]:
             json_objects.sort(key=len, reverse=True)
             response_text = json_objects[0]
             logger.info(f"Extracted most complete JSON object: {response_text[:100]}...")
-    
+
+        # Brace-matching just isolated a balanced object; give it a strict parse
+        # before handing it to the lossy regex heuristics.
+        parsed = _try_strict_parse(response_text)
+        if parsed is not None:
+            return parsed
+
     # Try to find JSON pattern in the response
     try:
         # Find a JSON object pattern (start and end braces with content in between)

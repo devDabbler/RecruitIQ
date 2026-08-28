@@ -1,0 +1,32 @@
+AISHA AL-RASHID
+Minneapolis, MN
+Email: aisha.alrashid@example.com
+Phone: 555-330-6754
+
+WORK HISTORY
+2023 to Present
+Senior Product Manager
+Northfield Systems
+* Own roadmap for a $12M ARR workforce management product
+* Shipped self-serve onboarding lifting activation 18%
+
+2020 to 2023
+Product Manager
+Lakeshore Software
+* Led three squads through discovery-to-launch on scheduling features
+
+2017 to 2020
+Business Analyst
+Twin Cities Consulting
+* Documented requirements and process maps for ERP rollouts
+
+EDUCATION
+2017  BSB Management Information Systems, University of Minnesota
+
+TECHNICAL SKILLS
+* Product Strategy
+* Jira
+* SQL
+* A/B Testing
+* Customer Discovery
+* Roadmapping

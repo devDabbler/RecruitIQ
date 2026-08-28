@@ -5,7 +5,7 @@ import sys
 import re
 from typing import Type, Dict, Any, Union, Optional
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, create_model
 
 # Add proper path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
@@ -16,6 +16,48 @@ from backend.services.llm_service import LLMService, get_llm_service
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Fields the model must never be asked to produce. `raw_text` is the resume we
+# just handed it: regenerating it verbatim roughly doubles output tokens for data
+# we already hold locally (resume_parser_main sets raw_text from our own input),
+# and it is where generation derails - qwen3:8b falls into a repeated-"\n" loop
+# and the response is cut off mid-string. One unterminated string makes the WHOLE
+# document unparseable, so a resume whose name/email/phone were extracted
+# perfectly still scores 0 on every field. Found by evals 2026-08-27.
+MODEL_EXCLUDED_FIELDS = ("raw_text",)
+
+# Output budget for one extraction. Shared with evals/run_eval.py so the eval
+# measures the same ceiling production uses - they were 4096 vs 8192 for a while,
+# which made a reasoning model look inaccurate when it was merely truncated.
+# Note this budget also covers reasoning tokens on models that emit them.
+EXTRACTION_MAX_TOKENS = 8192
+
+
+def _build_extraction_contract(contract: Type[BaseModel] = ResumeV2) -> Type[BaseModel]:
+    """ResumeV2 minus the fields we already know locally.
+
+    Kept as a Pydantic model rather than a bare dict because providers branch on
+    model-ness to select their native structured-output path (Anthropic
+    ``messages.parse``, Ollama ``format``); handing them a dict would silently
+    downgrade those to best-effort JSON plus the repair layer.
+    """
+    fields = {
+        name: (f.annotation, f)
+        for name, f in contract.model_fields.items()
+        if name not in MODEL_EXCLUDED_FIELDS
+    }
+    return create_model(f"{contract.__name__}Extraction", **fields)
+
+
+ExtractionContract = _build_extraction_contract()
+
+
+def extraction_schema(contract: Optional[Type[BaseModel]] = None) -> Dict[str, Any]:
+    """JSON schema for what the LLM should generate. Used for both the prompt and
+    the provider's schema constraint so the two cannot drift apart."""
+    model = ExtractionContract if contract is None else _build_extraction_contract(contract)
+    return model.model_json_schema()
+
 
 class StructuredExtractor(BaseExtractor):
     """
@@ -47,19 +89,22 @@ class StructuredExtractor(BaseExtractor):
         Returns:
             A dictionary with the extracted data, conforming to the contract.
         """
-        contract = ResumeV2
+        # The model is asked for ExtractionContract (ResumeV2 minus raw_text and
+        # anything else we already know locally); raw_text is attached downstream
+        # from our own input. See MODEL_EXCLUDED_FIELDS.
+        contract = ExtractionContract
         logger.info(f"Starting structured extraction using LLM: {type(self.llm_service)} model: {getattr(self.llm_service, 'model', None)}")
-        
+
         # Generate the schema from the Pydantic model
-        schema = contract.model_json_schema()
-        
+        schema = extraction_schema()
+
         # Create the prompt for the LLM
         prompt = self._create_prompt(raw_text, schema)
         
         response_text = ""
         extracted_data: Dict[str, Any] = {}
         try:
-            # Call the provider chain with the ResumeV2 schema. Providers with
+            # Call the provider chain with the extraction schema. Providers with
             # native schema support (Ollama format param, Claude messages.parse)
             # enforce conformance server-side; OpenAI-compatible providers get a
             # JSON instruction plus the repair layer in generate_structured.
@@ -68,7 +113,7 @@ class StructuredExtractor(BaseExtractor):
                     prompt,
                     contract,
                     system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
-                    max_tokens=8192,
+                    max_tokens=EXTRACTION_MAX_TOKENS,
                     task_type="resume_parsing",
                 )
             else:
@@ -76,7 +121,7 @@ class StructuredExtractor(BaseExtractor):
                 response_text = await self.llm_service.generate_text_async(
                     prompt,
                     system_message="You are a resume parsing specialist AI. Extract relevant information accurately.",
-                    max_tokens=8192,
+                    max_tokens=EXTRACTION_MAX_TOKENS,
                     task_type="resume_parsing",
                 )
                 extracted_data = self._parse_llm_response(response_text)
@@ -91,7 +136,7 @@ class StructuredExtractor(BaseExtractor):
                     + "\n\nIMPORTANT: Respond with a single raw JSON object only. Do NOT include code fences, explanations, or extra text."
                 )
                 response_text = await self.llm_service.generate_text_async(
-                    strict_prompt, max_tokens=8192, task_type="resume"
+                    strict_prompt, max_tokens=EXTRACTION_MAX_TOKENS, task_type="resume_parsing"
                 )
                 extracted_data = self._parse_llm_response(response_text)
                 validated_data = contract.model_validate(extracted_data)
@@ -537,66 +582,7 @@ class StructuredExtractor(BaseExtractor):
 
     def _create_prompt(self, text: str, schema: Dict[str, Any]) -> str:
         """Create a concise prompt for LLM extraction."""
-        schema_json = json.dumps(schema, indent=2)
-        
-        prompt = f"""You are an expert resume parser. Extract ALL information from this resume into structured JSON.
-
-**CRITICAL REQUIREMENTS:**
-1. Extract complete job responsibilities as clean, well-formatted bullet points
-2. Each bullet point should be a separate, concise achievement or responsibility
-3. Extract military experience separately from work experience
-4. Return valid JSON only - no explanations
-5. Use "Present" (not "PRESENT") for current employment end dates
-6. For education dates, extract only the year shown (do NOT add "till present" or similar)
-
-**EDUCATION EXTRACTION REQUIREMENTS:**
-- Extract COMPLETE education information including ALL available fields:
-  * institution: Full institution name
-  * degree: Degree type (e.g., "Bachelor of Science", "Master of Arts", "B.S.", "M.A.", "PhD", "Associate's", "Continuing Education")
-  * field_of_study: Major/field (e.g., "Computer Science", "Business Administration", "Engineering", "HR Management and Analytics", "Business Communication")
-  * start_date/end_date: Years only (e.g., "2021", "2022")
-  * gpa: Grade point average if mentioned
-  * location: Institution location if specified
-  * honors: Academic honors, awards, dean's list, etc.
-  * certifications: Professional certifications earned during education
-- IMPORTANT: Distinguish between degree type and field of study:
-  * degree: The type of degree (Bachelor, Master, PhD, Continuing Education, etc.)
-  * field_of_study: The specific subject/major (Computer Science, Business Administration, etc.)
-- Examples:
-  * "BA in Criminal Justice" → degree: "Bachelor of Arts", field_of_study: "Criminal Justice"
-  * "HR Management and Analytics" → degree: "Continuing Education", field_of_study: "HR Management and Analytics"
-  * "Business Communication" → degree: "Continuing Education", field_of_study: "Business Communication"
-- Look for degree patterns like: "Bachelor of Science in Computer Science", "B.S. in Engineering", "Master's in Business Administration"
-- If degree type is not explicitly stated but can be inferred from context, include it
-- Extract ALL education entries found in the resume, not just the most recent
-- Include any academic achievements, honors, or special recognitions
-- Look for certifications that may be listed near education sections
-
-**EXTRACT:**
-- Personal info (name, email, phone, location, LinkedIn)
-- Job experience with clean, organized bullet points for each role
-- Education details with ALL available fields (institution, degree, field_of_study, dates, gpa, location, honors, certifications)
-- Skills
-- Military experience (if any)
-
-**DATE FORMATTING:**
-- Current employment: use "Present" (proper case)
-- Education dates: use only the year shown in parentheses (e.g., "2021", "2022")
-- Never add "till present" for education entries
-
-**BULLET POINT FORMAT:**
-- Keep each responsibility as a clean, concise bullet point
-- Maintain the original structure and organization
-- Do not combine multiple bullets into long paragraphs
-
-**RESUME TEXT:**
-{text}
-
-**JSON SCHEMA:**
-{schema_json}
-
-Return only the JSON object."""
-        return prompt
+        return create_extraction_prompt(text, schema)
 
     def _parse_llm_response(self, response_text: str) -> Dict[str, Any]:
         """
@@ -957,3 +943,68 @@ Return only the JSON object."""
                     raise e
             except Exception:
                 raise e
+
+
+def create_extraction_prompt(text: str, schema: Dict[str, Any]) -> str:
+    """The production resume-extraction prompt. Module-level so evals/run_eval.py
+    can send exactly what production sends, rather than a copy that drifts."""
+    schema_json = json.dumps(schema, indent=2)
+
+    prompt = f"""You are an expert resume parser. Extract ALL information from this resume into structured JSON.
+
+**CRITICAL REQUIREMENTS:**
+1. Extract complete job responsibilities as clean, well-formatted bullet points
+2. Each bullet point should be a separate, concise achievement or responsibility
+3. Extract military experience separately from work experience
+4. Return valid JSON only - no explanations
+5. Use "Present" (not "PRESENT") for current employment end dates
+6. For education dates, extract only the year shown (do NOT add "till present" or similar)
+
+**EDUCATION EXTRACTION REQUIREMENTS:**
+- Extract COMPLETE education information including ALL available fields:
+  * institution: Full institution name
+  * degree: Degree type (e.g., "Bachelor of Science", "Master of Arts", "B.S.", "M.A.", "PhD", "Associate's", "Continuing Education")
+  * field_of_study: Major/field (e.g., "Computer Science", "Business Administration", "Engineering", "HR Management and Analytics", "Business Communication")
+  * start_date/end_date: Years only (e.g., "2021", "2022")
+  * gpa: Grade point average if mentioned
+  * location: Institution location if specified
+  * honors: Academic honors, awards, dean's list, etc.
+  * certifications: Professional certifications earned during education
+- IMPORTANT: Distinguish between degree type and field of study:
+  * degree: The type of degree (Bachelor, Master, PhD, Continuing Education, etc.)
+  * field_of_study: The specific subject/major (Computer Science, Business Administration, etc.)
+- Examples:
+  * "BA in Criminal Justice" → degree: "Bachelor of Arts", field_of_study: "Criminal Justice"
+  * "HR Management and Analytics" → degree: "Continuing Education", field_of_study: "HR Management and Analytics"
+  * "Business Communication" → degree: "Continuing Education", field_of_study: "Business Communication"
+- Look for degree patterns like: "Bachelor of Science in Computer Science", "B.S. in Engineering", "Master's in Business Administration"
+- If degree type is not explicitly stated but can be inferred from context, include it
+- Extract ALL education entries found in the resume, not just the most recent
+- Include any academic achievements, honors, or special recognitions
+- Look for certifications that may be listed near education sections
+
+**EXTRACT:**
+- Personal info (name, email, phone, location, LinkedIn)
+- Job experience with clean, organized bullet points for each role
+- Education details with ALL available fields (institution, degree, field_of_study, dates, gpa, location, honors, certifications)
+- Skills
+- Military experience (if any)
+
+**DATE FORMATTING:**
+- Current employment: use "Present" (proper case)
+- Education dates: use only the year shown in parentheses (e.g., "2021", "2022")
+- Never add "till present" for education entries
+
+**BULLET POINT FORMAT:**
+- Keep each responsibility as a clean, concise bullet point
+- Maintain the original structure and organization
+- Do not combine multiple bullets into long paragraphs
+
+**RESUME TEXT:**
+{text}
+
+**JSON SCHEMA:**
+{schema_json}
+
+Return only the JSON object."""
+    return prompt

@@ -1,0 +1,27 @@
+{
+  "name": "Aisha Al-Rashid",
+  "email": "aisha.alrashid@example.com",
+  "phone": "555-330-6754",
+  "location": "Minneapolis, MN",
+  "experience_titles": [
+    "Senior Product Manager",
+    "Product Manager",
+    "Business Analyst"
+  ],
+  "experience_companies": [
+    "Northfield Systems",
+    "Lakeshore Software",
+    "Twin Cities Consulting"
+  ],
+  "skills": [
+    "Product Strategy",
+    "Jira",
+    "SQL",
+    "A/B Testing",
+    "Customer Discovery",
+    "Roadmapping"
+  ],
+  "education_institutions": [
+    "University of Minnesota"
+  ]
+}
