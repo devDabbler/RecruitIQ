@@ -13,6 +13,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -39,6 +40,12 @@ Rules:
 - Be concise and recruiter-friendly: short paragraphs or tight bullet lists,
   names bolded, scores as percentages. No preamble.
 """
+
+
+class ChatResponse(BaseModel):
+    """The /chat contract, unchanged since Phase 2 — now merely written down."""
+    response: str
+    conversation_context: Dict[str, Any] = Field(default_factory=dict)
 
 
 class BufferedFileWrapper:
@@ -137,7 +144,7 @@ async def get_task_status(
         raise HTTPException(status_code=500, detail="Error fetching task status.")
 
 
-@router.post("/chat")
+@router.post("/chat", response_model=ChatResponse)
 async def chat_with_assistant(
     message: str = Body(..., embed=True),
     conversation_history: Optional[List[Dict[str, str]]] = Body(default=[], embed=True),

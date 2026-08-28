@@ -2,6 +2,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG)
 logging.debug("[candidates.py] Importing candidates router...")
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from typing import List, Optional, Dict, Any
@@ -25,6 +26,39 @@ from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
 
 router = APIRouter(prefix="/candidates")
+
+
+# Response models for the routes that used to return bare dicts. Declared here
+# rather than in models/candidate.py because they describe this router's
+# envelopes, not the candidate domain.
+class MessageResponse(BaseModel):
+    """A plain acknowledgement."""
+    message: str
+
+
+class CandidateResumeSummary(BaseModel):
+    id: int
+    file_name: Optional[str] = None
+    file_type: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class CandidateResumesResponse(BaseModel):
+    candidate_id: str
+    resumes: List[CandidateResumeSummary]
+
+
+class ResumeUploadResponse(BaseModel):
+    message: str
+    resume_id: int
+    candidate_id: Optional[str] = None
+
+
+class ParsedResumeSaveResponse(BaseModel):
+    message: str
+    resume_id: int
+    candidate_id: str
+    candidate_updated: bool
 
 def format_candidate_skills(candidate, parsed_data=None):
     """Format candidate skills safely, handling various data structures."""
@@ -134,6 +168,27 @@ async def create_candidate(
     
     return db_candidate
 
+@router.get("/skills_breakdown", response_model=Dict[str, int])
+async def get_skills_breakdown(db: Session = Depends(get_db),
+    resume_service = Depends(provide_resume_service)):
+    """
+    Get a breakdown/count of all skills across all candidates.
+    Returns a dict: {"Python": 5, "SQL": 3, ...}
+    """
+    from collections import Counter
+    skill_counts = Counter()
+    candidates = db.query(Candidate).all()
+    for candidate in candidates:
+        if hasattr(candidate, 'skills') and candidate.skills:
+            for skill in candidate.skills:
+                if skill.skill_name:
+                    skill_counts[skill.skill_name] += 1
+    return dict(skill_counts)
+
+
+# Must stay below every literal path in this router: FastAPI matches routes in
+# registration order, so a "/{candidate_id}" declared first swallows
+# "/skills_breakdown" and answers 404 for it.
 @router.get("/{candidate_id}", response_model=CandidateResponse)
 @async_timed
 async def get_candidate_by_id(
@@ -311,7 +366,7 @@ async def update_candidate(
     
     return db_candidate
 
-@router.delete("/{candidate_id}")
+@router.delete("/{candidate_id}", response_model=MessageResponse)
 async def delete_candidate(
     candidate_id: str,
     db: Session = Depends(get_db),
@@ -544,24 +599,7 @@ async def search_candidates(
         )
 
 
-@router.get("/skills_breakdown")
-async def get_skills_breakdown(db: Session = Depends(get_db),
-    resume_service = Depends(provide_resume_service)):
-    """
-    Get a breakdown/count of all skills across all candidates.
-    Returns a dict: {"Python": 5, "SQL": 3, ...}
-    """
-    from collections import Counter
-    skill_counts = Counter()
-    candidates = db.query(Candidate).all()
-    for candidate in candidates:
-        if hasattr(candidate, 'skills') and candidate.skills:
-            for skill in candidate.skills:
-                if skill.skill_name:
-                    skill_counts[skill.skill_name] += 1
-    return dict(skill_counts)
-
-@router.post("/{candidate_id}/upload-resume")
+@router.post("/{candidate_id}/upload-resume", response_model=ResumeUploadResponse)
 async def upload_candidate_resume(
     candidate_id: str,
     file: UploadFile = File(...),
@@ -619,7 +657,7 @@ async def upload_candidate_resume(
         # Clean up temporary file
         os.unlink(temp_file_path)
 
-@router.get("/{candidate_id}/resumes")
+@router.get("/{candidate_id}/resumes", response_model=CandidateResumesResponse)
 async def get_candidate_resumes(
     candidate_id: str,
     db: Session = Depends(get_db),
@@ -650,7 +688,7 @@ async def get_candidate_resumes(
         ]
     }
 
-@router.post("/{candidate_id}/parsed-resume")
+@router.post("/{candidate_id}/parsed-resume", response_model=ParsedResumeSaveResponse)
 async def save_parsed_resume_data(
     candidate_id: str,
     parsed_data: Dict[str, Any],

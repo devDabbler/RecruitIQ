@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 
@@ -81,7 +81,20 @@ class JobResponse(BaseModel):
     updated_at: datetime
     job_metadata: Dict[str, Any] = Field(default_factory=dict)
     skills: List[str] = Field(default_factory=list)
-    
+
+    # jobs.job_metadata, .views and .applications are all nullable columns, but
+    # a field default only applies when the key is *absent* — an explicit None
+    # still fails validation. Any job row carrying a NULL in one of these
+    # therefore 500'd the whole listing, not just its own entry. Coerce instead.
+    @field_validator("job_metadata", "skills", "views", "applications", mode="before")
+    @classmethod
+    def _null_means_empty(cls, value, info):
+        if value is not None:
+            return value
+        return {"job_metadata": {}, "skills": [], "views": 0, "applications": 0}[
+            info.field_name
+        ]
+
     model_config = {"from_attributes": True}
 
 

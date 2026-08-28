@@ -436,10 +436,25 @@ async def get_resume(resume_id: int, db: Session = Depends(get_db), resume_servi
     try:
         # Get the resume from database
         resume_data = await resume_service.get_resume(db, resume_id)
-        
+
         if not resume_data:
+            # get_resume() returns None both for "no such row" and for "the row
+            # is there but its parsed_data will not load". Those want different
+            # answers: a 404 on a resume the Candidate Detail screen just linked
+            # to reads as a broken link rather than as bad stored data.
+            from backend.models.models import Resume as ResumeRow
+
+            exists = db.query(ResumeRow.id).filter(ResumeRow.id == resume_id).first()
+            if exists:
+                logger.error(
+                    "Resume %s exists but its parsed_data could not be loaded", resume_id
+                )
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Resume {resume_id} is stored but its parsed data is unreadable",
+                )
             raise HTTPException(status_code=404, detail=f"Resume with ID {resume_id} not found")
-        
+
         # Convert to response model
         response = ResumeResponse(
             resume_id=resume_id,

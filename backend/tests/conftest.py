@@ -176,6 +176,7 @@ def seed(db_session: Session):
                 file_type="pdf",
                 parsed_content=f"{first} {last}\n{position} at {company}\nPython, SQL",
                 parsed_data={
+                    "file_name": f"{first.lower()}_{last.lower()}.pdf",
                     "personal_info": {
                         "name": f"{first} {last}",
                         "email": email,
@@ -192,6 +193,9 @@ def seed(db_session: Session):
                         }
                     ],
                     "education": [],
+                    # Bare strings on purpose: eight of the resumes in the dev
+                    # database store skills this way rather than as
+                    # {"name": ...}, and GET /api/resume/{id} has to survive it.
                     "skills": ["Python", "SQL"],
                 },
                 validation_status="valid",
