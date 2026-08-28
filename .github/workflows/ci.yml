@@ -51,5 +51,10 @@ jobs:
         working-directory: backend
         run: poetry run alembic upgrade head
 
+      # Fails the build when a route changes without a regenerated schema, so
+      # backend/frontend drift shows up here rather than as a broken screen.
+      - name: Check openapi.json is current
+        run: poetry run python scripts/export_openapi.py --check
+
       - name: Test
         run: poetry run pytest -q
