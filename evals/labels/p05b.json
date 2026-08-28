@@ -1,0 +1,24 @@
+{
+  "name": "Sofia Delgado",
+  "email": "sofia.delgado@example.com",
+  "phone": "555-778-0143",
+  "location": "Denver, CO",
+  "experience_titles": [
+    "Talent Operations Lead",
+    "Senior Technical Recruiter"
+  ],
+  "experience_companies": [
+    "Summitline",
+    "Peakview Staffing"
+  ],
+  "skills": [
+    "Greenhouse",
+    "Sourcing",
+    "Hiring Analytics",
+    "Stakeholder Management",
+    "Boolean Search"
+  ],
+  "education_institutions": [
+    "Colorado State University"
+  ]
+}

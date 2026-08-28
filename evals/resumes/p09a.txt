@@ -1,0 +1,19 @@
+Linda Park
+linda.park@example.com | 555-644-3387 | San Jose, CA
+
+SUMMARY
+QA lead with strong test automation background.
+
+EXPERIENCE
+QA Lead, Almaden Robotics | 2020 - Present
+- Lead a 5-person QA team covering firmware and cloud services
+- Grew automated regression coverage from 20% to 85% with Playwright
+
+QA Engineer, Sunnyvale Apps | 2016 - 2020
+- Wrote Selenium suites for consumer mobile/web products
+
+EDUCATION
+San Jose State University - BS in Software Engineering (2016)
+
+SKILLS
+Playwright, Selenium, Python, Test Planning, CI/CD, JIRA

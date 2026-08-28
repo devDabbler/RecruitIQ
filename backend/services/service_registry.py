@@ -1,7 +1,6 @@
 # Central service registry for singleton/shared services
 import logging
 from .llm_service import LLMService, get_llm_service
-from .intent_processor import IntentProcessor, get_intent_processor
 from .web_search_service import WebSearchService, get_web_search_service
 from .communications_service import CommunicationsService
 from .matching_integrator import MatchingIntegrator
@@ -21,7 +20,6 @@ class ServiceRegistry:
     def __init__(self):
         self.settings = Settings()
         self._llm_service = None
-        self._intent_processor = None
         self._web_search_service = None
         self._communications_service = None
         self._matching_integrator = None
@@ -40,12 +38,6 @@ class ServiceRegistry:
             self._llm_service = get_llm_service()
             # Don't preload embedding model during startup - load it when first accessed
         return self._llm_service
-
-    @property
-    def intent_processor(self):
-        if self._intent_processor is None:
-            self._intent_processor = IntentProcessor(self.llm_service)
-        return self._intent_processor
 
     @property
     def web_search_service(self):
@@ -145,9 +137,6 @@ registry = get_registry()
 
 def provide_llm_service():
     return registry.llm_service
-
-def provide_intent_processor():
-    return registry.intent_processor
 
 def provide_web_search_service():
     return registry.web_search_service

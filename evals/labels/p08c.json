@@ -1,0 +1,25 @@
+{
+  "name": "Jake Sherwood",
+  "email": "jake.sherwood@example.com",
+  "phone": "555-909-1276",
+  "location": "Remote",
+  "experience_titles": [
+    "DevOps Engineer",
+    "Audio Engineer"
+  ],
+  "experience_companies": [
+    "Driftwood Cloud",
+    "Redline Studios"
+  ],
+  "skills": [
+    "AWS",
+    "Terraform",
+    "Kubernetes",
+    "GitHub Actions",
+    "Linux",
+    "Bash"
+  ],
+  "education_institutions": [
+    "Full Sail University"
+  ]
+}

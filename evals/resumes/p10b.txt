@@ -1,0 +1,12 @@
+Omar Haddad | Chicago, IL | omar.haddad@example.com | 555-517-2098
+
+Financial analyst moving into analytics engineering.
+
+PROFESSIONAL EXPERIENCE
+Wacker Street Capital | Analytics Engineer | 2024-Present
+ * Model financial datasets in dbt feeding Looker dashboards
+Lakeview Holdings | Senior Financial Analyst | 2019-2024
+ * Built FP&A models and automated monthly reporting in Python
+
+EDUCATION: BS, Finance, University of Illinois Urbana-Champaign 2019
+CORE SKILLS: SQL - dbt - Looker - Python - Financial Modeling - Excel
