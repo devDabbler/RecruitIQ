@@ -998,11 +998,11 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
         
         experience_summary = []
         for exp in parsed_data.get('experience', []):
-            experience_summary.append(f"- {exp.get('title')} at {exp.get('company')}: {exp.get('description', '')[:100]}...")
+            experience_summary.append(f"- {exp.get('title')} at {exp.get('company')}: {(exp.get('description') or '')[:100]}...")
         if experience_summary:
             summary_parts.append("Experience:\n" + "\n".join(experience_summary))
 
-        skills_summary = ", ".join([skill.get('name') for skill in parsed_data.get('skills', [])[:15]])
+        skills_summary = ", ".join([skill.get('name') for skill in parsed_data.get('skills', [])[:15] if skill.get('name')])
         if skills_summary:
             summary_parts.append(f"Skills: {skills_summary}")
 
@@ -1039,23 +1039,35 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
         
         return assessment
 
-    async def process_resume(self, file: UploadFile, db=None, save_to_db: bool = False, candidate_id: Optional[str] = None) -> Dict[str, Any]:
+    async def process_resume(self, file: UploadFile, db=None, save_to_db: bool = False, candidate_id: Optional[str] = None,
+                             target_job_title: Optional[str] = None, job_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Process a single resume file, adapting to the interface expected by the resume router.
-        
+
         Args:
             file: The uploaded resume file
             db: Database session
             save_to_db: Whether to save the resume to the database
             candidate_id: Optional candidate ID for association
-            
+            target_job_title: Optional job title to score market/job fit against
+            job_data: Optional full job object; used to derive a title when none is given
+
         Returns:
             A dictionary with parsing results and metadata
         """
-        logger.info(f"Processing resume: {file.filename}, save_to_db={save_to_db}, candidate_id={candidate_id}")
-        
+        # Derive a title from job_data when none was provided explicitly
+        if (not target_job_title or not str(target_job_title).strip()) and isinstance(job_data, dict):
+            for key in ("title", "job_title", "name", "role"):
+                value = job_data.get(key)
+                if isinstance(value, str) and value.strip():
+                    target_job_title = value.strip()
+                    logger.info(f"Derived target_job_title from job_data['{key}']: {target_job_title}")
+                    break
+
+        logger.info(f"Processing resume: {file.filename}, save_to_db={save_to_db}, candidate_id={candidate_id}, target_job_title={target_job_title}")
+
         # Process the single file with our internal method
-        result = await self._process_single_file(file, target_job_title=None)
+        result = await self._process_single_file(file, target_job_title=target_job_title)
         
         # Format the result to match the expected structure in the router
         # Ensure parsed_data is available in the response
