@@ -80,6 +80,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # `npm run typecheck` runs `next typegen` first. PageProps and LayoutProps
+      # are globals Next writes into .next/types, so a bare tsc on a clean
+      # checkout fails on every route -- passing locally only because a build
+      # had already happened.
       - name: Typecheck
         run: npm run typecheck
 
