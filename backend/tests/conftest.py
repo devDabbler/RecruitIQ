@@ -28,7 +28,9 @@ from backend.models.models import (
     JobApplication,
     Resume,
     SavedJob,
+    User,
 )
+from backend.utils.auth import create_access_token, get_or_create_demo_user, hash_password
 from backend.utils.database import engine, get_db
 
 # Fixed timestamp so seeded rows sort deterministically regardless of when the
@@ -39,6 +41,8 @@ SEED_EPOCH = datetime(2025, 1, 1, 12, 0, 0)
 # so list endpoints return the same thing on a loaded dev database and an empty
 # CI one.
 SEED_EMAIL_DOMAIN = "recruitiq-seed.example.com"
+
+ADMIN_PASSWORD = "contract-suite-admin-password"
 
 
 @pytest.fixture(scope="session")
@@ -234,16 +238,55 @@ def seed(db_session: Session):
 
 
 @pytest.fixture(scope="session")
-def client(db_session: Session, seed):
+def override_get_db(db_session: Session):
     app.dependency_overrides[get_db] = lambda: db_session
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture(scope="session")
+def admin_user(db_session: Session) -> User:
+    """An admin with a known password, for login and write-access tests."""
+    user = User(
+        email=f"admin@{SEED_EMAIL_DOMAIN}",
+        hashed_password=hash_password(ADMIN_PASSWORD),
+        role="admin",
+        created_at=SEED_EPOCH,
+    )
+    db_session.add(user)
+    db_session.flush()
+    return user
+
+
+@pytest.fixture(scope="session")
+def client(override_get_db, seed):
+    """Anonymous client. Writes are refused; reads are not."""
     # A handler that blows up should be *recorded* as a 500, not raised out of
     # the capture fixture — a contract suite that dies on the first broken route
     # tells you nothing about the other twenty.
-    test_client = TestClient(app, raise_server_exceptions=False)
-    try:
-        yield test_client
-    finally:
-        app.dependency_overrides.pop(get_db, None)
+    return TestClient(app, raise_server_exceptions=False)
+
+
+@pytest.fixture(scope="session")
+def admin_client(override_get_db, seed, admin_user):
+    token = create_access_token(admin_user)
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+@pytest.fixture(scope="session")
+def demo_client(override_get_db, seed, db_session: Session):
+    token = create_access_token(get_or_create_demo_user(db_session))
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"Authorization": f"Bearer {token}"},
+    )
 
 
 @pytest.fixture

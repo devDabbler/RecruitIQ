@@ -14,11 +14,29 @@ from pydantic import BaseModel
 from ..services.service_registry import provide_storage_service, provide_minio_storage_service, provide_resume_service
 from backend.services.agent_framework.agent_factory import AgentFactory
 from ..utils.resume_parsing import ResumeData
+from backend.utils.auth import ROLE_ADMIN, get_optional_user
 from backend.utils.database import get_db
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 logger = logging.getLogger(__name__)
+
+
+def require_write_access_for_save(save_to_db: bool, current_user) -> None:
+    """Guard the one write hiding inside an otherwise read-only endpoint.
+
+    `/parse` is on the read-only allowlist in `utils/auth.py` because parsing a
+    resume touches nothing — unless `save_to_db=true`, which a multipart form
+    field the path-based gate cannot see. So the check lives here instead.
+    """
+    if not save_to_db:
+        return
+    if current_user is not None and current_user.role == ROLE_ADMIN:
+        return
+    raise HTTPException(
+        status_code=403 if current_user is not None else 401,
+        detail="Saving a parsed resume requires an administrator account.",
+    )
 
 
 class PreviewUrlResponse(BaseModel):
@@ -164,14 +182,16 @@ async def get_resume_preview(
 
 @router.post("/parse", response_model=ResumeResponse)
 async def parse_resume(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     candidate_id: Optional[str] = Form(None),
     save_to_db: bool = Form(False),
     target_job_title: Optional[str] = Form(None),
     candidate_context: Optional[str] = Form(None),
     db: Session = Depends(get_db),
+    current_user = Depends(get_optional_user),
 ):
     """Parse a resume file and optionally save to database, now using Agentic Zero agent"""
+    require_write_access_for_save(save_to_db, current_user)
     try:
         # Check file extension
         _, file_extension = os.path.splitext(file.filename)
@@ -264,13 +284,15 @@ async def parse_resume(
 
 @router.post("/parse-direct", response_model=ResumeResponse)
 async def parse_resume_direct(
-    file: UploadFile = File(...), 
+    file: UploadFile = File(...),
     candidate_id: Optional[str] = Form(None),
     save_to_db: bool = Form(False),
     db: Session = Depends(get_db),
-    resume_service = Depends(provide_resume_service)
+    resume_service = Depends(provide_resume_service),
+    current_user = Depends(get_optional_user),
 ):
     """Parse a resume file using direct resume service (no agent)"""
+    require_write_access_for_save(save_to_db, current_user)
     try:
         # Check file extension
         _, file_extension = os.path.splitext(file.filename)

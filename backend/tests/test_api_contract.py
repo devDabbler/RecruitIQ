@@ -187,7 +187,7 @@ def read_captures(client, seed, db_session) -> dict:
 
 
 @pytest.fixture(scope="session")
-def write_captures(client, seed, db_session) -> dict:
+def write_captures(admin_client, seed, db_session) -> dict:
     """Exercise the mutating routes the frontend needs, with fresh payloads.
 
     Everything written here is undone by the outer transaction rollback in
@@ -197,7 +197,7 @@ def write_captures(client, seed, db_session) -> dict:
     captures: dict = {}
 
     def cap(case_id: str, method: str, path: str, **kwargs) -> dict:
-        captures[case_id] = _capture(client, method, path, kwargs, case_id, db_session)
+        captures[case_id] = _capture(admin_client, method, path, kwargs, case_id, db_session)
         return captures[case_id]
 
     def job_payload(title: str, **overrides) -> dict:
@@ -216,7 +216,7 @@ def write_captures(client, seed, db_session) -> dict:
 
     cap("jobs.create", "POST", "/api/jobs/", json=job_payload(f"Contract Test Job {suffix}"))
 
-    scratch = client.post("/api/jobs/", json=job_payload(f"Contract Scratch Job {suffix}"))
+    scratch = admin_client.post("/api/jobs/", json=job_payload(f"Contract Scratch Job {suffix}"))
     db_session.expire_all()
     if scratch.status_code < 400:
         scratch_job_id = scratch.json()["id"]
@@ -258,7 +258,7 @@ def write_captures(client, seed, db_session) -> dict:
         },
     )
 
-    scratch = client.post(
+    scratch = admin_client.post(
         "/api/candidates/",
         json={
             "first_name": "Contract",
