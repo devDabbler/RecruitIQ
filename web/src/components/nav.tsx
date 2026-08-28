@@ -23,8 +23,8 @@ const LINKS = [
   { href: "/candidates", label: "Candidates", icon: Users },
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/matching", label: "Matching", icon: Sparkles },
-  { href: "/upload", label: "Resume Upload", icon: Upload },
-  { href: "/assistant", label: "AI Assistant", icon: Bot },
+  { href: "/upload", label: "Upload", icon: Upload },
+  { href: "/assistant", label: "Assistant", icon: Bot },
 ] as const;
 
 export function Nav() {
@@ -43,12 +43,12 @@ export function Nav() {
             className={cn(
               "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700",
             )}
           >
             <Icon className="h-4 w-4" aria-hidden />
-            <span className="hidden lg:inline">{label}</span>
+            <span className="hidden md:inline">{label}</span>
           </Link>
         );
       })}

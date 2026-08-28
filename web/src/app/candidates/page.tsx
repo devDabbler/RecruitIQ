@@ -82,19 +82,19 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
                       href={`/candidates/${candidate.id}`}
                       className="flex items-center gap-3 font-medium hover:underline"
                     >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-slate-900/5 text-xs font-semibold text-slate-600">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">
                         {initials(candidate)}
                       </span>
                       <span className="min-w-0">
                         <span className="block truncate">{fullName(candidate)}</span>
                         <span className="block truncate text-xs font-normal text-slate-500">
-                          {candidate.email ?? "—"}
+                          {candidate.email ?? "No email"}
                         </span>
                       </span>
                     </Link>
                   </TableCell>
                   <TableCell className="hidden max-w-56 truncate text-slate-600 md:table-cell">
-                    {candidate.current_position ?? candidate.position_applied ?? "—"}
+                    {candidate.current_position ?? candidate.position_applied ?? "Not listed"}
                     {candidate.current_company ? (
                       <span className="block text-xs text-slate-400">
                         {candidate.current_company}
@@ -102,7 +102,7 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
                     ) : null}
                   </TableCell>
                   <TableCell className="hidden text-slate-600 lg:table-cell">
-                    {candidate.location ?? "—"}
+                    {candidate.location ?? "Not listed"}
                   </TableCell>
                   <TableCell className="hidden xl:table-cell">
                     <SkillChips skills={candidate.skills} />
@@ -142,7 +142,7 @@ function first(value: string | string[] | undefined): string | undefined {
 }
 
 function SkillChips({ skills }: { skills: string[] | null | undefined }) {
-  if (!skills?.length) return <span className="text-slate-400">—</span>;
+  if (!skills?.length) return <span className="text-xs text-slate-400">None listed</span>;
   return (
     <span className="flex flex-wrap gap-1">
       {skills.slice(0, 3).map((skill) => (

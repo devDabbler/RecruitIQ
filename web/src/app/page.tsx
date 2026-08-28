@@ -15,15 +15,17 @@ function Stat({
   label,
   value,
   icon: Icon,
+  tint,
 }: {
   label: string;
   value: string | number;
   icon: typeof Users;
+  tint: string;
 }) {
   return (
     <Card>
       <CardContent className="flex items-center gap-4 p-6">
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-slate-900/5 text-slate-700">
+        <span className={`grid h-11 w-11 shrink-0 place-items-center rounded-lg ${tint}`}>
           <Icon className="h-5 w-5" aria-hidden />
         </span>
         <span>
@@ -83,18 +85,29 @@ export default async function DashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        description="Live counts from the seeded database — every number below is a query, not a fixture."
+        description="Live counts from the seeded database. Every number below is a query, not a fixture."
       />
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Candidates" value={candidates.total} icon={Users} />
-        <Stat label="Open roles" value={openJobs} icon={Briefcase} />
+        <Stat
+          label="Candidates"
+          value={candidates.total}
+          icon={Users}
+          tint="bg-indigo-50 text-indigo-600"
+        />
+        <Stat
+          label="Open roles"
+          value={openJobs}
+          icon={Briefcase}
+          tint="bg-emerald-50 text-emerald-600"
+        />
         <Stat
           label="In interview or later"
           value={funnel
             .filter((f) => ["interviewing", "offered", "hired"].includes(f.stage))
             .reduce((sum, f) => sum + f.count, 0)}
           icon={TrendingUp}
+          tint="bg-violet-50 text-violet-600"
         />
       </div>
 
@@ -111,7 +124,7 @@ export default async function DashboardPage() {
                 </span>
                 <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
                   <span
-                    className="block h-full rounded-full bg-slate-800"
+                    className="block h-full rounded-full bg-indigo-500"
                     style={{ width: `${(count / largestStage) * 100}%` }}
                   />
                 </span>
@@ -164,7 +177,7 @@ export default async function DashboardPage() {
               <span className="min-w-0">
                 <span className="block truncate font-medium">{fullName(candidate)}</span>
                 <span className="block truncate text-sm text-slate-500">
-                  {candidate.current_position ?? candidate.position_applied ?? "—"}
+                  {candidate.current_position ?? candidate.position_applied ?? "No role listed"}
                 </span>
               </span>
               <StageBadge status={candidate.status} />

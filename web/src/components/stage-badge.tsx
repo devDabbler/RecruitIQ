@@ -16,7 +16,7 @@ export function StageBadge({
   className?: string;
 }) {
   if (!status) {
-    return <span className={cn("text-xs text-slate-400", className)}>—</span>;
+    return <span className={cn("text-xs text-slate-400", className)}>No stage</span>;
   }
 
   const known = isPipelineStage(status);

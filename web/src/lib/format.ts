@@ -12,10 +12,13 @@ const DATE = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
+// Missing or unparseable dates format to "": call sites either sit inside a
+// sentence ("Added {date}") or provide their own written-out fallback, and an
+// empty string lets both handle absence their own way.
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : DATE.format(date);
+  return Number.isNaN(date.getTime()) ? "" : DATE.format(date);
 }
 
 const MONEY = new Intl.NumberFormat("en-US", {
@@ -36,7 +39,7 @@ export function formatSalary(
 
 /** "full_time" and "REMOTE" both need to read as prose in a table cell. */
 export function humanize(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "";
   return value
     .replace(/[_-]+/g, " ")
     .toLowerCase()

@@ -123,14 +123,14 @@ test("the demo user can walk all eight screens and every one shows live data", a
   await expectNoErrorState(page);
 
   // ---- 7. Resume Upload ---------------------------------------------------
-  await page.getByRole("link", { name: "Resume Upload", exact: true }).click();
+  await page.getByRole("link", { name: "Upload", exact: true }).click();
   await expect(page).toHaveURL(/\/upload$/);
   await expect(page.getByRole("heading", { name: "Resume Upload", level: 1 })).toBeVisible();
   // The uploader is the screen; without an input there is nothing to demo.
   await expect(page.locator('input[type="file"]')).toBeAttached();
 
   // ---- 8. AI Assistant ----------------------------------------------------
-  await page.getByRole("link", { name: "AI Assistant", exact: true }).click();
+  await page.getByRole("link", { name: "Assistant", exact: true }).click();
   await expect(page).toHaveURL(/\/assistant$/);
   await expect(page.getByRole("heading", { name: "AI Assistant", level: 1 })).toBeVisible();
 

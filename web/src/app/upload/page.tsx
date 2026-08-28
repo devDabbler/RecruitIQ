@@ -1,7 +1,7 @@
 import { PageHeader } from "@/components/page-header";
 import { ResumeUploader } from "@/components/resume-uploader";
 
-export const metadata = { title: "Resume Upload — RecruitIQ" };
+export const metadata = { title: "Resume Upload · RecruitIQ" };
 
 export default function UploadPage() {
   return (

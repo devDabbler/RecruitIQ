@@ -133,7 +133,7 @@ export function AssistantChat() {
           <div className="space-y-4">
             <p className="text-sm text-slate-500">
               Ask about the candidates and roles in the database. The assistant answers by calling
-              real API tools — you will see each one as it runs.
+              real API tools, and you will see each one as it runs.
             </p>
             <div className="flex flex-col items-start gap-2">
               {SUGGESTIONS.map((suggestion) => (
@@ -190,7 +190,7 @@ function Bubble({ turn, busy }: { turn: Turn; busy: boolean }) {
   return (
     <div className={cn("flex gap-3", isUser && "justify-end")}>
       {!isUser ? (
-        <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-900 text-white">
+        <span className="mt-1 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-indigo-600 text-white">
           <Bot className="h-4 w-4" aria-hidden />
         </span>
       ) : null}
@@ -212,7 +212,7 @@ function Bubble({ turn, busy }: { turn: Turn; busy: boolean }) {
                 )}
                 <Wrench className="h-3 w-3 shrink-0 text-slate-300" aria-hidden />
                 <code className="font-mono text-slate-600">{tool.tool}</code>
-                {tool.summary ? <span className="truncate">— {tool.summary}</span> : null}
+                {tool.summary ? <span className="truncate">· {tool.summary}</span> : null}
               </li>
             ))}
           </ul>
@@ -223,7 +223,7 @@ function Bubble({ turn, busy }: { turn: Turn; busy: boolean }) {
             className={cn(
               "rounded-2xl px-4 py-2.5 text-sm whitespace-pre-line",
               isUser
-                ? "bg-slate-900 text-white"
+                ? "bg-indigo-600 text-white"
                 : turn.failed
                   ? "border border-rose-200 bg-rose-50 text-rose-800"
                   : "bg-slate-100 text-slate-800",
