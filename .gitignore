@@ -44,6 +44,11 @@ logs/
 *.rej
 *.backup
 
+# Raw model responses dumped by evals/run_eval.py for any fixture scoring below
+# its threshold. Diagnostic-only and regenerated each run; results.md/.json are
+# the committed artifacts.
+evals/failures/
+
 # ==== Databases & dumps ====
 *.db
 *.sqlite

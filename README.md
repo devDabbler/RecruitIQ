@@ -61,6 +61,40 @@ project) and ranks by cosine similarity in `pgvector`. "Machine learning
 engineer with python" surfaces the NLP Engineers first — no keyword overlap
 required.
 
+**The AI assistant** is native LLM tool calling: the model reads the
+conversation and picks from 8 tool definitions (semantic candidate search,
+job matching, match explanation, salary benchmarks, pipeline stats...), each a
+thin wrapper over the same services the REST API uses. This replaced a
+4,338-line hand-written regex intent processor — the single largest deletion
+in the codebase's history, and the code works better.
+
+**The LLM provider chain** runs local-first: a `qwen3:8b` on my own GPU
+(best-effort, hard 20-second cap so a demo visitor can never queue work behind
+my other project's inference), falling through to OpenRouter, then Claude.
+Structured outputs are schema-enforced where the provider supports it (Ollama
+`format`, Claude `messages.parse`) and JSON-repaired where it does not — the
+repair layer is scoped to exactly the tier that needs it.
+
+**Which model parses resumes is decided by benchmark, not vibes.** The eval
+harness (`evals/`) runs 30 synthetic hand-labeled resumes through the exact
+production prompt, schema, and token budget, and scores field-by-field:
+
+| | overall | median latency | $/1k resumes |
+|---|---|---|---|
+| regex baseline | 49% | 0.03s | $0 |
+| `qwen3:8b` (local) | 86% | 6.5s | $0 |
+| **`gemini-2.5-flash-lite`** | **99%** | **2.6s** | **$0.83** |
+| `gpt-5-nano` | 100% | 25.6s | $1.89 |
+| `qwen3-32b` | 95% | 31.8s | $0.81 |
+
+So resume parsing — low-volume and schema-critical — routes to
+`gemini-2.5-flash-lite`, while chat stays on the free local tier
+([ADR 0002](docs/decisions/0002-per-task-llm-routing.md)). gpt-5-nano is the
+accuracy winner but spends 10× the wall clock thinking; a first run scored it
+53% because a provider bug reported truncated completions as successes —
+building the eval found that bug and three others in production code, which
+is most of why it was worth building.
+
 ---
 
 ## Honest status
@@ -73,16 +107,17 @@ specific about what is broken is more useful to you than a feature list:
   so the "graph layer" was concept, not capability. Phase 1b deleted it
   (~5,400 lines net, 31 packages including LangChain and the entire PyTorch
   stack) and rebuilt the vector layer on Postgres + `pgvector`: 768-dimension
-  embeddings, HNSW indexes, working semantic search. `docker compose up -d db`
-  is now the whole database story.
-- **The Nebius API key is dead (HTTP 401)** and it is still the primary
-  provider, so AI-dependent paths fail until the provider chain is rebuilt
-  (Phase 2). Its doomed connection test also dominates the ~27 s first-request
-  warmup.
-- **`intent_processor.py` is 4,338 lines of hand-written regex** across 30+
-  intents. It is being replaced with ~8 tool definitions.
-- **The test suite:** 65 passing, 0 failing, 86 skipped, with CI (ruff +
-  pytest against a pgvector service container) on every PR. See
+  embeddings, working semantic search. `docker compose up -d db` is now the
+  whole database story.
+- **The AI layer was rebuilt in Phase 2.** The dead Nebius provider (HTTP 401
+  on the primary path) and the 4,338-line regex intent processor are both
+  gone, replaced by the provider chain and tool calling described above.
+  Net across Phase 2: roughly 10,000 lines of provider spaghetti,
+  intent regex, and their tests deleted.
+- **The frontend is still the old Streamlit app** and is the next thing to be
+  replaced (Phase 3: Next.js, 8 screens, JWT auth).
+- **The test suite:** 100 passing, 0 failing, with CI (ruff + pytest against a
+  pgvector service container) on every PR. See
   [documentation/TESTING.md](documentation/TESTING.md).
 
 Full assessment and plan:
@@ -113,8 +148,9 @@ poetry run streamlit run frontend/app.py
 API docs at `http://localhost:8000/docs`. To embed seed data for semantic
 search: `poetry run python scripts/backfill_embeddings.py`.
 
-The first request takes around 27 seconds while the parsing subsystem warms
-up. Subsequent requests are under 100 ms.
+The first matching request takes a few seconds while embeddings and matcher
+caches warm; after that, requests are under 100 ms. (The infamous 27-second
+cold start died with the Nebius provider in Phase 2.)
 
 ---
 

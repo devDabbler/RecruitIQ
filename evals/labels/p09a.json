@@ -1,0 +1,25 @@
+{
+  "name": "Linda Park",
+  "email": "linda.park@example.com",
+  "phone": "555-644-3387",
+  "location": "San Jose, CA",
+  "experience_titles": [
+    "QA Lead",
+    "QA Engineer"
+  ],
+  "experience_companies": [
+    "Almaden Robotics",
+    "Sunnyvale Apps"
+  ],
+  "skills": [
+    "Playwright",
+    "Selenium",
+    "Python",
+    "Test Planning",
+    "CI/CD",
+    "JIRA"
+  ],
+  "education_institutions": [
+    "San Jose State University"
+  ]
+}

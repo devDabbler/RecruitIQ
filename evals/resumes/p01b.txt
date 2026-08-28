@@ -1,0 +1,12 @@
+Maya Chen | Seattle, WA | maya.chen@example.com | 555-201-3345
+
+Data engineer with six years building batch and streaming pipelines.
+
+PROFESSIONAL EXPERIENCE
+Cascadia Analytics | Senior Data Engineer | 2022-Present
+ * Designed Airflow DAGs orchestrating 40+ daily ETL jobs into Snowflake; Cut pipeline failure rate 60% by adding data quality checks with Great Expectations
+Pugetworks | Data Engineer | 2019-2022
+ * Built Kafka streaming ingestion for clickstream events at 50k msg/s; Migrated legacy SQL Server warehouse to BigQuery
+
+EDUCATION: BS, Informatics, University of Washington 2019
+CORE SKILLS: Python - SQL - Airflow - Snowflake - Kafka - dbt

@@ -29,12 +29,27 @@ class LLMService:
         self.embedding_model = None
         self._embedding_model_loaded = False
         self._chain: Optional[ProviderChain] = None
+        self._task_chains: Dict[str, ProviderChain] = {}
 
     @property
     def chain(self) -> ProviderChain:
         if self._chain is None:
             self._chain = build_chain(self.settings)
         return self._chain
+
+    def chain_for(self, task_type: str) -> ProviderChain:
+        """The chain for this task type (ADR 0002 per-task routing).
+
+        A task is routed iff settings define ``llm_provider_order_<task_type>``
+        (e.g. resume_parsing -> the eval winner); every other task_type shares
+        the default local-first chain.
+        """
+        order = getattr(self.settings, f"llm_provider_order_{task_type}", "") or None
+        if order is None:
+            return self.chain
+        if order not in self._task_chains:
+            self._task_chains[order] = build_chain(self.settings, order=order)
+        return self._task_chains[order]
 
     def get_embedding_model(self):
         """Return the shared 768-dim Ollama embedding adapter (loaded once)."""
@@ -64,7 +79,7 @@ class LLMService:
         configured model.
         """
         try:
-            result = await self.chain.generate(
+            result = await self.chain_for(task_type).generate(
                 prompt,
                 system=system_message,
                 max_tokens=max_tokens,
@@ -110,7 +125,7 @@ class LLMService:
         Raises AllProvidersFailedError when every tier fails — structured
         callers need to know, unlike chat callers who get a fallback string.
         """
-        result = await self.chain.generate(
+        result = await self.chain_for(task_type).generate(
             prompt,
             system=system_message,
             max_tokens=max_tokens,

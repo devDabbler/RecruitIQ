@@ -1,0 +1,12 @@
+Priya Raghavan-Wells | Austin, TX | priya.rw@example.com | +1 (555) 640-2211
+
+Full-stack engineer focused on React and Node services.
+
+PROFESSIONAL EXPERIENCE
+Hillstone Software | Software Engineer II | 2021-Present
+ * Ship features across a React/TypeScript frontend and Node microservices; Reduced p95 API latency from 900ms to 220ms via query batching
+Bluebonnet Digital | Junior Web Developer | 2019-2021
+ * Built marketing sites and internal dashboards for 20+ clients
+
+EDUCATION: BA, Mathematics, University of Texas at Austin 2019
+CORE SKILLS: JavaScript - TypeScript - React - Node.js - PostgreSQL - Docker

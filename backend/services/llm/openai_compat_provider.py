@@ -88,17 +88,45 @@ class OpenAICompatProvider(LLMProvider):
                 last_error = f"{type(e).__name__}: {e}"
             else:
                 if resp.status_code in (200, 201):
-                    content = self._extract_content(resp)
+                    content, usage, finish_reason = self._extract_content(resp)
+                    # A completion cut off at the token limit is a failure, not a
+                    # result. Returning it lets the JSON-repair layer turn the
+                    # fragment into a partial dict, so the caller silently stores
+                    # half a resume and the chain never falls through to a tier
+                    # that could have answered fully. Reasoning models make this
+                    # routine: their thinking is billed against the same budget,
+                    # so gpt-5-nano spent all 4096 tokens reasoning and emitted
+                    # nothing visible. Found by evals 2026-08-27.
+                    if finish_reason == "length":
+                        reasoning = (usage.get("completion_tokens_details") or {}).get("reasoning_tokens")
+                        detail = f", {reasoning} of them reasoning" if reasoning else ""
+                        raise ProviderError(
+                            self.name,
+                            f"response truncated at the token limit "
+                            f"({usage.get('completion_tokens', '?')} completion tokens{detail}) — "
+                            f"raise max_tokens or use a model that reserves budget for output",
+                        )
                     if content:
                         return LLMResult(
                             text=content,
                             provider=self.name,
                             model=use_model,
                             latency_ms=int((time.monotonic() - started) * 1000),
+                            extra={"usage": usage} if usage else {},
                         )
                     last_error = "empty response"
                 elif resp.status_code in (401, 403):
                     raise ProviderError(self.name, f"auth failed ({resp.status_code}) — check API key")
+                elif resp.status_code == 429:
+                    # Rate limiting is transient, not a bad request — back off and retry
+                    # rather than burning the whole tier. Found by evals 2026-08-27, when
+                    # an upstream-throttled model failed 30/30 fixtures with zero retries.
+                    retry_after = self._retry_after_seconds(resp)
+                    last_error = f"HTTP 429: {resp.text[:200]}"
+                    if attempt < self.max_retries and retry_after is not None:
+                        logger.info("%s rate-limited, honoring Retry-After %.1fs", self.name, retry_after)
+                        await asyncio.sleep(retry_after)
+                        continue
                 elif 400 <= resp.status_code < 500:
                     raise ProviderError(self.name, f"HTTP {resp.status_code}: {resp.text[:300]}")
                 else:
@@ -111,14 +139,40 @@ class OpenAICompatProvider(LLMProvider):
         raise ProviderError(self.name, last_error or "unknown failure")
 
     @staticmethod
-    def _extract_content(resp: httpx.Response) -> str:
+    def _retry_after_seconds(resp: httpx.Response) -> Optional[float]:
+        """Parse a Retry-After header (delta-seconds form), capped so a hostile
+        or absurd value can't stall the chain. Returns None when absent/unparseable,
+        letting the caller fall through to exponential backoff."""
+        raw = resp.headers.get("Retry-After")
+        if not raw:
+            return None
+        try:
+            return max(0.0, min(float(raw), 30.0))
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _extract_content(resp: httpx.Response) -> tuple[str, dict, Optional[str]]:
+        """Return (content, usage, finish_reason).
+
+        Usage is carried on LLMResult.extra so cost can be measured from real
+        token counts instead of estimated. finish_reason is needed to tell a
+        complete response from one cut off at the token limit — they are
+        otherwise indistinguishable, and the truncated one looks like valid
+        JSON right up to the point it stops.
+        """
         try:
             data = resp.json()
         except json.JSONDecodeError:
-            return resp.text
+            return resp.text, {}, None
+        usage = data.get("usage") or {}
         choices = data.get("choices") or []
         if choices:
             choice = choices[0]
             message = choice.get("message") or {}
-            return message.get("content") or choice.get("text") or ""
-        return ""
+            return (
+                (message.get("content") or choice.get("text") or ""),
+                usage,
+                choice.get("finish_reason"),
+            )
+        return "", usage, None

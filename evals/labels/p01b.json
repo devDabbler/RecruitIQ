@@ -1,0 +1,25 @@
+{
+  "name": "Maya Chen",
+  "email": "maya.chen@example.com",
+  "phone": "555-201-3345",
+  "location": "Seattle, WA",
+  "experience_titles": [
+    "Senior Data Engineer",
+    "Data Engineer"
+  ],
+  "experience_companies": [
+    "Cascadia Analytics",
+    "Pugetworks"
+  ],
+  "skills": [
+    "Python",
+    "SQL",
+    "Airflow",
+    "Snowflake",
+    "Kafka",
+    "dbt"
+  ],
+  "education_institutions": [
+    "University of Washington"
+  ]
+}

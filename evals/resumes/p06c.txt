@@ -1,0 +1,28 @@
+DMITRI VOLKOV
+Boston, MA
+Email: d.volkov@example.com
+Phone: 555-455-8821
+
+WORK HISTORY
+2021 to Present
+Machine Learning Engineer
+Beacon Language AI
+* Fine-tune and deploy transformer models for document classification
+* Built evaluation harness cutting model regression escapes to zero
+
+2018 to 2021
+Data Scientist
+Harborlight Insurance
+* Developed claims-fraud detection models saving $2M annually
+
+EDUCATION
+2018  MS Computer Science, Northeastern University
+2016  BS Statistics, Boston University
+
+TECHNICAL SKILLS
+* Python
+* PyTorch
+* Transformers
+* spaCy
+* MLflow
+* AWS SageMaker

@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default=os.getenv("GOOGLE_GEMINI_API_KEY", ""))
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     openrouter_api_key: str = Field(default=os.getenv("OPENROUTER_API_KEY", ""))
-    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "meta-llama/llama-3.3-8b-instruct:free"))
+    # llama-3.3-8b:free was delisted by OpenRouter (404 "No endpoints found", found by evals 2026-08-27)
+    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "google/gemma-4-31b-it:free"))
     openrouter_base_url: str = Field(default=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"))
     openrouter_timeout: float = Field(default=float(os.getenv("OPENROUTER_TIMEOUT", "60.0")))
     openrouter_max_retries: int = Field(default=int(os.getenv("OPENROUTER_MAX_RETRIES", "3")))
@@ -46,6 +47,18 @@ class Settings(BaseSettings):
 
     # Provider chain order (comma-separated; unknown/unconfigured names are skipped)
     llm_provider_order: str = Field(default=os.getenv("LLM_PROVIDER_ORDER", "ollama,openrouter,anthropic"))
+    # Per-task chain override (ADR 0002): resume parsing is low-volume and
+    # schema-critical, so it routes to the eval winner first instead of the
+    # local tier; chat and everything else stay local-first (ADR 0001). An
+    # entry may pin a model (`openrouter:google/gemini-2.5-flash-lite`) — the
+    # same spec syntax as `evals/run_eval.py --providers`. Any other task_type
+    # becomes routable by adding `llm_provider_order_<task_type>`.
+    llm_provider_order_resume_parsing: str = Field(
+        default=os.getenv(
+            "LLM_PROVIDER_ORDER_RESUME_PARSING",
+            "openrouter:google/gemini-2.5-flash-lite,anthropic,ollama",
+        )
+    )
     
     # Database settings
     postgres_conn: str = Field(
