@@ -63,16 +63,18 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  async function submit() {
-    if (!file || busy) return;
+  async function submit(fileOverride?: File, targetOverride?: string) {
+    const chosen = fileOverride ?? file;
+    const target = targetOverride ?? targetJob;
+    if (!chosen || busy) return;
     setBusy(true);
     setError(null);
     setResult(null);
 
     try {
       const form = new FormData();
-      form.set("file", file);
-      if (targetJob.trim()) form.set("target_job_title", targetJob.trim());
+      form.set("file", chosen);
+      if (target.trim()) form.set("target_job_title", target.trim());
 
       const response = await fetch("/api/resume/parse", { method: "POST", body: form });
       const payload = (await response.json().catch(() => null)) as
@@ -89,6 +91,30 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  /**
+   * One click, no file needed: fetch the bundled synthetic resume and parse it
+   * against a seeded role. Most visitors should never have to upload anything
+   * real to see the feature work.
+   */
+  async function trySample() {
+    if (busy) return;
+    setError(null);
+    try {
+      const response = await fetch("/sample-resume.docx");
+      if (!response.ok) throw new Error("Could not load the sample resume.");
+      const blob = await response.blob();
+      const sample = new File([blob], "sample-resume.docx", {
+        type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      });
+      const target = "Machine Learning Engineer";
+      setFile(sample);
+      setTargetJob(target);
+      await submit(sample, target);
+    } catch (e) {
+      setError((e as Error).message);
     }
   }
 
@@ -185,7 +211,7 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
             </span>
           </label>
 
-          <Button onClick={submit} disabled={!file || busy || saving} className="w-full">
+          <Button onClick={() => submit()} disabled={!file || busy || saving} className="w-full">
             {busy ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -194,6 +220,16 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
             ) : (
               "Parse resume"
             )}
+          </Button>
+
+          <Button
+            onClick={trySample}
+            disabled={busy || saving}
+            variant="outline"
+            className="w-full"
+          >
+            <FileText className="mr-2 h-4 w-4" aria-hidden />
+            Try a sample resume
           </Button>
 
           {canWrite && result && !busy ? (
@@ -220,7 +256,7 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
           <p className="text-xs text-slate-500">
             {canWrite
               ? "Parsing alone saves nothing. Save as candidate adds this person to the pipeline with the resume attached."
-              : "Nothing is saved. This demo parses the file and discards it."}
+              : "Files are parsed in memory and discarded, never stored. Extraction uses a third-party AI service, so please use the sample rather than a real person's resume."}
           </p>
 
           {error ? (

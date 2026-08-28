@@ -16,6 +16,7 @@ from backend.services.agent_framework.agent_factory import AgentFactory
 from ..utils.resume_parsing import ResumeData
 from backend.utils.auth import ROLE_ADMIN, get_optional_user
 from backend.utils.database import get_db
+from backend.utils.parse_quota import enforce_parse_quota
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
@@ -197,6 +198,7 @@ async def parse_resume(
     candidate_context: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_optional_user),
+    _quota: None = Depends(enforce_parse_quota),
 ):
     """Parse a resume file and optionally save to database, now using Agentic Zero agent"""
     require_write_access_for_save(save_to_db, current_user)
@@ -303,6 +305,7 @@ async def parse_resume_direct(
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service),
     current_user = Depends(get_optional_user),
+    _quota: None = Depends(enforce_parse_quota),
 ):
     """Parse a resume file using direct resume service (no agent)"""
     require_write_access_for_save(save_to_db, current_user)

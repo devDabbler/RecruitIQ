@@ -102,6 +102,10 @@ training_data/
 **/[Cc][Vv]*.docx
 **/[Cc][Vv]*.rtf
 **/[Cc][Vv]*.txt
+# The one exception: the demo's bundled sample is fully synthetic (a made-up
+# person, example.com email, 555 phone) and exists so visitors never need to
+# upload a real resume. Anything else matching the patterns above stays out.
+!web/public/sample-resume.docx
 # Untracked 4.87 MB pitch deck - not a resume, so named explicitly.
 data/Recruiting Solution POC.pdf
 
