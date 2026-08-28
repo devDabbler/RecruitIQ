@@ -42,13 +42,25 @@ export async function POST(request: NextRequest) {
 
   const token = await getToken();
 
+  // The backend's per-IP daily parse cap reads X-Real-IP. This hop is
+  // server-to-server, so without forwarding it every visitor would land in
+  // one shared 127.0.0.1 bucket and the twenty-first parse of the day would
+  // 429 for everyone.
+  const clientIp =
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+    null;
+
   async function send(bearer: string | null): Promise<Response> {
+    const headers: Record<string, string> = {};
+    if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    if (clientIp) headers["X-Real-IP"] = clientIp;
     return fetch(`${API_BASE_URL}/api/resume/parse`, {
       method: "POST",
       // Content-Type is deliberately unset: fetch generates the multipart
       // boundary itself, and setting the header by hand omits it, which the
       // server then cannot parse.
-      headers: bearer ? { Authorization: `Bearer ${bearer}` } : undefined,
+      headers: Object.keys(headers).length ? headers : undefined,
       body: outgoing,
       cache: "no-store",
     });
