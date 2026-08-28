@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc
 from typing import Optional, List, Dict, Any
+from datetime import datetime
 from pydantic import BaseModel, Field
 import json
 
@@ -67,6 +68,41 @@ class SavedJobResponse(BaseModel):
     candidate_id: str
     saved_at: str
     notes: Optional[str] = None
+
+class JobCandidateSummary(BaseModel):
+    """A candidate row on the Job Detail screen."""
+    id: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    email: Optional[str] = None
+    status: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class CandidateApplicationSummary(BaseModel):
+    """One of a candidate's applications, with the job denormalised in."""
+    id: int
+    job_id: int
+    job_title: Optional[str] = None
+    job_department: Optional[str] = None
+    status: str
+    applied_at: str
+    source: Optional[str] = None
+
+class CandidateSavedJobSummary(BaseModel):
+    id: int
+    job_id: int
+    job_title: Optional[str] = None
+    job_department: Optional[str] = None
+    job_location: Optional[str] = None
+    saved_at: str
+    notes: Optional[str] = None
+
+class MessageResponse(BaseModel):
+    message: str
+
+class TrackViewResponse(BaseModel):
+    message: str
+    total_views: int
 
 router = APIRouter(prefix="/jobs")
 
@@ -219,7 +255,7 @@ async def update_job(
 
 from sqlalchemy.exc import SQLAlchemyError
 
-@router.delete("/{job_id}")
+@router.delete("/{job_id}", response_model=MessageResponse)
 async def delete_job(
     job_id: int,
     db: Session = Depends(get_db),
@@ -379,7 +415,7 @@ async def search_jobs(
         "results": jobs
     }
 
-@router.get("/{job_id}/candidates", response_model=List[dict])
+@router.get("/{job_id}/candidates", response_model=List[JobCandidateSummary])
 async def get_job_candidates(
     job_id: int,
     status: Optional[str] = None,
@@ -416,7 +452,7 @@ async def get_job_candidates(
         for candidate in candidates
     ]
 
-@router.post("/{job_id}/track-view")
+@router.post("/{job_id}/track-view", response_model=TrackViewResponse)
 async def track_job_view(
     job_id: int,
     db: Session = Depends(get_db),
@@ -556,9 +592,11 @@ async def save_job(
         notes=db_saved_job.notes
     )
 
-@router.get("/applications/{candidate_id}")
+@router.get("/applications/{candidate_id}", response_model=List[CandidateApplicationSummary])
 async def get_candidate_applications(
-    candidate_id: int,
+    # str, not int: candidate ids became UUID strings in Phase 1 and this
+    # signature was missed, so every real id 422'd here.
+    candidate_id: str,
     db: Session = Depends(get_db)
 ):
     """Get all applications for a candidate."""
@@ -579,9 +617,9 @@ async def get_candidate_applications(
         for app in applications
     ]
 
-@router.get("/saved/{candidate_id}")
+@router.get("/saved/{candidate_id}", response_model=List[CandidateSavedJobSummary])
 async def get_candidate_saved_jobs(
-    candidate_id: int,
+    candidate_id: str,
     db: Session = Depends(get_db)
 ):
     """Get all saved jobs for a candidate."""

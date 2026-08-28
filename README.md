@@ -43,8 +43,10 @@ me what the previous one got wrong.
 
 ## What is actually here
 
-A FastAPI backend (92 routes) and a Streamlit frontend, backed by a single
-PostgreSQL database with `pgvector`.
+A FastAPI backend (92 routes) and a Next.js front end, backed by a single
+PostgreSQL database with `pgvector`. The browser only ever talks to Next, which
+holds the session cookie and calls FastAPI server-side — so the API listens on
+loopback and there is no CORS configuration anywhere.
 
 **The resume parsing pipeline** is the part I am most confident in. LLM
 structured extraction against a Pydantic contract, falling back to a regex
@@ -114,11 +116,19 @@ specific about what is broken is more useful to you than a feature list:
   gone, replaced by the provider chain and tool calling described above.
   Net across Phase 2: roughly 10,000 lines of provider spaghetti,
   intent regex, and their tests deleted.
-- **The frontend is still the old Streamlit app** and is the next thing to be
-  replaced (Phase 3: Next.js, 8 screens, JWT auth).
-- **The test suite:** 100 passing, 0 failing, with CI (ruff + pytest against a
-  pgvector service container) on every PR. See
-  [documentation/TESTING.md](documentation/TESTING.md).
+- **The Streamlit app is gone.** Phase 3 replaced it with Next.js: eight
+  screens, JWT in an httpOnly cookie, visitors auto-signed-in as a read-only
+  demo user so a link from my résumé lands in a working product rather than a
+  login form. TypeScript types are generated from the committed `openapi.json`,
+  so a screen reading a field the API no longer returns fails the build instead
+  of rendering a blank card. Deleting the old app also dropped nine declared
+  dependencies nothing outside it imported — `streamlit` and its two add-ons,
+  `pandas`, `scipy`, `plotly`, `altair`, `matplotlib`, `pyperclip` — which is
+  27 packages once transitives are counted.
+- **The test suite:** 269 passing Python tests plus 36 front-end unit tests and
+  a Playwright journey through all eight screens. CI runs ruff, pytest against
+  a pgvector service container, and typecheck/lint/test/build for the web app
+  on every PR. See [documentation/TESTING.md](documentation/TESTING.md).
 
 Full assessment and plan:
 [docs/superpowers/specs/2026-08-26-recruitiq-portfolio-revival-design.md](docs/superpowers/specs/2026-08-26-recruitiq-portfolio-revival-design.md).
@@ -127,26 +137,29 @@ Full assessment and plan:
 
 ## Running it
 
-Requires **Python 3.11+**, Poetry and Docker. Redis and MinIO are optional —
-the app degrades gracefully without them.
+Requires **Python 3.11+**, Poetry, Node 20+ and Docker. Redis and MinIO are
+optional — the app degrades gracefully without them.
 
 ```bash
 poetry install
 cp .env.example .env        # fill in POSTGRES_* at minimum
 docker compose up -d db     # pgvector Postgres on :5433
 cd backend && poetry run alembic upgrade head && cd ..
+npm --prefix web install
 ```
 
 ```bash
-# Terminal 1 - backend on :8000
-poetry run python -m uvicorn main:app --host 127.0.0.1 --port 8000 --app-dir backend
+# Terminal 1 - API on :8010, loopback only
+poetry run python -m uvicorn main:app --host 127.0.0.1 --port 8010 --app-dir backend
 
-# Terminal 2 - frontend on :8501
-poetry run streamlit run frontend/app.py
+# Terminal 2 - the app on :3000
+npm --prefix web run dev
 ```
 
-API docs at `http://localhost:8000/docs`. To embed seed data for semantic
-search: `poetry run python scripts/backfill_embeddings.py`.
+Open `http://localhost:3000`; API docs are at `http://localhost:8010/docs`.
+For a populated demo: `poetry run python scripts/seed_demo.py`, then
+`poetry run python scripts/backfill_embeddings.py` to embed it for semantic
+search.
 
 The first matching request takes a few seconds while embeddings and matcher
 caches warm; after that, requests are under 100 ms. (The infamous 27-second

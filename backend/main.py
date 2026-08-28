@@ -22,12 +22,16 @@ from backend.models import models
 from backend.utils.database import Base, engine, verify_postgres_connection
 
 # Import routers
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
-from backend.routers import tasks, interviews, pitches, agent, performance, cache
+from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache
 from backend.api.routes import job_routes
+from backend.utils.auth import enforce_read_only
 
-app = FastAPI()
+# The read-only gate is an application-level dependency, not a per-route one, so
+# a route added later is refused for the demo role by default instead of being
+# quietly exposed. See backend/utils/auth.py for the read-only-POST allowlist.
+app = FastAPI(dependencies=[Depends(enforce_read_only)])
 
 # Import service registry and agent framework - this will handle all service initialization
 from backend.services.service_registry import provide_llm_service
@@ -64,6 +68,7 @@ def startup_event():
         raise e
 
 # Include routers
+app.include_router(auth.router)
 app.include_router(matching.router, tags=["matching"])
 app.include_router(enhanced_matching.router, tags=["enhanced-matching"])  # New enhanced matching router
 app.include_router(jobs.router, prefix="/api", tags=["jobs"])
