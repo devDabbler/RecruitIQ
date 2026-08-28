@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Loader2, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FileText, Loader2, Target, Upload, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,19 +18,46 @@ interface ParsedResume {
   experience?: Record<string, unknown>[] | null;
   education?: Record<string, unknown>[] | null;
   parsed_data?: Record<string, unknown> | null;
+  job_fit_score?: number | null;
+  hiring_recommendation?: {
+    recommendation?: string;
+    details?: string;
+    decision?: string;
+  } | null;
+  market_alignment?: {
+    target_job_title?: string;
+    matching_skills?: string[];
+    missing_skills?: string[];
+    commentary?: string;
+  } | null;
+  quality_assessment?: {
+    clarity_score?: number;
+    impact_score?: number;
+    skills_relevance_score?: number;
+    overall_feedback?: string;
+  } | null;
+  skill_suggestions?: {
+    technical_skills?: string[];
+    soft_skills?: string[];
+    certifications?: string[];
+    recommendations?: string;
+  } | null;
 }
 
 /**
  * Drop a resume in, see what the parser extracted.
  *
- * Nothing is written: the route handler pins `save_to_db=false`, so this
- * demonstrates the extraction without the demo turning into a pile of
- * strangers' resumes. The screen says so rather than leaving it a surprise.
+ * Parsing itself writes nothing: the parse route pins `save_to_db=false`, so
+ * the public demo cannot fill the database with strangers' resumes. When the
+ * session can write (admin), a reviewed parse can then be saved as a candidate
+ * through /api/resume/save.
  */
-export function ResumeUploader() {
+export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [targetJob, setTargetJob] = useState("");
   const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ParsedResume | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -61,6 +89,36 @@ export function ResumeUploader() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function save() {
+    if (!file || !result || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const form = new FormData();
+      form.set("file", file);
+      form.set("parsed_data", JSON.stringify(result.parsed_data ?? {}));
+      if (targetJob.trim()) form.set("position_applied", targetJob.trim());
+
+      const response = await fetch("/api/resume/save", { method: "POST", body: form });
+      const payload = (await response.json().catch(() => null)) as {
+        success?: boolean;
+        candidate_id?: string | null;
+        detail?: string;
+        message?: string;
+      } | null;
+
+      if (!response.ok || payload?.success === false || !payload?.candidate_id) {
+        throw new Error(
+          payload?.detail || payload?.message || `Saving failed (${response.status})`,
+        );
+      }
+      router.push(`/candidates/${payload.candidate_id}`);
+    } catch (e) {
+      setError((e as Error).message);
+      setSaving(false);
     }
   }
 
@@ -127,7 +185,7 @@ export function ResumeUploader() {
             </span>
           </label>
 
-          <Button onClick={submit} disabled={!file || busy} className="w-full">
+          <Button onClick={submit} disabled={!file || busy || saving} className="w-full">
             {busy ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -138,8 +196,31 @@ export function ResumeUploader() {
             )}
           </Button>
 
+          {canWrite && result && !busy ? (
+            <Button
+              onClick={save}
+              disabled={saving}
+              variant="outline"
+              className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-4 w-4" aria-hidden />
+                  Save as candidate
+                </>
+              )}
+            </Button>
+          ) : null}
+
           <p className="text-xs text-slate-500">
-            Nothing is saved. This demo parses the file and discards it.
+            {canWrite
+              ? "Parsing alone saves nothing. Save as candidate adds this person to the pipeline with the resume attached."
+              : "Nothing is saved. This demo parses the file and discards it."}
           </p>
 
           {error ? (
@@ -150,28 +231,166 @@ export function ResumeUploader() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-base">
-            <FileText className="h-4 w-4" aria-hidden />
-            Extracted
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {busy ? (
-            <p className="text-sm text-slate-500">
-              Extracting text, then structuring it with the model. Ten to thirty seconds.
-            </p>
-          ) : result ? (
-            <ParsedView result={result} />
-          ) : (
-            <p className="text-sm text-slate-500">
-              Parsed contact details, skills, experience, and education appear here.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <div className="space-y-6">
+        {result && !busy ? <FitCard result={result} /> : null}
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <FileText className="h-4 w-4" aria-hidden />
+              Extracted
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {busy ? (
+              <p className="text-sm text-slate-500">
+                Extracting text, then structuring it with the model. Ten to thirty seconds.
+              </p>
+            ) : result ? (
+              <ParsedView result={result} />
+            ) : (
+              <p className="text-sm text-slate-500">
+                Parsed contact details, skills, experience, and education appear here.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  );
+}
+
+const DECISION_CLASSES: Record<string, string> = {
+  yes: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  maybe: "border-amber-200 bg-amber-50 text-amber-700",
+  no: "border-rose-200 bg-rose-50 text-rose-700",
+};
+
+/** Target-role analysis: fit score, skill overlap, and resume quality. */
+function FitCard({ result }: { result: ParsedResume }) {
+  const score = result.job_fit_score;
+  const alignment = result.market_alignment;
+  const recommendation = result.hiring_recommendation;
+  const quality = result.quality_assessment;
+
+  // No target role given: the parse ran without fit analysis, show nothing.
+  if (score == null && !alignment?.target_job_title) return null;
+
+  const matched = (alignment?.matching_skills ?? []).slice(0, 12);
+  const missing = (alignment?.missing_skills ?? []).slice(0, 12);
+  const missingOverflow = (alignment?.missing_skills?.length ?? 0) - missing.length;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Target className="h-4 w-4" aria-hidden />
+          Fit for {alignment?.target_job_title ?? "the target role"}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          {score != null ? (
+            <span className="text-2xl font-semibold tabular-nums">
+              {score.toFixed(1)}
+              <span className="text-sm font-normal text-slate-400"> / 10</span>
+            </span>
+          ) : null}
+          {recommendation?.recommendation ? (
+            <span
+              className={cn(
+                "rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                DECISION_CLASSES[recommendation.decision ?? ""] ??
+                  "border-slate-200 bg-slate-50 text-slate-600",
+              )}
+            >
+              {recommendation.recommendation}
+            </span>
+          ) : null}
+        </div>
+
+        {recommendation?.details ? (
+          <p className="text-slate-600">{recommendation.details}</p>
+        ) : null}
+
+        {matched.length ? (
+          <div>
+            <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">
+              Skills the market asks for and this resume has
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {matched.map((skill) => (
+                <span
+                  key={skill}
+                  className="rounded bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {missing.length ? (
+          <div>
+            <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">
+              In demand for this role, not on the resume
+            </h3>
+            <div className="flex flex-wrap gap-1.5">
+              {missing.map((skill) => (
+                <span
+                  key={skill}
+                  className="rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-700"
+                >
+                  {skill}
+                </span>
+              ))}
+              {missingOverflow > 0 ? (
+                <span className="px-1 py-0.5 text-xs text-slate-400">
+                  +{missingOverflow} more
+                </span>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {quality ? (
+          <div>
+            <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">
+              Resume quality
+            </h3>
+            <div className="flex flex-wrap gap-x-6 gap-y-1">
+              <QualityMeter label="Clarity" value={quality.clarity_score} />
+              <QualityMeter label="Impact" value={quality.impact_score} />
+              <QualityMeter label="Relevance" value={quality.skills_relevance_score} />
+            </div>
+            {quality.overall_feedback ? (
+              <p className="mt-2 text-xs text-slate-500">{quality.overall_feedback}</p>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function QualityMeter({ label, value }: { label: string; value: number | undefined }) {
+  if (value == null) return null;
+  const pct = Math.min(100, Math.max(0, value * 10));
+  return (
+    <span className="flex items-center gap-2 text-xs text-slate-500">
+      <span className="w-16 shrink-0">{label}</span>
+      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+        <span
+          className={cn(
+            "block h-full rounded-full",
+            pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-blue-500" : "bg-amber-500",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </span>
+      <span className="tabular-nums">{value}</span>
+    </span>
   );
 }
 

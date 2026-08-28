@@ -59,6 +59,14 @@ class ResumeResponse(BaseModel):
     skills: Optional[List[Dict[str, Any]]] = None
     parsed_data: Optional[Dict[str, Any]] = None
     military: Optional[List[Dict[str, Any]]] = None
+    # Target-role analysis. Populated only when the caller supplied a job title;
+    # the agent computed these all along, but until Phase 3c the router dropped
+    # them and the fit scoring was invisible to the UI.
+    job_fit_score: Optional[float] = None
+    hiring_recommendation: Optional[Dict[str, Any]] = None
+    market_alignment: Optional[Dict[str, Any]] = None
+    quality_assessment: Optional[Dict[str, Any]] = None
+    skill_suggestions: Optional[Dict[str, Any]] = None
     success: bool = True
     message: str = "Resume parsed successfully"
 
@@ -254,6 +262,11 @@ async def parse_resume(
             experience=result.get("parsed_data", {}).get("experience") if isinstance(result.get("parsed_data"), dict) else None,
             skills=result.get("parsed_data", {}).get("skills") if isinstance(result.get("parsed_data"), dict) else None,
             military=result.get("parsed_data", {}).get("military") if isinstance(result.get("parsed_data"), dict) else None,
+            job_fit_score=result.get("job_fit_score") if job_title else None,
+            hiring_recommendation=result.get("hiring_recommendation") if job_title else None,
+            market_alignment=result.get("market_alignment"),
+            quality_assessment=result.get("quality_assessment"),
+            skill_suggestions=result.get("skill_suggestions"),
             success=True,
             message="Resume parsed successfully"
         )
@@ -335,6 +348,108 @@ async def parse_resume_direct(
                 "message": f"Error parsing resume: {str(e)}"
             }
         )
+
+
+class SaveCandidateResponse(BaseModel):
+    """API response model for saving a reviewed parse as a candidate."""
+    success: bool = True
+    candidate_id: Optional[str] = None
+    resume_id: Optional[int] = None
+    message: str = "Candidate saved"
+
+
+@router.post("/save-candidate", response_model=SaveCandidateResponse)
+async def save_candidate_from_parse(
+    file: UploadFile = File(...),
+    parsed_data: str = Form(...),
+    position_applied: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    resume_service = Depends(provide_resume_service),
+):
+    """Persist a reviewed parse: upsert the candidate, store the file, save the resume.
+
+    Takes the parse the client already has instead of re-running the model, so a
+    save is a few hundred milliseconds rather than another LLM round trip.
+
+    Deliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`
+    gate refuses anonymous callers (401) and the demo role (403) before this
+    handler runs, so only an administrator can reach it.
+    """
+    import tempfile
+
+    from sqlalchemy import text as sql_text
+
+    try:
+        data = json.loads(parsed_data)
+        if not isinstance(data, dict):
+            raise ValueError("expected a JSON object")
+        resume_model = ResumeData.model_validate(data)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=f"parsed_data is not a valid parse payload: {e}")
+
+    _, extension = os.path.splitext(file.filename or "")
+    file_type = extension.lstrip(".").lower()
+    supported_formats = ["pdf", "docx", "doc", "txt", "jpg", "jpeg", "png"]
+    if file_type not in supported_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format: {extension}. Supported formats: {', '.join(supported_formats)}",
+        )
+
+    # Store the original file so the profile's resume list can preview it.
+    content = await file.read()
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=extension) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        file_id = await resume_service.storage_service.store_document(
+            file_path=tmp_path,
+            file_name=file.filename,
+            content_type=resume_service._get_content_type(file_type),
+            metadata={},
+        )
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+    try:
+        resume_id = resume_service.save_resume(
+            resume_data=resume_model,
+            db_session=db,
+            file_id=file_id,
+            file_name=file.filename,
+            file_type=file_type,
+        )
+    except Exception as e:
+        logger.error(f"Saving candidate from parse failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Could not save the candidate: {e}")
+
+    row = db.execute(
+        sql_text("SELECT candidate_id FROM resumes WHERE id = :id"), {"id": resume_id}
+    ).fetchone()
+    candidate_id = row[0] if row else None
+
+    # The role the recruiter parsed against is the role they are considering
+    # the person for; record it unless the candidate already has one.
+    if candidate_id and position_applied and position_applied.strip():
+        db.execute(
+            sql_text(
+                "UPDATE candidates SET position_applied = :position "
+                "WHERE id = :id AND (position_applied IS NULL OR position_applied = '')"
+            ),
+            {"position": position_applied.strip(), "id": candidate_id},
+        )
+    db.commit()
+
+    return SaveCandidateResponse(
+        candidate_id=candidate_id,
+        resume_id=resume_id,
+        message="Candidate saved to the pipeline",
+    )
 
 
 @router.post("/confirm", response_model=ResumeConfirmResponse)
