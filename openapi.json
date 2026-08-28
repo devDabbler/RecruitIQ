@@ -44,6 +44,49 @@
         "title": "Body_chat_with_assistant_api_assistant_chat_post",
         "type": "object"
       },
+      "Body_chat_with_assistant_streaming_api_assistant_chat_stream_post": {
+        "properties": {
+          "conversation_context": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": {},
+            "title": "Conversation Context"
+          },
+          "conversation_history": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": [],
+            "title": "Conversation History"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "Body_chat_with_assistant_streaming_api_assistant_chat_stream_post",
+        "type": "object"
+      },
       "Body_execute_agent_task_api_assistant_agent_task_post": {
         "properties": {
           "agent_name": {
@@ -3612,6 +3655,46 @@
           }
         },
         "summary": "Chat With Assistant",
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/api/assistant/chat/stream": {
+      "post": {
+        "description": "The same answer as /chat, with the tool calls narrated as they happen.\n\nA turn is typically three model calls plus database work, and only the last\none produces prose \u2014 so streaming tokens would cover about the final fifth of\nthe wait and leave the rest as dead air. Streaming the *tool activity* covers\nall of it, and shows the thing worth showing: that the assistant is querying\nreal ATS data rather than inventing it (spec \u00a75).\n\n/chat is untouched. Phase 2's contract and its tests stand.",
+        "operationId": "chat_with_assistant_streaming_api_assistant_chat_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_chat_with_assistant_streaming_api_assistant_chat_stream_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat With Assistant Streaming",
         "tags": [
           "assistant"
         ]
