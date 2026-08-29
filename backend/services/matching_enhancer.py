@@ -6,24 +6,57 @@ This module enhances the existing matching capabilities with more sophisticated 
 import re
 import logging
 import numpy as np
+from collections import OrderedDict
 from typing import Dict, List, Any, Optional, Tuple, Union
 from sklearn.metrics.pairwise import cosine_similarity
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 
+# Titles and positions are a small, highly repetitive vocabulary, so a few
+# hundred entries covers a realistic database many times over.
+_EMBEDDING_CACHE_MAX = 512
+
+
 class MatchingEnhancer:
     """Enhances matching between candidates and jobs with advanced algorithms."""
-    
+
     def __init__(self, embedding_model=None):
         """
         Initialize the matching enhancer.
-        
+
         Args:
             embedding_model: Optional embedding model for semantic matching
         """
         self.embedding_model = embedding_model
-    
+        self._embedding_cache: "OrderedDict[str, np.ndarray]" = OrderedDict()
+
+    def _embed(self, text: str) -> np.ndarray:
+        """Embed `text` as a row vector, memoized across calls.
+
+        Scoring a job against N candidates called this 2N times, and one of the
+        two arguments was the *same job title every iteration*: the dominant cost
+        of a /matching page load was re-deriving one vector N times over the
+        Ollama tunnel. Candidate positions repeat heavily too ("Software
+        Engineer" is not a rare title), so both sides of the comparison hit.
+
+        Caching across requests rather than per-request is safe because an
+        embedding is a pure function of its input string and the model is fixed
+        for the life of the process. There is no database state in the key, so a
+        cached vector cannot go stale. Bounded LRU so a long-running process
+        cannot grow without limit.
+        """
+        cached = self._embedding_cache.get(text)
+        if cached is not None:
+            self._embedding_cache.move_to_end(text)
+            return cached
+
+        vector = np.array(self.embedding_model.embed_query(text)).reshape(1, -1)
+        self._embedding_cache[text] = vector
+        if len(self._embedding_cache) > _EMBEDDING_CACHE_MAX:
+            self._embedding_cache.popitem(last=False)
+        return vector
+
     def extract_experience_level(self, text: str) -> Tuple[str, int]:
         """
         Extract experience level from text and return a normalized value.
@@ -451,12 +484,8 @@ class MatchingEnhancer:
         
         if self.embedding_model:
             try:
-                vec1 = self.embedding_model.embed_query(job_title)
-                vec2 = self.embedding_model.embed_query(candidate_position)
-
-                # Reshape for cosine_similarity function
-                vec1 = np.array(vec1).reshape(1, -1)
-                vec2 = np.array(vec2).reshape(1, -1)
+                vec1 = self._embed(job_title)
+                vec2 = self._embed(candidate_position)
 
                 # Calculate cosine similarity and scale to 0-100
                 similarity = cosine_similarity(vec1, vec2)[0][0]
