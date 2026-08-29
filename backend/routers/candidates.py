@@ -185,7 +185,7 @@ async def create_candidate(
     return db_candidate
 
 @router.get("/skills_breakdown", response_model=Dict[str, int])
-async def get_skills_breakdown(db: Session = Depends(get_db),
+def get_skills_breakdown(db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service)):
     """
     Get a breakdown/count of all skills across all candidates.
@@ -471,7 +471,7 @@ async def delete_candidate(
 
 
 @router.get("/", response_model=CandidateSearchResponse)
-async def search_candidates(
+def search_candidates(
     keyword: Optional[str] = None,
     status: Optional[CandidateStatus] = None,
     position: Optional[str] = None,
