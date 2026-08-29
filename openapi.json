@@ -143,6 +143,17 @@
             "title": "File",
             "type": "string"
           },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
           "save_to_db": {
             "default": false,
             "title": "Save To Db",
@@ -6293,7 +6304,7 @@
     },
     "/api/jobs/{job_id}": {
       "delete": {
-        "description": "Delete a job posting and all related records (future-proof).",
+        "description": "Delete a job posting and detach everything that references it.\n\nThree tables point at jobs.id, and they need different treatment:\n\n- job_applications and saved_jobs are owned by the job. Both relationships\n  declare cascade=\"all, delete-orphan\" (models.py), so the ORM deletes those\n  rows for us.\n- candidate_pitches.job_id is nullable and its relationship carries no\n  cascade, so SQLAlchemy de-associates it by writing NULL.\n- candidates.job_id is a nullable FK with *no* relationship on Job at all,\n  which means the ORM never learns about it and Postgres rejects the delete.\n  Nulling it here is the difference between this endpoint working and\n  returning a 500 for any job a candidate was ever attached to.\n\nA candidate outlives the requisition they were sourced for, so detaching is\nthe correct semantic, not cascading the delete into people.",
         "operationId": "delete_job_api_jobs__job_id__delete",
         "parameters": [
           {
@@ -6970,7 +6981,7 @@
     },
     "/api/resume/parse": {
       "post": {
-        "description": "Parse a resume file and optionally save to database, now using Agentic Zero agent",
+        "description": "Parse a resume file and optionally save to database, now using Agentic Zero agent\n\n`job_id` names a real requisition and is the preferred way to ask for a fit\nscore: the resume is then measured against the skills that job actually\nrequires. `target_job_title` remains for roles that are not in the database,\nbut a free-text title can only be scored against similar jobs and a static\nfallback list, which is a weaker claim. When both arrive, job_id wins.",
         "operationId": "parse_resume_api_resume_parse_post",
         "requestBody": {
           "content": {

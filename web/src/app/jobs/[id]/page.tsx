@@ -1,20 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 
+import { DeleteJobButton } from "@/components/delete-job-button";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getJob, matchCandidatesForJob } from "@/lib/data";
 import { formatDate, formatSalary, humanize } from "@/lib/format";
+import { canWrite } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = await params;
-  const job = await getJob(id);
+  const [job, writable] = await Promise.all([getJob(id), canWrite()]);
   if (!job) notFound();
 
   return (
@@ -32,6 +35,17 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
         description={[job.department, job.location, humanize(job.location_type)]
           .filter(Boolean)
           .join(" · ")}
+        actions={
+          writable ? (
+            <Link
+              href={`/jobs/${job.id}/edit`}
+              className={buttonVariants({ variant: "outline" })}
+            >
+              <Pencil className="mr-1.5 h-4 w-4" aria-hidden />
+              Edit
+            </Link>
+          ) : null
+        }
       />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -109,6 +123,8 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
               </CardContent>
             </Card>
           ) : null}
+
+          {writable ? <DeleteJobButton jobId={job.id} title={job.title} variant="full" /> : null}
         </div>
       </div>
     </>

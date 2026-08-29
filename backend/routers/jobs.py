@@ -112,7 +112,7 @@ from fastapi import HTTPException
 logger = logging.getLogger("backend.routers.jobs")
 
 @router.post("/", response_model=JobResponse, status_code=201)
-async def create_job(
+def create_job(
     job: JobCreateUpdate,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
@@ -172,7 +172,7 @@ async def create_job(
 
 
 @router.get("/{job_id}", response_model=JobResponse)
-async def get_job(
+def get_job(
     job_id: int,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
@@ -195,7 +195,7 @@ async def get_job(
     return job
 
 @router.put("/{job_id}", response_model=JobResponse)
-async def update_job(
+def update_job(
     job_id: int,
     job_update: JobCreateUpdate,
     db: Session = Depends(get_db),
@@ -256,31 +256,52 @@ async def update_job(
 from sqlalchemy.exc import SQLAlchemyError
 
 @router.delete("/{job_id}", response_model=MessageResponse)
-async def delete_job(
+def delete_job(
     job_id: int,
     db: Session = Depends(get_db),
     job_service = Depends(provide_job_service),
     llm_service = Depends(provide_llm_service)
 ):
-    """Delete a job posting and all related records (future-proof)."""
-    try:
-        db_job = db.query(Job).filter(Job.id == job_id).first()
-        if not db_job:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Job with ID {job_id} not found"
-            )
+    """Delete a job posting and detach everything that references it.
 
-        # TODO: Delete related records if needed (e.g., applications, analytics)
+    Three tables point at jobs.id, and they need different treatment:
+
+    - job_applications and saved_jobs are owned by the job. Both relationships
+      declare cascade="all, delete-orphan" (models.py), so the ORM deletes those
+      rows for us.
+    - candidate_pitches.job_id is nullable and its relationship carries no
+      cascade, so SQLAlchemy de-associates it by writing NULL.
+    - candidates.job_id is a nullable FK with *no* relationship on Job at all,
+      which means the ORM never learns about it and Postgres rejects the delete.
+      Nulling it here is the difference between this endpoint working and
+      returning a 500 for any job a candidate was ever attached to.
+
+    A candidate outlives the requisition they were sourced for, so detaching is
+    the correct semantic, not cascading the delete into people.
+    """
+    db_job = db.query(Job).filter(Job.id == job_id).first()
+    if not db_job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Job with ID {job_id} not found"
+        )
+
+    title = db_job.title
+    try:
+        detached = (
+            db.query(Candidate)
+            .filter(Candidate.job_id == job_id)
+            .update({Candidate.job_id: None}, synchronize_session=False)
+        )
         db.delete(db_job)
         db.commit()
-        return {"message": f"Job with ID {job_id} and all related data deleted successfully"}
     except SQLAlchemyError as e:
         db.rollback()
+        logger.error(f"Database error deleting job {job_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Database error during deletion: {str(e)}")
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+
+    logger.info(f"Deleted job {job_id} ('{title}'), detached {detached} candidate(s)")
+    return {"message": f"Deleted '{title}' and all of its applications and saved-job records."}
 
 from backend.services.agent_framework.agent_factory import AgentFactory
 from backend.services.service_registry import provide_matching_integrator
