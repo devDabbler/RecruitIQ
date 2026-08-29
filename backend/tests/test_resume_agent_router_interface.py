@@ -17,11 +17,19 @@ from backend.services.agent_framework.agents.resume_processing_agent import (
 
 
 def make_agent_with_stubbed_processing(captured: dict):
-    """A bare agent whose file processing just records what it was asked to do."""
+    """A bare agent whose file processing just records what it was asked to do.
+
+    The stub mirrors the real `_process_single_file` signature deliberately: if
+    it drifts, these tests fail, which is the entire point of the file.
+    """
     agent = object.__new__(ResumeProcessingAgent)
 
-    async def fake_process_single_file(file, target_job_title=None):
+    async def fake_process_single_file(
+        file, target_job_title=None, job_skills=None, job_requirements=None
+    ):
         captured["target_job_title"] = target_job_title
+        captured["job_skills"] = job_skills
+        captured["job_requirements"] = job_requirements
         return {"status": "success", "data": {"personal_info": {"name": "X"}}}
 
     agent._process_single_file = fake_process_single_file
@@ -54,6 +62,38 @@ async def test_process_resume_derives_title_from_job_data():
         FakeUpload(), target_job_title=None, job_data={"title": "ML Engineer"},
     )
     assert captured["target_job_title"] == "ML Engineer"
+
+
+@pytest.mark.asyncio
+async def test_process_resume_forwards_a_real_requisitions_skills():
+    """The whole point of passing a job rather than a title.
+
+    If these stop reaching `_process_single_file`, the fit score silently falls
+    back to the market estimate while the UI still claims it scored against the
+    named role.
+    """
+    captured = {}
+    agent = make_agent_with_stubbed_processing(captured)
+    await agent.process_resume(
+        FakeUpload(),
+        job_data={
+            "title": "ML Engineer",
+            "skills": "Python,PyTorch,Kubernetes",
+            "required_qualifications": "3+ years shipping models",
+        },
+    )
+    assert captured["target_job_title"] == "ML Engineer"
+    assert captured["job_skills"] == ["Python", "PyTorch", "Kubernetes"]
+    assert captured["job_requirements"] == "3+ years shipping models"
+
+
+@pytest.mark.asyncio
+async def test_process_resume_sends_no_skills_when_the_job_lists_none():
+    """None, not [], so the agent falls back instead of scoring against nothing."""
+    captured = {}
+    agent = make_agent_with_stubbed_processing(captured)
+    await agent.process_resume(FakeUpload(), job_data={"title": "ML Engineer"})
+    assert captured["job_skills"] is None
 
 
 @pytest.mark.asyncio

@@ -196,10 +196,18 @@ class MatchingIntegrator:
             logger.warning(f"Candidate with ID {candidate_id} not found")
             return []
             
-        # Get all jobs
-        jobs = db.query(Job).all()
+        # Only open requisitions are matchable. A draft is a job that has not
+        # been decided on yet and a closed one cannot be filled, so neither
+        # belongs in "roles this person could be put forward for". Without this
+        # filter, saving a draft in the jobs UI immediately surfaced it in every
+        # candidate's matches.
+        #
+        # Deliberately not applied to enhanced_candidate_job_matching: that one
+        # takes an explicit job_id the caller already chose, so filtering there
+        # would break viewing candidates for a role you are still drafting.
+        jobs = db.query(Job).filter(Job.status == "open").all()
         if not jobs:
-            logger.warning("No jobs found in database")
+            logger.warning("No open jobs found in database")
             return []
             
         # Prepare candidate data

@@ -6,9 +6,29 @@ import { FileText, Loader2, Target, Upload, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const ACCEPT = ".pdf,.docx,.doc,.txt,.jpg,.jpeg,.png";
+
+/** The sentinel for "score against a role that is not in the database". */
+export const OTHER_ROLE = "__other__";
+/** The sentinel for "do not score fit at all". */
+export const NO_ROLE = "__none__";
+
+export interface SelectableJob {
+  id: number;
+  title: string;
+  department: string;
+  status: string;
+}
 
 interface ParsedResume {
   success?: boolean;
@@ -26,6 +46,9 @@ interface ParsedResume {
   } | null;
   market_alignment?: {
     target_job_title?: string;
+    // "job" when the score came from a real requisition's own skills, "market"
+    // when it was estimated from similar roles. Absent on older responses.
+    source?: "job" | "market";
     matching_skills?: string[];
     missing_skills?: string[];
     commentary?: string;
@@ -52,10 +75,18 @@ interface ParsedResume {
  * session can write (admin), a reviewed parse can then be saved as a candidate
  * through /api/resume/save.
  */
-export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
+export function ResumeUploader({
+  canWrite = false,
+  jobs = [],
+}: {
+  canWrite?: boolean;
+  jobs?: SelectableJob[];
+}) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
-  const [targetJob, setTargetJob] = useState("");
+  // Either a job id as a string, OTHER_ROLE, or NO_ROLE.
+  const [roleChoice, setRoleChoice] = useState<string>(NO_ROLE);
+  const [customRole, setCustomRole] = useState("");
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<ParsedResume | null>(null);
@@ -63,9 +94,14 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
   const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLInputElement>(null);
 
-  async function submit(fileOverride?: File, targetOverride?: string) {
+  const selectedJob = jobs.find((job) => String(job.id) === roleChoice) ?? null;
+  /** What to store as the position when saving a candidate. */
+  const roleLabel = selectedJob?.title ?? (roleChoice === OTHER_ROLE ? customRole.trim() : "");
+
+  async function submit(fileOverride?: File, choiceOverride?: string, customOverride?: string) {
     const chosen = fileOverride ?? file;
-    const target = targetOverride ?? targetJob;
+    const choice = choiceOverride ?? roleChoice;
+    const custom = customOverride ?? customRole;
     if (!chosen || busy) return;
     setBusy(true);
     setError(null);
@@ -74,7 +110,16 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
     try {
       const form = new FormData();
       form.set("file", chosen);
-      if (target.trim()) form.set("target_job_title", target.trim());
+
+      // A real requisition is sent as job_id so the backend scores against that
+      // job's own required skills. Free text can only be compared to similar
+      // roles, which is a weaker claim, and the fit card says so.
+      const job = jobs.find((j) => String(j.id) === choice);
+      if (job) {
+        form.set("job_id", String(job.id));
+      } else if (choice === OTHER_ROLE && custom.trim()) {
+        form.set("target_job_title", custom.trim());
+      }
 
       const response = await fetch("/api/resume/parse", { method: "POST", body: form });
       const payload = (await response.json().catch(() => null)) as
@@ -109,10 +154,21 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
       const sample = new File([blob], "sample-resume.docx", {
         type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       });
-      const target = "Machine Learning Engineer";
+
+      // Prefer a real seeded requisition so the sample demonstrates the
+      // job-backed score rather than the market estimate. Falls back to the
+      // free-text title on a database that has not been seeded.
+      const preferred =
+        jobs.find((job) => /machine learning/i.test(job.title)) ??
+        jobs.find((job) => job.status === "open") ??
+        null;
+      const choice = preferred ? String(preferred.id) : OTHER_ROLE;
+      const custom = preferred ? "" : "Machine Learning Engineer";
+
       setFile(sample);
-      setTargetJob(target);
-      await submit(sample, target);
+      setRoleChoice(choice);
+      setCustomRole(custom);
+      await submit(sample, choice, custom);
     } catch (e) {
       setError((e as Error).message);
     }
@@ -126,7 +182,7 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
       const form = new FormData();
       form.set("file", file);
       form.set("parsed_data", JSON.stringify(result.parsed_data ?? {}));
-      if (targetJob.trim()) form.set("position_applied", targetJob.trim());
+      if (roleLabel) form.set("position_applied", roleLabel);
 
       const response = await fetch("/api/resume/save", { method: "POST", body: form });
       const payload = (await response.json().catch(() => null)) as {
@@ -196,20 +252,64 @@ export function ResumeUploader({ canWrite = false }: { canWrite?: boolean }) {
             />
           </div>
 
-          <label className="block text-sm">
-            <span className="mb-1 block font-medium text-slate-700">
-              Target role <span className="font-normal text-slate-400">(optional)</span>
-            </span>
-            <input
-              value={targetJob}
-              onChange={(e) => setTargetJob(e.target.value)}
-              placeholder="Senior Backend Engineer"
-              className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-            />
-            <span className="mt-1 block text-xs text-slate-500">
-              Given a role, the parser also scores fit against it.
-            </span>
-          </label>
+          <div className="space-y-2">
+            <label htmlFor="score-against" className="block text-sm font-medium text-slate-700">
+              Score against <span className="font-normal text-slate-400">(optional)</span>
+            </label>
+            {/* Base UI types the change value as nullable; clearing the
+                selection is the same as choosing not to score fit. */}
+            <Select value={roleChoice} onValueChange={(next) => setRoleChoice(next ?? NO_ROLE)}>
+              <SelectTrigger id="score-against" className="h-10 w-full bg-white">
+                <SelectValue>
+                  {selectedJob ? (
+                    <span className="truncate">
+                      {selectedJob.title}
+                      <span className="text-slate-400"> · {selectedJob.department}</span>
+                    </span>
+                  ) : roleChoice === OTHER_ROLE ? (
+                    "Another role"
+                  ) : (
+                    "No fit scoring"
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NO_ROLE}>No fit scoring</SelectItem>
+                {jobs.map((job) => (
+                  <SelectItem key={job.id} value={String(job.id)}>
+                    <span className="flex min-w-0 flex-col items-start text-left">
+                      <span className="truncate font-medium">{job.title}</span>
+                      <span className="truncate text-xs text-slate-500">
+                        {job.department}
+                        {job.status === "open" ? "" : ` · ${humanize(job.status)}`}
+                      </span>
+                    </span>
+                  </SelectItem>
+                ))}
+                <SelectItem value={OTHER_ROLE}>Another role...</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {roleChoice === OTHER_ROLE ? (
+              <input
+                value={customRole}
+                onChange={(e) => setCustomRole(e.target.value)}
+                placeholder="Senior Backend Engineer"
+                aria-label="Other role"
+                className="w-full rounded-md border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+            ) : null}
+
+            <p className="text-xs text-slate-500">
+              {selectedJob
+                ? "Fit is scored against the skills this role actually requires."
+                : roleChoice === OTHER_ROLE
+                  ? "This role is not in the database, so fit is estimated from similar roles rather than a real opening."
+                  : jobs.length === 0
+                    ? "No jobs are available to score against right now."
+                    : "Pick a role to also score how well this resume fits it."}
+            </p>
+          </div>
 
           <Button onClick={() => submit()} disabled={!file || busy || saving} className="w-full">
             {busy ? (
@@ -325,6 +425,15 @@ function FitCard({ result }: { result: ParsedResume }) {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 text-sm">
+        {/* Say which baseline produced the number. A score against a real
+            requisition and a score against "roles like this one" are different
+            claims, and presenting them identically overstates the second. */}
+        <p className="text-xs text-slate-500">
+          {alignment?.source === "job"
+            ? "Scored against the skills this requisition requires."
+            : "Estimated from roles similar to this title. No matching requisition was used."}
+        </p>
+
         <div className="flex flex-wrap items-center gap-3">
           {score != null ? (
             <span className="text-2xl font-semibold tabular-nums">

@@ -97,8 +97,17 @@ test("the demo user can walk all eight screens and every one shows live data", a
   await expect(page.getByRole("heading", { name: "Jobs", level: 1 })).toBeVisible();
   await expectNoErrorState(page);
 
-  // Jobs render as cards, not table rows.
-  const firstJob = page.locator('a[href^="/jobs/"]').first();
+  // A read-only visitor gets no job management affordances. The backend gate is
+  // the real control (test_auth.py walks the route table and asserts every
+  // mutating route refuses the demo role), but showing a demo user a "New job"
+  // button guaranteed to 403 is a broken screen, so the hiding is pinned too.
+  await expect(page.getByRole("link", { name: "New job" })).toHaveCount(0);
+  await expect(page.locator('a[href$="/edit"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Delete / })).toHaveCount(0);
+
+  // Jobs render as cards, not table rows. Excluding /edit keeps this pointing
+  // at a job card rather than an admin control if those ever render here.
+  const firstJob = page.locator('a[href^="/jobs/"]:not([href$="/edit"])').first();
   await expect(firstJob).toBeVisible();
   const jobTitle = (await firstJob.innerText()).trim();
   expect(jobTitle).toBeTruthy();

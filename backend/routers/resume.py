@@ -17,6 +17,7 @@ from ..utils.resume_parsing import ResumeData
 from backend.utils.auth import ROLE_ADMIN, get_optional_user
 from backend.utils.database import get_db
 from backend.utils.parse_quota import enforce_parse_quota
+from backend.models.models import Job
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
@@ -195,13 +196,37 @@ async def parse_resume(
     candidate_id: Optional[str] = Form(None),
     save_to_db: bool = Form(False),
     target_job_title: Optional[str] = Form(None),
+    job_id: Optional[int] = Form(None),
     candidate_context: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user = Depends(get_optional_user),
     _quota: None = Depends(enforce_parse_quota),
 ):
-    """Parse a resume file and optionally save to database, now using Agentic Zero agent"""
+    """Parse a resume file and optionally save to database, now using Agentic Zero agent
+
+    `job_id` names a real requisition and is the preferred way to ask for a fit
+    score: the resume is then measured against the skills that job actually
+    requires. `target_job_title` remains for roles that are not in the database,
+    but a free-text title can only be scored against similar jobs and a static
+    fallback list, which is a weaker claim. When both arrive, job_id wins.
+    """
     require_write_access_for_save(save_to_db, current_user)
+
+    # Resolved before the try below, which converts anything that escapes it
+    # into a 500. A bad job_id is a client error and has to survive as one.
+    resolved_job = None
+    if job_id is not None:
+        resolved_job = db.query(Job).filter(Job.id == job_id).first()
+        if not resolved_job:
+            # Deliberately not falling back to the free-text path. Silently
+            # scoring against "roles like this one" while the caller believes it
+            # asked about a specific opening is the exact failure this parameter
+            # exists to remove.
+            raise HTTPException(
+                status_code=400,
+                detail=f"No job with ID {job_id} exists to score against.",
+            )
+
     try:
         # Check file extension
         _, file_extension = os.path.splitext(file.filename)
@@ -220,9 +245,24 @@ async def parse_resume(
         # Process job context if provided
         job_title = target_job_title
         job_data = None
-        
-        # Parse candidate_context JSON if provided
-        if candidate_context:
+
+        # A named requisition takes precedence over everything else: it is the
+        # only input that lets the fit score reference real requirements.
+        if resolved_job is not None:
+            job_data = {
+                "title": resolved_job.title,
+                "department": resolved_job.department,
+                "job_overview": resolved_job.job_overview,
+                "required_qualifications": resolved_job.required_qualifications,
+                "experience_level": resolved_job.experience_level,
+                "skills": resolved_job.skills,
+            }
+            job_title = resolved_job.title
+            logger.info(f"Scoring resume against job {job_id} ('{resolved_job.title}')")
+
+        # Parse candidate_context JSON if provided. Skipped when a real job was
+        # named, so a stale context blob cannot override the requisition.
+        if candidate_context and resolved_job is None:
             try:
                 context_data = json.loads(candidate_context)
                 if isinstance(context_data, dict):
