@@ -333,7 +333,7 @@ async def get_matching_candidates(
         raise HTTPException(status_code=500, detail=f"Error finding matching candidates (agentic): {str(e)}")
 
 @router.get("/", response_model=JobSearchResponse)
-async def search_jobs(
+def search_jobs(
     keyword: Optional[str] = None,
     department: Optional[str] = None,
     location: Optional[str] = None,

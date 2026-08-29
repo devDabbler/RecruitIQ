@@ -37,6 +37,23 @@ app = FastAPI(dependencies=[Depends(enforce_read_only)])
 from backend.services.service_registry import provide_llm_service
 from backend.services.agent_framework import initialize_agents
 
+# Sync (`def`) endpoints run in Starlette's threadpool, which defaults to 40
+# workers - more than the 30 connections our engine can hand out (pool_size 10 +
+# max_overflow 20). Left alone, enough concurrent requests would queue on
+# connection checkout and 500 after pool_timeout. Capping the threadpool below
+# the pool ceiling means concurrency is bounded where it is cheap (a waiting
+# thread) instead of where it is expensive (a failed request), and it keeps this
+# process's Postgres connection count predictable on a shared droplet.
+THREADPOOL_LIMIT = 24
+
+
+@app.on_event("startup")
+async def limit_threadpool():
+    import anyio.to_thread
+
+    anyio.to_thread.current_default_thread_limiter().total_tokens = THREADPOOL_LIMIT
+
+
 @app.on_event("startup")
 def startup_event():
     # Start the startup timer
