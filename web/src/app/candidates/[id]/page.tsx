@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
 
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getCandidate,
   getCandidateApplications,
@@ -23,13 +25,15 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
   const candidate = await getCandidate(id);
   if (!candidate) notFound();
 
-  // The related lists are all optional context. One of them failing — matching
-  // is the slow, model-backed one — should dim a card, not blank the profile.
-  const [applications, savedJobs, resumes, matches] = await Promise.all([
+  // The related lists are all optional context, and each is a plain database
+  // read. Matching is deliberately *not* in here: it is model-backed and took
+  // ~1.6s of the page's 1.75s, holding the whole navigation open while the
+  // profile — already fetched — sat waiting on it. It streams below instead,
+  // the same way /jobs/[id] handles its own matching panel.
+  const [applications, savedJobs, resumes] = await Promise.all([
     getCandidateApplications(id),
     getCandidateSavedJobs(id),
     getCandidateResumes(id),
-    matchJobsForCandidate(id).catch(() => [] as Awaited<ReturnType<typeof matchJobsForCandidate>>),
   ]);
 
   return (
@@ -145,32 +149,9 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
               <CardTitle className="text-base">Recommended roles</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {matches.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  No role scored above the threshold for this candidate.
-                </p>
-              ) : (
-                matches.slice(0, 5).map((job) => (
-                  <div key={job.id} className="rounded-lg border border-slate-200 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">
-                        {job.title}
-                      </Link>
-                      <MatchScore score={job.match_score} />
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {[job.department, job.location].filter(Boolean).join(" · ") ||
-                        "No department or location listed"}
-                    </p>
-                    <p className="mt-2 text-sm text-slate-600">{job.match_explanation}</p>
-                    <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
-                      <SubScore label="Skills" score={job.skill_match_score} />
-                      <SubScore label="Role" score={job.role_match_score} />
-                      <SubScore label="Experience" score={job.experience_match_score} />
-                    </div>
-                  </div>
-                ))
-              )}
+              <Suspense fallback={<RolesSkeleton />}>
+                <RecommendedRoles candidateId={id} />
+              </Suspense>
             </CardContent>
           </Card>
 
@@ -231,6 +212,57 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+async function RecommendedRoles({ candidateId }: { candidateId: string }) {
+  // If matching fails, the profile still renders; an empty panel beats a 500 on
+  // the whole route.
+  const matches = await matchJobsForCandidate(candidateId).catch(
+    () => [] as Awaited<ReturnType<typeof matchJobsForCandidate>>,
+  );
+
+  if (matches.length === 0) {
+    return (
+      <p className="text-sm text-slate-500">
+        No role scored above the threshold for this candidate.
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {matches.slice(0, 5).map((job) => (
+        <div key={job.id} className="rounded-lg border border-slate-200 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link href={`/jobs/${job.id}`} className="font-medium hover:underline">
+              {job.title}
+            </Link>
+            <MatchScore score={job.match_score} />
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            {[job.department, job.location].filter(Boolean).join(" · ") ||
+              "No department or location listed"}
+          </p>
+          <p className="mt-2 text-sm text-slate-600">{job.match_explanation}</p>
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1">
+            <SubScore label="Skills" score={job.skill_match_score} />
+            <SubScore label="Role" score={job.role_match_score} />
+            <SubScore label="Experience" score={job.experience_match_score} />
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function RolesSkeleton() {
+  return (
+    <>
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-28 w-full rounded-lg" />
+      ))}
     </>
   );
 }

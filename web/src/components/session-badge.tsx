@@ -1,7 +1,24 @@
 import Link from "next/link";
 import { Eye, ShieldCheck } from "lucide-react";
 
+import { Skeleton } from "@/components/ui/skeleton";
 import { getUser } from "@/lib/session";
+
+/**
+ * What the header shows while `SessionBadge` resolves.
+ *
+ * Sized to the real badge rather than left empty: this sits in a sticky header
+ * above every page, so a fallback that collapses would shift the whole nav row
+ * on each first paint. The pill is h-6 to match `text-xs` plus `py-1`.
+ */
+export function SessionBadgeFallback() {
+  return (
+    <span className="flex items-center gap-3" aria-hidden>
+      <Skeleton className="h-6 w-32 rounded-full" />
+      <Skeleton className="h-4 w-12" />
+    </span>
+  );
+}
 
 /**
  * Says which account the visitor is on and, for the demo role, that writes will

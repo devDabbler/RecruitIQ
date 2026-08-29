@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist_Mono, Inter } from "next/font/google";
+import { Suspense } from "react";
 
 import { Nav } from "@/components/nav";
-import { SessionBadge } from "@/components/session-badge";
+import { SessionBadge, SessionBadgeFallback } from "@/components/session-badge";
 import "./globals.css";
 
 // globals.css resolves the Tailwind font tokens from --font-sans; the variable
@@ -34,7 +35,16 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <div className="flex-1">
               <Nav />
             </div>
-            <SessionBadge />
+            {/* Suspended on purpose, and load-bearing for every `loading.tsx`
+                in the app. `SessionBadge` reads `cookies()` and calls
+                /auth/me; the loading.js docs are explicit that runtime data
+                accessed directly in a layout gets no fallback and blocks the
+                navigation until the layout finishes. Behind a boundary, the
+                shell and the route's skeleton paint immediately and the badge
+                fills in. */}
+            <Suspense fallback={<SessionBadgeFallback />}>
+              <SessionBadge />
+            </Suspense>
           </div>
         </header>
 
