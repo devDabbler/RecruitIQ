@@ -1,12 +1,15 @@
 import Link from "next/link";
-import { MapPin, Users } from "lucide-react";
+import { MapPin, Pencil, Plus, Users } from "lucide-react";
 
+import { DeleteJobButton } from "@/components/delete-job-button";
 import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
 import { listJobs } from "@/lib/data";
 import type { JobList } from "@/lib/domain";
 import { formatSalary, humanize } from "@/lib/format";
+import { canWrite } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -21,13 +24,17 @@ const STATUS_CLASSES: Record<string, string> = {
 };
 
 export default async function JobsPage() {
+  // Resolved before the fetch so the "New job" button is still offered on the
+  // error path, where creating a role is a plausible next move.
+  const writable = await canWrite();
+
   let jobs: JobList;
   try {
     jobs = await listJobs();
   } catch (error) {
     return (
       <>
-        <PageHeader title="Jobs" />
+        <PageHeader title="Jobs" actions={writable ? <NewJobButton /> : null} />
         <ErrorState
           title="Could not load jobs"
           detail={error instanceof ApiError ? error.detail : String(error)}
@@ -48,10 +55,18 @@ export default async function JobsPage() {
       <PageHeader
         title="Jobs"
         description={`${jobs.results.filter((j) => j.status === "open").length} open of ${jobs.total} total`}
+        actions={writable ? <NewJobButton /> : null}
       />
 
       {sorted.length === 0 ? (
-        <EmptyState title="No jobs yet" detail="Run scripts/seed_demo.py to populate the demo." />
+        <EmptyState
+          title="No jobs yet"
+          detail={
+            writable
+              ? "Create one above, or run scripts/seed_demo.py to populate the demo."
+              : "Run scripts/seed_demo.py to populate the demo."
+          }
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {sorted.map((job) => (
@@ -88,11 +103,33 @@ export default async function JobsPage() {
                     {formatSalary(job.min_salary, job.max_salary)}
                   </span>
                 </div>
+
+                {writable ? (
+                  <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
+                    <Link
+                      href={`/jobs/${job.id}/edit`}
+                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                    >
+                      <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                      Edit
+                    </Link>
+                    <DeleteJobButton jobId={job.id} title={job.title} />
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           ))}
         </div>
       )}
     </>
+  );
+}
+
+function NewJobButton() {
+  return (
+    <Link href="/jobs/new" className={buttonVariants()}>
+      <Plus className="mr-1.5 h-4 w-4" aria-hidden />
+      New job
+    </Link>
   );
 }

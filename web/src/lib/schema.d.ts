@@ -928,7 +928,22 @@ export interface paths {
         post?: never;
         /**
          * Delete Job
-         * @description Delete a job posting and all related records (future-proof).
+         * @description Delete a job posting and detach everything that references it.
+         *
+         *     Three tables point at jobs.id, and they need different treatment:
+         *
+         *     - job_applications and saved_jobs are owned by the job. Both relationships
+         *       declare cascade="all, delete-orphan" (models.py), so the ORM deletes those
+         *       rows for us.
+         *     - candidate_pitches.job_id is nullable and its relationship carries no
+         *       cascade, so SQLAlchemy de-associates it by writing NULL.
+         *     - candidates.job_id is a nullable FK with *no* relationship on Job at all,
+         *       which means the ORM never learns about it and Postgres rejects the delete.
+         *       Nulling it here is the difference between this endpoint working and
+         *       returning a 500 for any job a candidate was ever attached to.
+         *
+         *     A candidate outlives the requisition they were sourced for, so detaching is
+         *     the correct semantic, not cascading the delete into people.
          */
         delete: operations["delete_job_api_jobs__job_id__delete"];
         options?: never;
@@ -1192,6 +1207,12 @@ export interface paths {
         /**
          * Parse Resume
          * @description Parse a resume file and optionally save to database, now using Agentic Zero agent
+         *
+         *     `job_id` names a real requisition and is the preferred way to ask for a fit
+         *     score: the resume is then measured against the skills that job actually
+         *     requires. `target_job_title` remains for roles that are not in the database,
+         *     but a free-text title can only be scored against similar jobs and a static
+         *     fallback list, which is a weaker claim. When both arrive, job_id wins.
          */
         post: operations["parse_resume_api_resume_parse_post"];
         delete?: never;
@@ -1670,6 +1691,8 @@ export interface components {
              * Format: binary
              */
             file: string;
+            /** Job Id */
+            job_id?: number | null;
             /**
              * Save To Db
              * @default false

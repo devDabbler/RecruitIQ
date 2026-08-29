@@ -25,6 +25,46 @@ from backend.utils.resume_parsing.models.resume_schema import ResumeData
 
 logger = logging.getLogger(__name__)
 
+# "ai" as a bare substring matches Retail, Maintenance, Trainer, Paid Media and
+# plenty of other titles that have nothing to do with machine learning, and any
+# of them used to collect the AI scoring bonus below. Match it as a word, or as
+# part of a genuinely AI-flavoured compound like "AI/ML".
+_AI_ROLE_PATTERN = re.compile(
+    r"\b(ai|a\.i\.|artificial intelligence|ml|machine learning|deep learning|nlp|llm|genai)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_ai_role(job_title: Optional[str]) -> bool:
+    """Whether a role title is AI/ML flavoured, for role-specific score weighting."""
+    if not job_title:
+        return False
+    return bool(_AI_ROLE_PATTERN.search(job_title))
+
+
+def _job_skills_from(job_data: Optional[Dict[str, Any]]) -> Optional[List[str]]:
+    """Pull a job's own required skills out of a job payload.
+
+    The `jobs.skills` column stores a comma-separated string while the API
+    serialises it as a list, and this is reached from both directions, so accept
+    either. Returns None rather than [] when there is nothing usable: an empty
+    list would be indistinguishable from "this role requires no skills" and
+    would score every resume at zero overlap.
+    """
+    if not isinstance(job_data, dict):
+        return None
+
+    raw = job_data.get("skills")
+    if isinstance(raw, str):
+        skills = [s.strip() for s in raw.split(",") if s.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        skills = [str(s).strip() for s in raw if str(s).strip()]
+    else:
+        return None
+
+    return skills or None
+
+
 @register(
     name="ResumeProcessingAgent",
     description="Handles all resume processing tasks, from initial parsing to enhancement and quality analysis."
@@ -42,9 +82,19 @@ class ResumeProcessingAgent(BaseAgent):
         self.web_search_service = web_search_service
         self.job_service = job_service
 
-    async def _process_single_file(self, file: UploadFile, target_job_title: Optional[str]) -> Dict[str, Any]:
+    async def _process_single_file(
+        self,
+        file: UploadFile,
+        target_job_title: Optional[str],
+        job_skills: Optional[List[str]] = None,
+        job_requirements: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Processes a single resume file, including parsing, enrichment, analysis, and saving to database.
+
+        `job_skills` and `job_requirements`, when given, come from a real
+        requisition and make the fit analysis specific to that opening rather
+        than to the market average for its title.
         """
         logger.info(f"Processing single file: {file.filename}")
 
@@ -96,7 +146,11 @@ class ResumeProcessingAgent(BaseAgent):
                 }
                 
                 if target_job_title:
-                    market_alignment_task = asyncio.create_task(self._analyze_market_alignment(parsed_data, target_job_title))
+                    market_alignment_task = asyncio.create_task(
+                        self._analyze_market_alignment(
+                            parsed_data, target_job_title, job_skills, job_requirements
+                        )
+                    )
 
                 # Await concurrent tasks
                 try:
@@ -149,7 +203,7 @@ class ResumeProcessingAgent(BaseAgent):
                         base_score = (skills_score * 0.6) + (clarity * 0.1) + (impact * 0.2) + (skills_relevance * 0.1)
                         
                         # Apply role-specific adjustments
-                        if 'gen ai' in target_job_title.lower() or 'ai' in target_job_title.lower():
+                        if _is_ai_role(target_job_title):
                             # For AI roles, check for core AI/ML skills and adjust score
                             core_ai_skills = {'ai', 'ml', 'python', 'tensorflow', 'pytorch', 'pandas', 'numpy', 'git', 'aws', 'azure', 'gcp'}
                             candidate_skills_set = set()
@@ -233,13 +287,40 @@ class ResumeProcessingAgent(BaseAgent):
                 "message": str(e)
             }
 
-    async def _analyze_market_alignment(self, parsed_data: Dict[str, Any], target_job_title: str) -> Dict[str, Any]:
+    async def _analyze_market_alignment(
+        self,
+        parsed_data: Dict[str, Any],
+        target_job_title: str,
+        job_skills: Optional[List[str]] = None,
+        job_requirements: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        Analyzes the resume's skills against the market demand for a target job title.
+        Analyzes the resume's skills against a target role.
+
+        Two sources are possible, and which one was used is reported in
+        `source` so the UI can say so rather than implying more rigour than
+        there is:
+
+        - "job": the caller named a real requisition, and `job_skills` holds
+          that job's own required skills. The comparison is against what this
+          employer actually asked for.
+        - "market": only a free-text title was available, so the baseline comes
+          from a pgvector lookup of similar jobs and, failing that, a static
+          per-role skill list. That is an estimate about a job *like* this one,
+          not about a specific opening.
+
+        `job_requirements` is the requisition's qualifications prose. It informs
+        the written commentary only; it does not move the numeric score, because
+        turning prose into a comparable skill set would need an extraction step
+        whose errors would be invisible inside a number.
         """
-        logger.info(f"Analyzing market alignment for target job: '{target_job_title}'")
+        source = "job" if job_skills else "market"
+        logger.info(
+            f"Analyzing alignment for target job: '{target_job_title}' (source={source})"
+        )
         analysis_result = {
             "target_job_title": target_job_title,
+            "source": source,
             "market_skills": [],
             "matching_skills": [],
             "missing_skills": [],
@@ -316,14 +397,24 @@ class ResumeProcessingAgent(BaseAgent):
                     candidate_skills_raw.append(skill)
             candidate_skills = {_norm(x) for x in candidate_skills_raw if x}
             
-            # Get skills from comparable jobs with enhanced fallback
-            market_skills_list = await self.job_service.get_skills_for_comparable_jobs(target_job_title)
-            
-            # Enhanced fallback for specialized roles like Gen AI Engineer
-            if not market_skills_list or len(market_skills_list) < 5:
-                logger.info(f"Market skills list too small ({len(market_skills_list) if market_skills_list else 0}), using enhanced fallback for '{target_job_title}'")
-                market_skills_list = self._get_enhanced_fallback_skills(target_job_title)
-            
+            if job_skills:
+                # A real requisition was named. Its own skill list is the
+                # baseline, full stop: no similarity search, no static fallback.
+                # Substituting a guess here when a real answer exists is exactly
+                # the failure this parameter was added to remove.
+                market_skills_list = list(job_skills)
+                logger.info(
+                    f"Scoring against {len(market_skills_list)} skills from the '{target_job_title}' requisition"
+                )
+            else:
+                # Get skills from comparable jobs with enhanced fallback
+                market_skills_list = await self.job_service.get_skills_for_comparable_jobs(target_job_title)
+
+                # Enhanced fallback for specialized roles like Gen AI Engineer
+                if not market_skills_list or len(market_skills_list) < 5:
+                    logger.info(f"Market skills list too small ({len(market_skills_list) if market_skills_list else 0}), using enhanced fallback for '{target_job_title}'")
+                    market_skills_list = self._get_enhanced_fallback_skills(target_job_title)
+
             # Limit to top-N unique skills to avoid denominator inflation when aggregating many jobs
             market_skills_clean = []
             seen = set()
@@ -500,7 +591,7 @@ class ResumeProcessingAgent(BaseAgent):
             basic_overlap = len(candidate_skills.intersection(market_skills)) / max(len(union), 1)
             
             # Apply role-specific weighting for specialized positions
-            if 'gen ai' in target_job_title.lower() or 'ai' in target_job_title.lower():
+            if _is_ai_role(target_job_title):
                 # For AI roles, give more weight to core AI/ML skills
                 core_ai_skills = {'ai', 'ml', 'python', 'tensorflow', 'pytorch', 'pandas', 'numpy', 'git', 'aws', 'azure', 'gcp'}
                 core_matches = len(candidate_skills.intersection(market_skills).intersection(core_ai_skills))
@@ -511,15 +602,38 @@ class ResumeProcessingAgent(BaseAgent):
                 analysis_result["overlap_ratio"] = round(basic_overlap, 4)
 
             # Enhanced LLM commentary with more specific guidance
+            if source == "job":
+                baseline_line = (
+                    f"The resume was compared against an actual open requisition for "
+                    f"'{target_job_title}' and the skills that role requires."
+                )
+                skills_label = "Skills required by this role"
+            else:
+                baseline_line = (
+                    f"The resume was compared against the skills typically demanded "
+                    f"in the market for the job title '{target_job_title}'. No specific "
+                    f"requisition was provided."
+                )
+                skills_label = "Common market skills"
+
+            requirements_block = ""
+            if job_requirements:
+                # Cap the prose: qualifications fields run long and the useful
+                # signal is at the top.
+                requirements_block = (
+                    f"\n            Required qualifications for this role:\n"
+                    f"            {job_requirements.strip()[:1200]}\n"
+                )
+
             prompt = f"""
-            A candidate's resume has been analyzed against the skills demanded by the market for the job title '{target_job_title}'.
-            
+            {baseline_line}
+
             Candidate's Skills: {', '.join(sorted(list(candidate_skills)))}
-            Common Market Skills: {', '.join(analysis_result['market_skills'])}
-            
+            {skills_label}: {', '.join(analysis_result['market_skills'])}
+
             Matching Skills: {', '.join(analysis_result['matching_skills'])}
             Missing Skills: {', '.join(analysis_result['missing_skills'])}
-
+            {requirements_block}
             Provide a brief, encouraging, and constructive analysis (2-3 sentences) for the candidate.
             Comment on their strengths (matching skills) and areas for potential growth (missing skills).
             For AI/ML roles, emphasize the importance of core skills like Python, ML frameworks, and cloud platforms.
@@ -1050,7 +1164,9 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
             save_to_db: Whether to save the resume to the database
             candidate_id: Optional candidate ID for association
             target_job_title: Optional job title to score market/job fit against
-            job_data: Optional full job object; used to derive a title when none is given
+            job_data: Optional full job object. Supplies the title when none is
+                given, and when it carries the job's own `skills` the fit is
+                scored against that requisition instead of the market average.
 
         Returns:
             A dictionary with parsing results and metadata
@@ -1064,10 +1180,25 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
                     logger.info(f"Derived target_job_title from job_data['{key}']: {target_job_title}")
                     break
 
-        logger.info(f"Processing resume: {file.filename}, save_to_db={save_to_db}, candidate_id={candidate_id}, target_job_title={target_job_title}")
+        job_skills = _job_skills_from(job_data)
+        job_requirements = None
+        if isinstance(job_data, dict):
+            raw = job_data.get("required_qualifications") or job_data.get("requirements")
+            if isinstance(raw, str) and raw.strip():
+                job_requirements = raw.strip()
+
+        logger.info(
+            f"Processing resume: {file.filename}, save_to_db={save_to_db}, candidate_id={candidate_id}, "
+            f"target_job_title={target_job_title}, job_skills={len(job_skills) if job_skills else 0}"
+        )
 
         # Process the single file with our internal method
-        result = await self._process_single_file(file, target_job_title=target_job_title)
+        result = await self._process_single_file(
+            file,
+            target_job_title=target_job_title,
+            job_skills=job_skills,
+            job_requirements=job_requirements,
+        )
         
         # Format the result to match the expected structure in the router
         # Ensure parsed_data is available in the response

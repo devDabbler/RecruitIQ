@@ -37,6 +37,19 @@ export async function POST(request: NextRequest) {
   const outgoing = new FormData();
   outgoing.set("file", file, file.name);
   outgoing.set("save_to_db", "false");
+
+  // job_id names a real requisition and takes precedence upstream; the
+  // free-text title is the fallback for roles that are not in the database.
+  // Validated as an integer here so a malformed value fails as a 400 rather
+  // than a FastAPI 422 the uploader would have to decode.
+  const jobId = incoming.get("job_id");
+  if (typeof jobId === "string" && jobId) {
+    if (!/^\d+$/.test(jobId)) {
+      return NextResponse.json({ detail: "That is not a valid job id." }, { status: 400 });
+    }
+    outgoing.set("job_id", jobId);
+  }
+
   const targetJob = incoming.get("target_job_title");
   if (typeof targetJob === "string" && targetJob) outgoing.set("target_job_title", targetJob);
 
