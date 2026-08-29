@@ -128,3 +128,52 @@
     @apply font-sans;
   }
 }
+/*
+ * Pending hint for the nav links (`PendingDot` in components/nav.tsx).
+ *
+ * Always rendered and always the same size, so showing it cannot reflow the
+ * header. The 120ms animation delay is the point of the whole thing: a
+ * navigation that resolves quickly finishes before the dot ever becomes
+ * visible, so the nav stays still instead of flickering on every click.
+ */
+.nav-hint {
+  display: inline-block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background: currentColor;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.nav-hint.is-pending {
+  visibility: visible;
+  animation-name: nav-hint-in, nav-hint-pulse;
+  animation-duration: 200ms, 1s;
+  animation-delay: 120ms, 120ms;
+  animation-timing-function: ease, ease-in-out;
+  animation-iteration-count: 1, infinite;
+  animation-fill-mode: forwards, none;
+}
+
+@keyframes nav-hint-in {
+  to {
+    opacity: 0.6;
+  }
+}
+
+@keyframes nav-hint-pulse {
+  50% {
+    opacity: 0.2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-hint.is-pending {
+    animation-name: nav-hint-in;
+    animation-duration: 200ms;
+    animation-delay: 120ms;
+    animation-iteration-count: 1;
+    animation-fill-mode: forwards;
+  }
+}
