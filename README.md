@@ -1,6 +1,6 @@
 # RecruitIQ
 
-**Live demo: [resumecupid.ai](https://resumecupid.ai)** — no signup, you land
+**Live demo: [resumecupid.ai](https://resumecupid.ai)** - no signup, you land
 in the product as a read-only demo user. (The domain is an earlier iteration
 of this project; see the lineage below.)
 
@@ -49,12 +49,12 @@ me what the previous one got wrong.
 
 A FastAPI backend (92 routes) and a Next.js front end, backed by a single
 PostgreSQL database with `pgvector`. The browser only ever talks to Next, which
-holds the session cookie and calls FastAPI server-side — so the API listens on
+holds the session cookie and calls FastAPI server-side - so the API listens on
 loopback and there is no CORS configuration anywhere.
 
 **The resume parsing pipeline** is the part I am most confident in. LLM
 structured extraction against a Pydantic contract, falling back to a regex
-extractor, with a dedicated extractor for military service — because veteran
+extractor, with a dedicated extractor for military service - because veteran
 resumes describe experience in a format civilian parsers reliably mangle.
 
 **Candidate-job matching** scores role fit, skill overlap and experience
@@ -64,21 +64,21 @@ rank for a Data Engineer role just because both mention "leadership".
 **Semantic search** embeds every candidate and job as a 768-dimension vector
 (`nomic-embed-text`, served by an Ollama instance I already run for another
 project) and ranks by cosine similarity in `pgvector`. "Machine learning
-engineer with python" surfaces the NLP Engineers first — no keyword overlap
+engineer with python" surfaces the NLP Engineers first - no keyword overlap
 required.
 
 **The AI assistant** is native LLM tool calling: the model reads the
 conversation and picks from 8 tool definitions (semantic candidate search,
 job matching, match explanation, salary benchmarks, pipeline stats...), each a
 thin wrapper over the same services the REST API uses. This replaced a
-4,338-line hand-written regex intent processor — the single largest deletion
+4,338-line hand-written regex intent processor - the single largest deletion
 in the codebase's history, and the code works better.
 
 **The LLM provider chain** runs local-first: a `qwen3:8b` on my own GPU
 (best-effort, hard 20-second cap so a demo visitor can never queue work behind
 my other project's inference), falling through to OpenRouter, then Claude.
 Structured outputs are schema-enforced where the provider supports it (Ollama
-`format`, Claude `messages.parse`) and JSON-repaired where it does not — the
+`format`, Claude `messages.parse`) and JSON-repaired where it does not - the
 repair layer is scoped to exactly the tier that needs it.
 
 **Which model parses resumes is decided by benchmark, not vibes.** The eval
@@ -93,11 +93,11 @@ production prompt, schema, and token budget, and scores field-by-field:
 | `gpt-5-nano` | 100% | 25.6s | $1.89 |
 | `qwen3-32b` | 95% | 31.8s | $0.81 |
 
-So resume parsing — low-volume and schema-critical — routes to
+So resume parsing - low-volume and schema-critical - routes to
 `gemini-2.5-flash-lite`, while chat stays on the free local tier
 ([ADR 0002](docs/decisions/0002-per-task-llm-routing.md)). gpt-5-nano is the
 accuracy winner but spends 10× the wall clock thinking; a first run scored it
-53% because a provider bug reported truncated completions as successes —
+53% because a provider bug reported truncated completions as successes -
 building the eval found that bug and three others in production code, which
 is most of why it was worth building.
 
@@ -109,7 +109,7 @@ This is a portfolio piece under active renovation, not a product. Being
 specific about what is broken is more useful to you than a feature list:
 
 - **Neo4j is gone.** It held 48 nodes and its vector indexes were
-  misconfigured — 384-dimension indexes against 1536-dimension stored vectors —
+  misconfigured - 384-dimension indexes against 1536-dimension stored vectors -
   so the "graph layer" was concept, not capability. Phase 1b deleted it
   (~5,400 lines net, 31 packages including LangChain and the entire PyTorch
   stack) and rebuilt the vector layer on Postgres + `pgvector`: 768-dimension
@@ -126,8 +126,8 @@ specific about what is broken is more useful to you than a feature list:
   login form. TypeScript types are generated from the committed `openapi.json`,
   so a screen reading a field the API no longer returns fails the build instead
   of rendering a blank card. Deleting the old app also dropped nine declared
-  dependencies nothing outside it imported — `streamlit` and its two add-ons,
-  `pandas`, `scipy`, `plotly`, `altair`, `matplotlib`, `pyperclip` — which is
+  dependencies nothing outside it imported - `streamlit` and its two add-ons,
+  `pandas`, `scipy`, `plotly`, `altair`, `matplotlib`, `pyperclip` - which is
   27 packages once transitives are counted.
 - **The test suite:** 269 passing Python tests plus 36 front-end unit tests and
   a Playwright journey through all eight screens. CI runs ruff, pytest against
@@ -142,7 +142,7 @@ Full assessment and plan:
 ## Running it
 
 Requires **Python 3.11+**, Poetry, Node 20+ and Docker. Redis and MinIO are
-optional — the app degrades gracefully without them.
+optional - the app degrades gracefully without them.
 
 ```bash
 poetry install
