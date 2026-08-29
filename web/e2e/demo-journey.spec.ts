@@ -141,5 +141,21 @@ test("the demo user can walk all eight screens and every one shows live data", a
 
 test("an unknown candidate renders not-found rather than crashing", async ({ page }) => {
   const response = await page.goto("/candidates/00000000-0000-4000-8000-000000000000");
-  expect(response?.status()).toBe(404);
+
+  // Asserts the rendered result, not the status line, and that is deliberate.
+  // Once the root layout streams — which is what lets every `loading.tsx`
+  // fallback paint instead of the browser sitting on the previous page — the
+  // response headers are already sent by the time `notFound()` runs, so the
+  // status can no longer be changed to 404. The loading.js docs call this out
+  // directly. Next marks the streamed body `noindex` instead, which is the one
+  // thing the 404 status was actually buying us here: no public search engine
+  // will index a bogus candidate URL. The screen itself is unchanged.
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { name: "Not found", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to the dashboard" })).toBeVisible();
+
+  // Checked against the served bytes rather than the hydrated DOM: this tag is
+  // emitted by Next's streaming machinery mid-body, and a crawler reads the
+  // response, not a React tree it never builds.
+  expect(await response?.text()).toContain('name="robots" content="noindex"');
 });
