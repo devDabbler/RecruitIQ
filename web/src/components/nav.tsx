@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bot,
@@ -27,6 +27,22 @@ const LINKS = [
   { href: "/assistant", label: "Assistant", icon: Bot },
 ] as const;
 
+/**
+ * A dot that appears only if the click did not resolve straight away.
+ *
+ * With a `loading.tsx` on every route, Next prefetches each destination and
+ * navigation commits instantly, so this normally never shows — `useLinkStatus`
+ * skips the pending state entirely for a prefetched route. It covers the case
+ * the docs call out: the very first click, before the prefetch queue has
+ * reached that link. The 120ms animation delay means a fast navigation does not
+ * flash it, and the element is always rendered at a fixed size so toggling it
+ * cannot shift the nav.
+ */
+function PendingDot() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className={cn("nav-hint", pending && "is-pending")} />;
+}
+
 export function Nav() {
   const pathname = usePathname();
 
@@ -49,6 +65,7 @@ export function Nav() {
           >
             <Icon className="h-4 w-4" aria-hidden />
             <span className="hidden md:inline">{label}</span>
+            <PendingDot />
           </Link>
         );
       })}
