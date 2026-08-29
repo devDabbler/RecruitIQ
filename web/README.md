@@ -24,7 +24,7 @@ disabled rather than failing on click.
 
 ## Running it
 
-The backend must be up first — the screens render real rows, not fixtures:
+The backend must be up first - the screens render real rows, not fixtures:
 
 ```bash
 poetry run uvicorn backend.main:app --port 8010     # repo root
@@ -60,7 +60,7 @@ npm test               # Vitest: apiFetch, the SSE reader, session helpers
 npm run e2e            # Playwright: one journey through all eight screens
 ```
 
-The Playwright run is not in CI — it needs a seeded database and real model
+The Playwright run is not in CI - it needs a seeded database and real model
 credentials, so it would fail there for reasons unrelated to the diff. It
 builds and boots the standalone artifact on port 3100 rather than reusing
 whatever is on 3000.
