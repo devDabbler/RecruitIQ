@@ -136,6 +136,17 @@ class TestRunToolLoop:
         ]
 
 
+class TestAssistantToolSchemas:
+    def test_search_candidates_accepts_location(self):
+        # Building the tool set only binds closures; nothing touches the db.
+        from backend.services.assistant_tools import build_assistant_tools
+
+        tools = {t.name: t for t in build_assistant_tools(None)}
+        schema = tools["search_candidates"].parameters
+        assert "location" in schema["properties"]
+        assert schema["required"] == ["query"], "location must stay optional"
+
+
 class TestToolSpecs:
     def test_openai_and_anthropic_shapes(self):
         oa = tl._openai_tool_spec(TOOLS)

@@ -112,6 +112,35 @@ def test_search_candidates_by_text(db):
 
     results = svc.search_candidates_by_text(db, "python data engineer with airflow", limit=5)
     assert isinstance(results, list) and len(results) >= 1
-    assert all({"id", "name", "position", "similarity"} <= set(r) for r in results)
+    assert all({"id", "name", "position", "location", "similarity"} <= set(r) for r in results)
     sims = [r["similarity"] for r in results]
     assert sims == sorted(sims, reverse=True), "must be ranked best-first"
+
+
+def test_search_candidates_by_text_location_filter(db):
+    """The location arg is a case-insensitive substring WHERE, not semantics."""
+    from backend.models.models import Candidate
+    from backend.services.vector_search_service import VectorSearchService
+
+    svc = VectorSearchService(embedding_model=StubEmbedder())
+    candidates = db.query(Candidate).limit(2).all()
+    if len(candidates) < 2:
+        pytest.skip("needs at least 2 seeded candidates")
+
+    originals = {c.id: c.location for c in candidates}
+    try:
+        candidates[0].location = "Testville, TS"
+        candidates[1].location = "Elsewhere, EW"
+        for c in candidates:
+            assert svc.store_candidate_embedding(db, c.id) is True
+
+        hits = svc.search_candidates_by_text(db, "python engineer", limit=10, location="testville")
+        assert [r["id"] for r in hits] == [candidates[0].id]
+        assert hits[0]["location"] == "Testville, TS"
+
+        misses = svc.search_candidates_by_text(db, "python engineer", limit=10, location="zz-nowhere")
+        assert misses == []
+    finally:
+        for c in candidates:
+            c.location = originals[c.id]
+        db.commit()
