@@ -59,23 +59,35 @@ class VectorSearchService:
         db.commit()
         return True
 
-    def search_candidates_by_text(self, db, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def search_candidates_by_text(
+        self, db, query: str, limit: int = 10, location: str = None
+    ) -> List[Dict[str, Any]]:
         """Semantic candidate search: embed the natural-language query, cosine-rank
         candidates. This is the pgvector successor to the old (non-functional)
-        Neo4j RAG retrieval; Phase 2's search_candidates tool will call it."""
+        Neo4j RAG retrieval; Phase 2's search_candidates tool will call it.
+
+        `location` is a structured substring filter, not part of the embedding:
+        candidate embeddings cover position and skills only, so "in Seattle" must
+        be a WHERE clause or it silently matches nothing."""
         query_vec = self.embedding_model.embed_query(query)
+        location_clause = "AND c.location ILIKE :location" if location else ""
+        params = {"qvec": str(query_vec), "limit": limit}
+        if location:
+            params["location"] = f"%{location.strip()}%"
         rows = db.execute(
             text(
-                """
+                f"""
                 SELECT c.id, c.first_name, c.last_name, c.email, c.current_position,
+                       c.location,
                        1 - (c.embedding <=> CAST(:qvec AS vector)) AS similarity
                 FROM candidates c
                 WHERE c.embedding IS NOT NULL
+                {location_clause}
                 ORDER BY c.embedding <=> CAST(:qvec AS vector)
                 LIMIT :limit
                 """
             ),
-            {"qvec": str(query_vec), "limit": limit},
+            params,
         ).fetchall()
         return [
             {
@@ -83,6 +95,7 @@ class VectorSearchService:
                 "name": f"{r.first_name or ''} {r.last_name or ''}".strip(),
                 "email": r.email,
                 "position": r.current_position,
+                "location": r.location,
                 "similarity": max(0.0, min(1.0, float(r.similarity))),
             }
             for r in rows
