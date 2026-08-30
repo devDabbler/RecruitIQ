@@ -282,8 +282,8 @@ roughly 4× too small, wrong region, and repurposing kills the VPN.
 | Area | Decision |
 |---|---|
 | Product name | **RecruitIQ** (unchanged) |
-| Domain | **resumecupid.ai** — Namecheap remains registrar; DNS points at the droplet |
-| Branding note | Footer line acknowledging the domain as an earlier iteration, linking into the lineage story |
+| Domain | **recruitiq.io** - Namecheap remains registrar, Cloudflare serves DNS. Was `resumecupid.ai` through Phase 5; renamed 2026-08-30 to match the product name, old domain redirects (ADR 0005) |
+| Branding note | ~~Footer line acknowledging the domain as an earlier iteration~~ - moot after the rename; the lineage story stands on its own merits rather than as an explanation |
 | Hosting | Piggyback `sentient-trader`, with hard `systemd MemoryMax=` caps |
 | Frontend | Next.js App Router + TypeScript + Tailwind + shadcn/ui |
 | Backend | FastAPI retained |
