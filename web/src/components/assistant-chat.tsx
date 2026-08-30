@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUp, Bot, Check, Loader2, User, Wrench, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { parseChatMarkdown } from "@/lib/chat-markdown";
 import { readSse } from "@/lib/sse";
 import { cn } from "@/lib/utils";
 
@@ -21,11 +23,29 @@ interface Turn {
   failed?: boolean;
 }
 
-const SUGGESTIONS = [
+// One suggestion per capability the assistant demos well; a random handful is
+// shown per visit so repeat visitors see the breadth, not the same three chips.
+const SUGGESTION_POOL = [
   "Who are the strongest candidates for the Senior Backend Engineer role?",
+  "Find Python engineers in Seattle",
   "How many candidates are in the interviewing stage?",
   "Which skills show up most often across the pipeline?",
+  "What is the market salary for a Data Engineer in Austin?",
+  "Show me machine learning candidates and where they are located",
+  "Why is our top candidate a good fit for the NLP Engineer role?",
+  "Summarize the pipeline for me",
 ];
+
+const SUGGESTION_COUNT = 4;
+
+function sampleSuggestions(): string[] {
+  const pool = [...SUGGESTION_POOL];
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  return pool.slice(0, SUGGESTION_COUNT);
+}
 
 /**
  * The assistant, with its tool calls narrated as they happen.
@@ -40,7 +60,16 @@ export function AssistantChat() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [context, setContext] = useState<Record<string, unknown>>({});
+  // Sampled after mount: Math.random() during render would make the server and
+  // client HTML disagree and trip hydration.
+  const [suggestions, setSuggestions] = useState<string[]>(() =>
+    SUGGESTION_POOL.slice(0, SUGGESTION_COUNT),
+  );
   const bottom = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setSuggestions(sampleSuggestions());
+  }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -136,7 +165,7 @@ export function AssistantChat() {
               real API tools, and you will see each one as it runs.
             </p>
             <div className="flex flex-col items-start gap-2">
-              {SUGGESTIONS.map((suggestion) => (
+              {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
@@ -229,7 +258,7 @@ function Bubble({ turn, busy }: { turn: Turn; busy: boolean }) {
                   : "bg-slate-100 text-slate-800",
             )}
           >
-            {turn.content}
+            {isUser ? turn.content : <AssistantText content={turn.content} />}
           </div>
         ) : busy && !isUser ? (
           <p className="text-sm text-slate-400">Thinking…</p>
@@ -242,5 +271,34 @@ function Bubble({ turn, busy }: { turn: Turn; busy: boolean }) {
         </span>
       ) : null}
     </div>
+  );
+}
+
+/** Assistant prose with candidate/job profile links and bold rendered. */
+function AssistantText({ content }: { content: string }) {
+  return (
+    <>
+      {parseChatMarkdown(content).map((segment, i) => {
+        if (segment.kind === "link") {
+          return (
+            <Link
+              key={i}
+              href={segment.href}
+              className="font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-900"
+            >
+              {segment.text}
+            </Link>
+          );
+        }
+        if (segment.kind === "bold") {
+          return (
+            <strong key={i} className="font-semibold">
+              {segment.text}
+            </strong>
+          );
+        }
+        return <span key={i}>{segment.text}</span>;
+      })}
+    </>
   );
 }

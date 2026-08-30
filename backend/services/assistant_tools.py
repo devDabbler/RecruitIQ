@@ -72,9 +72,23 @@ def build_assistant_tools(db: Session) -> List[Tool]:
 
         return VectorSearchService(registry.llm_service.get_embedding_model())
 
-    async def search_candidates(query: str, limit: int = 8) -> dict:
-        results = _vector_service().search_candidates_by_text(db, query, limit=int(limit))
-        return {"query": query, "candidates": results, "count": len(results)}
+    async def search_candidates(query: str, limit: int = 8, location: Optional[str] = None) -> dict:
+        service = _vector_service()
+        results = service.search_candidates_by_text(db, query, limit=int(limit), location=location)
+        if not results and location and "," in location:
+            # "Seattle, WA" misses rows stored as plain "Seattle"; the city
+            # alone is the broadest substring that is still a location match.
+            city = location.split(",")[0].strip()
+            results = service.search_candidates_by_text(db, query, limit=int(limit), location=city)
+        out = {"query": query, "candidates": results, "count": len(results)}
+        if location:
+            out["location_filter"] = location
+            if not results:
+                out["note"] = (
+                    "No candidates matched that location. Consider retrying without "
+                    "the location filter and telling the user where the matches actually are."
+                )
+        return out
 
     async def get_candidate(candidate: str) -> dict:
         row = db.query(Candidate).filter(Candidate.id == candidate).first()
@@ -210,13 +224,16 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             description=(
                 "Semantic search over all candidates in the ATS. Call this whenever the user asks to "
                 "find, list, or source candidates by skills, role, or free-text description "
-                "(e.g. 'machine learning engineers with python'). Matches by meaning, not keywords."
+                "(e.g. 'machine learning engineers with python'). Matches by meaning, not keywords. "
+                "For place-based asks like 'python developers in Seattle', put the skills/role in "
+                "query and the place in location; do not put the place in query."
             ),
             parameters={
                 "type": "object",
                 "properties": {
-                    "query": {"type": "string", "description": "Natural-language description of the candidates wanted"},
+                    "query": {"type": "string", "description": "Natural-language description of the candidates wanted (skills, role); do not include the location here"},
                     "limit": {"type": "integer", "description": "Max results (default 8)"},
+                    "location": {"type": "string", "description": "Optional city/state filter, e.g. 'Seattle' or 'Austin, TX'. Substring match on the candidate's location."},
                 },
                 "required": ["query"],
             },
