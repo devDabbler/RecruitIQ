@@ -2,6 +2,10 @@
 
 **Date:** 2026-08-29 · **Status:** Accepted (Phase 5)
 
+> The domain was renamed to `recruitiq.io` on 2026-08-30 (ADR 0005). Everything
+> below still holds; read `resumecupid.ai` as "the canonical domain". The
+> renamed zone is proxied the same way, and for the reasons given here.
+
 ## Context
 
 `resumecupid.ai` serves HTTP/1.1 only. The homepage pulls 10 subresources
