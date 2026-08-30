@@ -35,12 +35,13 @@ echo "==> install units + nginx config"
 install -d -o recruitiq -g recruitiq /opt/recruitiq/logs
 cp "$APP"/deploy/recruitiq-api.service "$APP"/deploy/recruitiq-web.service /etc/systemd/system/
 systemctl daemon-reload
-if [ ! -f /etc/nginx/sites-available/resumecupid.ai ]; then
-    cp "$APP"/deploy/nginx-resumecupid.conf /etc/nginx/sites-available/resumecupid.ai
-    ln -sf /etc/nginx/sites-available/resumecupid.ai /etc/nginx/sites-enabled/resumecupid.ai
+SITE=/etc/nginx/sites-available/recruitiq.io
+if [ ! -f "$SITE" ]; then
+    cp "$APP"/deploy/nginx-recruitiq.conf "$SITE"
+    ln -sf "$SITE" /etc/nginx/sites-enabled/recruitiq.io
 else
     echo "    nginx site exists; not overwriting (certbot manages it). Diff:"
-    diff /etc/nginx/sites-available/resumecupid.ai "$APP"/deploy/nginx-resumecupid.conf || true
+    diff "$SITE" "$APP"/deploy/nginx-recruitiq.conf || true
 fi
 nginx -t
 systemctl reload nginx

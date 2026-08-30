@@ -2,7 +2,8 @@
 
 Recruiting intelligence platform: FastAPI + Postgres/pgvector backend
 (`backend/`), Next.js frontend (`web/`), LLM provider chain (Ollama tunnel →
-OpenRouter). Live at https://resumecupid.ai. Design spec:
+OpenRouter). Live at https://recruitiq.io (the former resumecupid.ai
+redirects; see ADR 0005). Design spec:
 `docs/superpowers/specs/2026-08-26-recruitiq-portfolio-revival-design.md`.
 Decisions live in `docs/decisions/` (ADRs 0001-0003); read them before
 changing provider routing or deployment shape.

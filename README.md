@@ -1,8 +1,7 @@
 # RecruitIQ
 
-**Live demo: [resumecupid.ai](https://resumecupid.ai)** - no signup, you land
-in the product as a read-only demo user. (The domain is an earlier iteration
-of this project; see the lineage below.)
+**Live demo: [recruitiq.io](https://recruitiq.io)** - no signup, you land
+in the product as a read-only demo user.
 
 **Your ATS is a graveyard of qualified candidates you already paid to source.**
 

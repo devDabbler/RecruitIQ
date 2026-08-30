@@ -18,12 +18,15 @@ evaluator can see depends on how the droplet itself runs the app.
 
 ## Decision
 
+> Domain renamed to `recruitiq.io` on 2026-08-30; see ADR 0005.
+
 **Native processes under systemd; Docker stays a dev-only concern.**
 Installing the Docker daemon on a production trading host buys zero visible
 polish and adds a few hundred MB of overhead plus one more failure domain.
 Postgres 16 + pgvector come from apt, listening on loopback only.
 
-**One domain, one proxy hop.** nginx serves `resumecupid.ai` and proxies
+**One domain, one proxy hop.** nginx serves `recruitiq.io` (`resumecupid.ai`
+when this was written; renamed 2026-08-30, see ADR 0005) and proxies
 everything to the Next.js standalone server (127.0.0.1:3001). The browser
 never talks to FastAPI (Phase 3 design); Next reaches it server-side at
 127.0.0.1:8020. Ports 8000/8001 belong to the neighbor.
