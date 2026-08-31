@@ -84,9 +84,17 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         if location:
             out["location_filter"] = location
             if not results:
+                # Do the no-filter follow-up here instead of asking the model
+                # to: small models announce "let me search again" as their
+                # final answer and never make the second call.
+                elsewhere = service.search_candidates_by_text(db, query, limit=int(limit))
+                out["candidates_elsewhere"] = elsewhere
                 out["note"] = (
-                    "No candidates matched that location. Consider retrying without "
-                    "the location filter and telling the user where the matches actually are."
+                    f"No candidates matched the location {location!r}. "
+                    "candidates_elsewhere is the same search with no location filter: "
+                    "tell the user nobody matched in that location and where the "
+                    "matching candidates actually are. Do not present them as being "
+                    "in the requested location."
                 )
         return out
 
@@ -233,7 +241,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "properties": {
                     "query": {"type": "string", "description": "Natural-language description of the candidates wanted (skills, role); do not include the location here"},
                     "limit": {"type": "integer", "description": "Max results (default 8)"},
-                    "location": {"type": "string", "description": "Optional city/state filter, e.g. 'Seattle' or 'Austin, TX'. Substring match on the candidate's location."},
+                    "location": {"type": "string", "description": "Optional place filter: a city ('Seattle'), state ('Austin, TX'), or region ('west coast', 'midwest', 'bay area'). Pass the place the user said; regions are understood."},
                 },
                 "required": ["query"],
             },
