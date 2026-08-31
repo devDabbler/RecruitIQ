@@ -10,6 +10,44 @@ from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
+# Region vocabulary for the location filter. Candidate locations are stored as
+# "City, ST", so a state list is matched as "%, ST%"; metro areas that span one
+# state are matched by city name. Recruiters ask in regions ("anywhere on the
+# west coast") far more often than exact strings, and an ILIKE on the literal
+# region name matches zero rows.
+_REGION_STATES = {
+    "west coast": ["CA", "OR", "WA"],
+    "east coast": ["ME", "NH", "MA", "RI", "CT", "NY", "NJ", "PA", "DE", "MD", "DC", "VA", "NC", "SC", "GA", "FL"],
+    "pacific northwest": ["WA", "OR"],
+    "pnw": ["WA", "OR"],
+    "new england": ["ME", "NH", "VT", "MA", "RI", "CT"],
+    "midwest": ["OH", "MI", "IN", "IL", "WI", "MN", "IA", "MO", "ND", "SD", "NE", "KS"],
+    "south": ["TX", "OK", "AR", "LA", "MS", "AL", "TN", "KY", "GA", "FL", "SC", "NC", "VA", "WV"],
+    "southwest": ["AZ", "NM", "NV", "TX", "OK"],
+    "mountain west": ["CO", "UT", "ID", "MT", "WY", "NV"],
+}
+_REGION_CITIES = {
+    "bay area": ["San Francisco", "Oakland", "San Jose", "Berkeley", "Palo Alto", "Mountain View", "Sunnyvale"],
+    "socal": ["Los Angeles", "San Diego", "Irvine", "Long Beach", "Santa Monica", "Pasadena"],
+    "southern california": ["Los Angeles", "San Diego", "Irvine", "Long Beach", "Santa Monica", "Pasadena"],
+    "dmv": ["Washington", "Arlington", "Alexandria", "Bethesda"],
+}
+
+
+def location_filter_patterns(location: str) -> List[str]:
+    """ILIKE patterns for a location ask: a region expands to its states or
+    cities, anything else stays a plain substring match."""
+    key = location.strip().lower()
+    for prefix in ("anywhere on the ", "anywhere along the ", "along the ", "on the ", "the "):
+        if key.startswith(prefix):
+            key = key[len(prefix):]
+            break
+    if key in _REGION_STATES:
+        return [f"%, {state}%" for state in _REGION_STATES[key]]
+    if key in _REGION_CITIES:
+        return [f"%{city}%" for city in _REGION_CITIES[key]]
+    return [f"%{location.strip()}%"]
+
 
 def _job_text(job) -> str:
     skills = job.skills or ""
@@ -68,12 +106,16 @@ class VectorSearchService:
 
         `location` is a structured substring filter, not part of the embedding:
         candidate embeddings cover position and skills only, so "in Seattle" must
-        be a WHERE clause or it silently matches nothing."""
+        be a WHERE clause or it silently matches nothing. Region names ("west
+        coast") expand to their states via location_filter_patterns."""
         query_vec = self.embedding_model.embed_query(query)
-        location_clause = "AND c.location ILIKE :location" if location else ""
+        location_clause = ""
         params = {"qvec": str(query_vec), "limit": limit}
         if location:
-            params["location"] = f"%{location.strip()}%"
+            patterns = location_filter_patterns(location)
+            ors = " OR ".join(f"c.location ILIKE :loc{i}" for i in range(len(patterns)))
+            location_clause = f"AND ({ors})"
+            params.update({f"loc{i}": p for i, p in enumerate(patterns)})
         rows = db.execute(
             text(
                 f"""
