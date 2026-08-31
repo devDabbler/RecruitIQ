@@ -82,3 +82,26 @@ class TestLookupTools:
     def test_get_candidate_not_found(self, db, tools):
         result = run(tools["get_candidate"].run(candidate="zzz-nobody-zzz"))
         assert "error" in result
+
+
+class TestSearchCandidatesLocationFallback:
+    def test_unmatched_location_returns_candidates_elsewhere(self, db, tools):
+        """When the place filter matches nobody, the tool itself re-runs the
+        search unfiltered so the model never has to make a second call."""
+        from sqlalchemy import text as sql_text
+
+        has_embeddings = db.execute(
+            sql_text("SELECT count(*) FROM candidates WHERE embedding IS NOT NULL")
+        ).scalar()
+        if not has_embeddings:
+            pytest.skip("needs candidates with embeddings")
+
+        result = run(
+            tools["search_candidates"].run(
+                query="software engineer", location="zzz-nowhere-land"
+            )
+        )
+        assert result["count"] == 0 and result["candidates"] == []
+        assert result["location_filter"] == "zzz-nowhere-land"
+        assert len(result["candidates_elsewhere"]) > 0
+        assert "note" in result and "zzz-nowhere-land" in result["note"]

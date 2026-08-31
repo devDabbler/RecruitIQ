@@ -147,6 +147,36 @@ class TestAssistantToolSchemas:
         assert schema["required"] == ["query"], "location must stay optional"
 
 
+class TestLocationFilterPatterns:
+    """Pure pattern expansion for the location filter; no DB involved."""
+
+    def test_region_expands_to_states(self):
+        from backend.services.vector_search_service import location_filter_patterns
+
+        patterns = location_filter_patterns("west coast")
+        assert "%, CA%" in patterns and "%, WA%" in patterns and "%, OR%" in patterns
+
+    def test_region_is_case_insensitive_and_survives_phrasing(self):
+        from backend.services.vector_search_service import location_filter_patterns
+
+        assert location_filter_patterns("West Coast") == location_filter_patterns("west coast")
+        assert location_filter_patterns("along the west coast") == location_filter_patterns(
+            "west coast"
+        )
+        assert location_filter_patterns("the Pacific Northwest") == location_filter_patterns("pnw")
+
+    def test_metro_expands_to_cities(self):
+        from backend.services.vector_search_service import location_filter_patterns
+
+        assert "%San Francisco%" in location_filter_patterns("bay area")
+
+    def test_plain_place_stays_substring(self):
+        from backend.services.vector_search_service import location_filter_patterns
+
+        assert location_filter_patterns("Seattle") == ["%Seattle%"]
+        assert location_filter_patterns("Austin, TX") == ["%Austin, TX%"]
+
+
 class TestToolSpecs:
     def test_openai_and_anthropic_shapes(self):
         oa = tl._openai_tool_spec(TOOLS)
