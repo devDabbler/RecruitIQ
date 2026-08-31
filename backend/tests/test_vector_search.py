@@ -144,3 +144,36 @@ def test_search_candidates_by_text_location_filter(db):
         for c in candidates:
             c.location = originals[c.id]
         db.commit()
+
+
+def test_search_candidates_by_text_region_filter(db):
+    """Region names expand to their states: "west coast" finds "Seattle, WA"."""
+    from backend.models.models import Candidate
+    from backend.services.vector_search_service import VectorSearchService
+
+    svc = VectorSearchService(embedding_model=StubEmbedder())
+    candidates = db.query(Candidate).limit(3).all()
+    if len(candidates) < 3:
+        pytest.skip("needs at least 3 seeded candidates")
+
+    originals = {c.id: c.location for c in candidates}
+    try:
+        candidates[0].location = "Seattle, WA"
+        candidates[1].location = "Portland, OR"
+        candidates[2].location = "Austin, TX"
+        for c in candidates:
+            assert svc.store_candidate_embedding(db, c.id) is True
+
+        hits = svc.search_candidates_by_text(db, "python engineer", limit=50, location="west coast")
+        hit_ids = {r["id"] for r in hits}
+        assert candidates[0].id in hit_ids and candidates[1].id in hit_ids
+        assert candidates[2].id not in hit_ids
+
+        pnw = svc.search_candidates_by_text(
+            db, "python engineer", limit=50, location="the Pacific Northwest"
+        )
+        assert {r["id"] for r in pnw} >= {candidates[0].id, candidates[1].id}
+    finally:
+        for c in candidates:
+            c.location = originals[c.id]
+        db.commit()

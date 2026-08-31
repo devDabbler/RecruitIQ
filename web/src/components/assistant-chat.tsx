@@ -2,26 +2,22 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bot, Check, Loader2, User, Wrench, X } from "lucide-react";
+import { ArrowUp, Bot, Check, History, Loader2, Plus, Trash2, User, Wrench, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { parseChatMarkdown } from "@/lib/chat-markdown";
+import {
+  type StoredConversation,
+  type StoredTurn as Turn,
+  conversationTitle,
+  deleteConversation,
+  loadConversations,
+  newConversationId,
+  saveConversation,
+} from "@/lib/chat-store";
 import { readSse } from "@/lib/sse";
 import { cn } from "@/lib/utils";
-
-interface ToolEvent {
-  tool: string;
-  state: "running" | "ok" | "failed";
-  summary?: string;
-}
-
-interface Turn {
-  role: "user" | "assistant";
-  content: string;
-  tools?: ToolEvent[];
-  failed?: boolean;
-}
 
 // One suggestion per capability the assistant demos well; a random handful is
 // shown per visit so repeat visitors see the breadth, not the same three chips.
@@ -56,10 +52,14 @@ function sampleSuggestions(): string[] {
  * real ATS rather than improvising (spec §5).
  */
 export function AssistantChat() {
+  const [conversationId, setConversationId] = useState(() => newConversationId());
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [context, setContext] = useState<Record<string, unknown>>({});
+  const [historyOpen, setHistoryOpen] = useState(false);
+  // Loaded after mount: localStorage does not exist during server render.
+  const [saved, setSaved] = useState<StoredConversation[]>([]);
   // Sampled after mount: Math.random() during render would make the server and
   // client HTML disagree and trip hydration.
   const [suggestions, setSuggestions] = useState<string[]>(() =>
@@ -69,11 +69,48 @@ export function AssistantChat() {
 
   useEffect(() => {
     setSuggestions(sampleSuggestions());
+    setSaved(loadConversations());
   }, []);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
+
+  // Persist after each completed turn, not during streaming: mid-stream turns
+  // still mutate, and a reload should restore finished exchanges only.
+  useEffect(() => {
+    if (busy || turns.length === 0) return;
+    saveConversation({
+      id: conversationId,
+      title: conversationTitle(turns),
+      updatedAt: Date.now(),
+      turns,
+      context,
+    });
+    setSaved(loadConversations());
+  }, [busy, turns, context, conversationId]);
+
+  function startNewChat() {
+    setConversationId(newConversationId());
+    setTurns([]);
+    setContext({});
+    setHistoryOpen(false);
+    setSuggestions(sampleSuggestions());
+  }
+
+  function openConversation(conversation: StoredConversation) {
+    if (busy) return;
+    setConversationId(conversation.id);
+    setTurns(conversation.turns);
+    setContext(conversation.context ?? {});
+    setHistoryOpen(false);
+  }
+
+  function removeConversation(id: string) {
+    deleteConversation(id);
+    setSaved(loadConversations());
+    if (id === conversationId) startNewChat();
+  }
 
   async function send(message: string) {
     const text = message.trim();
@@ -157,6 +194,78 @@ export function AssistantChat() {
 
   return (
     <div className="flex h-[calc(100vh-16rem)] min-h-[28rem] flex-col rounded-xl border border-slate-200 bg-white">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setHistoryOpen((open) => !open)}
+          aria-expanded={historyOpen}
+          className="text-slate-600"
+        >
+          <History className="h-4 w-4" aria-hidden />
+          History{saved.length > 0 ? ` (${saved.length})` : ""}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={startNewChat}
+          disabled={busy}
+          className="text-slate-700"
+        >
+          <Plus className="h-4 w-4" aria-hidden />
+          New chat
+        </Button>
+      </div>
+
+      {historyOpen ? (
+        <div className="max-h-56 overflow-y-auto border-b border-slate-200 bg-slate-50 p-2">
+          {saved.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-slate-500">
+              No saved conversations yet. Finished chats are kept in this browser.
+            </p>
+          ) : (
+            <ul className="space-y-1">
+              {saved.map((conversation) => (
+                <li key={conversation.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openConversation(conversation)}
+                    className={cn(
+                      "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-100",
+                      conversation.id === conversationId
+                        ? "font-medium text-indigo-700"
+                        : "text-slate-700",
+                    )}
+                  >
+                    <span className="block truncate">{conversation.title}</span>
+                    <span className="block text-xs text-slate-400">
+                      {new Date(conversation.updatedAt).toLocaleString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => removeConversation(conversation.id)}
+                    aria-label={`Delete conversation: ${conversation.title}`}
+                    className="text-slate-400 hover:text-rose-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
+
       <div className="flex-1 space-y-6 overflow-y-auto p-6">
         {turns.length === 0 ? (
           <div className="space-y-4">
