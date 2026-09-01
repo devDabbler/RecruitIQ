@@ -105,3 +105,22 @@ class TestSearchCandidatesLocationFallback:
         assert result["location_filter"] == "zzz-nowhere-land"
         assert len(result["candidates_elsewhere"]) > 0
         assert "note" in result and "zzz-nowhere-land" in result["note"]
+
+    def test_anywhere_is_dropped_not_filtered(self, db, tools):
+        """"Anywhere" from the model must not become a location filter: the
+        result carries plain matches, with no location_filter to apologize
+        for and no candidates_elsewhere detour."""
+        from sqlalchemy import text as sql_text
+
+        has_embeddings = db.execute(
+            sql_text("SELECT count(*) FROM candidates WHERE embedding IS NOT NULL")
+        ).scalar()
+        if not has_embeddings:
+            pytest.skip("needs candidates with embeddings")
+
+        result = run(
+            tools["search_candidates"].run(query="software engineer", location="Anywhere")
+        )
+        assert result["count"] > 0
+        assert "location_filter" not in result
+        assert "candidates_elsewhere" not in result
