@@ -153,6 +153,10 @@ class ResumeParser:
                             phone=personal.get('phone', ''),
                             location=personal.get('location', ''),
                             linkedin=personal.get('linkedin') or personal.get('linkedin_url', ''),
+                            # The LLM extracts a summary; dropping it here cost the
+                            # candidate their headline (and its industry signal in
+                            # the search embedding).
+                            summary=personal.get('summary', ''),
                         ),
                         education=[Education(**e) for e in llm_result.get('education', [])],
                         experience=experiences,
