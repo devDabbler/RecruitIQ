@@ -112,7 +112,10 @@ def test_search_candidates_by_text(db):
 
     results = svc.search_candidates_by_text(db, "python data engineer with airflow", limit=5)
     assert isinstance(results, list) and len(results) >= 1
-    assert all({"id", "name", "position", "location", "similarity"} <= set(r) for r in results)
+    assert all(
+        {"id", "name", "position", "company", "headline", "location", "similarity"} <= set(r)
+        for r in results
+    )
     sims = [r["similarity"] for r in results]
     assert sims == sorted(sims, reverse=True), "must be ranked best-first"
 
@@ -144,6 +147,26 @@ def test_search_candidates_by_text_location_filter(db):
         for c in candidates:
             c.location = originals[c.id]
         db.commit()
+
+
+def test_search_candidates_by_text_anywhere_is_no_filter(db):
+    """location="Anywhere" must behave exactly like no location at all, not
+    like an ILIKE that matches zero rows (the bug: the model passes the
+    user's word through despite the schema saying omit it)."""
+    from backend.models.models import Candidate
+    from backend.services.vector_search_service import VectorSearchService
+
+    svc = VectorSearchService(embedding_model=StubEmbedder())
+    candidates = db.query(Candidate).limit(2).all()
+    if len(candidates) < 2:
+        pytest.skip("needs at least 2 seeded candidates")
+    for c in candidates:
+        assert svc.store_candidate_embedding(db, c.id) is True
+
+    unfiltered = svc.search_candidates_by_text(db, "python engineer", limit=50)
+    anywhere = svc.search_candidates_by_text(db, "python engineer", limit=50, location="Anywhere")
+    assert [r["id"] for r in anywhere] == [r["id"] for r in unfiltered]
+    assert len(anywhere) >= 2
 
 
 def test_search_candidates_by_text_region_filter(db):
