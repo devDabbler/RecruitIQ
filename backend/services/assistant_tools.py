@@ -73,6 +73,14 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         return VectorSearchService(registry.llm_service.get_embedding_model())
 
     async def search_candidates(query: str, limit: int = 8, location: Optional[str] = None) -> dict:
+        from backend.services.vector_search_service import location_filter_patterns
+
+        if location and not location_filter_patterns(location):
+            # "Anywhere" / "any location" / "US" is not a filter. Dropping it
+            # here (not just in SQL) keeps location_filter and the elsewhere
+            # fallback out of the result, so the model does not tell the user
+            # that nobody matched the location "Anywhere".
+            location = None
         service = _vector_service()
         results = service.search_candidates_by_text(db, query, limit=int(limit), location=location)
         if not results and location and "," in location:
@@ -231,8 +239,9 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             name="search_candidates",
             description=(
                 "Semantic search over all candidates in the ATS. Call this whenever the user asks to "
-                "find, list, or source candidates by skills, role, or free-text description "
-                "(e.g. 'machine learning engineers with python'). Matches by meaning, not keywords. "
+                "find, list, or source candidates by skills, role, industry, or free-text description "
+                "(e.g. 'machine learning engineers with python', 'people with insurance or healthcare "
+                "experience'). Matches by meaning, not keywords. "
                 "For place-based asks like 'python developers in Seattle', put the skills/role in "
                 "query and the place in location; do not put the place in query."
             ),
@@ -241,7 +250,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "properties": {
                     "query": {"type": "string", "description": "Natural-language description of the candidates wanted (skills, role); do not include the location here"},
                     "limit": {"type": "integer", "description": "Max results (default 8)"},
-                    "location": {"type": "string", "description": "Optional place filter: a city ('Seattle'), state ('Austin, TX'), or region ('west coast', 'midwest', 'bay area'). Pass the place the user said; regions are understood."},
+                    "location": {"type": "string", "description": "Optional place filter: a city ('Seattle'), state ('Austin, TX'), or region ('west coast', 'midwest', 'bay area'). Pass the place the user said; regions are understood. If the user says 'anywhere' or does not name a place, omit this entirely."},
                 },
                 "required": ["query"],
             },

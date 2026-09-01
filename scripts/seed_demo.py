@@ -272,6 +272,11 @@ NEW_JOBS = [
 # parsed resumes, which the spec (§6) bars from the public demo, and which a
 # fresh install does not have anyway. Positions deliberately span all eight
 # jobs so the Matching screen has plausible pairings to rank.
+#
+# Headlines name the candidate's industry (insurance, healthcare, retail,
+# travel, financial services...) because recruiters search by industry and the
+# headline is embedded: an all-tech-company roster made "insurance experience"
+# return nothing but weak similarity noise.
 NEW_CANDIDATES = [
     ("Priya", "Raghavan", "Seattle, WA", "ML Engineer scaling recsys to 40M users",
      "Machine Learning Engineer", "Senior ML Engineer", "Instacart",
@@ -285,7 +290,7 @@ NEW_CANDIDATES = [
     ("Daniel", "Okonkwo", "Chicago, IL", "Data engineer, streaming pipelines at scale",
      "Data Engineer", "Senior Data Engineer", "Grubhub",
      ["Python", "Spark", "Kafka", "Airflow", "dbt", "Snowflake"]),
-    ("Elena", "Vasquez", "Denver, CO", "Applied scientist, causal inference and experimentation",
+    ("Elena", "Vasquez", "Denver, CO", "Applied scientist, causal inference for a real estate marketplace",
      "Senior Data Scientist", "Staff Data Scientist", "Zillow",
      ["Python", "R", "Causal Inference", "Experimentation", "SQL", "Statistics"]),
     ("Sam", "Whitfield", "Remote, US", "Full stack engineer, React and Python",
@@ -297,8 +302,8 @@ NEW_CANDIDATES = [
     ("Jonas", "Lindqvist", "Boston, MA", "Recent MS in Statistics, two ML internships",
      "Junior Data Scientist", "Data Science Intern", "Wayfair",
      ["Python", "Pandas", "Scikit-learn", "SQL", "Data Visualization"]),
-    ("Rachel", "Kim", "Seattle, WA", "MLOps engineer, model serving and monitoring",
-     "Machine Learning Engineer", "MLOps Engineer", "Zillow",
+    ("Rachel", "Kim", "Seattle, WA", "MLOps engineer serving clinical ML models in healthcare",
+     "Machine Learning Engineer", "MLOps Engineer", "Tempus AI",
      ["Python", "Kubernetes", "MLflow", "Prometheus", "AWS", "CI/CD"]),
     ("Tobias", "Herrmann", "Remote, US", "Backend engineer moving into platform work",
      "Engineering Manager, Platform", "Staff Engineer", "Datadog",
@@ -309,7 +314,7 @@ NEW_CANDIDATES = [
     ("Carlos", "Mendes", "Miami, FL", "Analytics engineer, dbt and warehouse modeling",
      "Data Engineer", "Analytics Engineer", "MercadoLibre",
      ["SQL", "dbt", "Snowflake", "Python", "Airflow", "Data Modeling"]),
-    ("Hannah", "Bright", "Portland, OR", "Data scientist, forecasting and pricing",
+    ("Hannah", "Bright", "Portland, OR", "Data scientist, retail demand forecasting and pricing",
      "Senior Data Scientist", "Data Scientist", "Nike",
      ["Python", "Time Series", "Forecasting", "SQL", "Statistics", "Tableau"]),
     ("Omar", "Haddad", "Austin, TX", "Frontend-leaning full stack, design systems",
@@ -321,8 +326,8 @@ NEW_CANDIDATES = [
     ("Wei", "Zhang", "Boston, MA", "New grad, strong Kaggle record",
      "Junior Data Scientist", "Research Assistant", "MIT",
      ["Python", "Pandas", "Scikit-learn", "Data Cleaning", "SQL"]),
-    ("Isabel", "Moreau", "Chicago, IL", "Data platform engineer, lakehouse migrations",
-     "Data Engineer", "Data Platform Engineer", "McDonald's",
+    ("Isabel", "Moreau", "Chicago, IL", "Data platform engineer, lakehouse migrations at a national insurance carrier",
+     "Data Engineer", "Data Platform Engineer", "Allstate",
      ["Python", "Spark", "Delta Lake", "Airflow", "AWS", "Terraform"]),
     ("Aisha", "Karim", "Boston, MA", "LLM applications engineer, agents and tool use",
      "Gen AI Engineer", "Machine Learning Engineer", "HubSpot",
@@ -330,22 +335,22 @@ NEW_CANDIDATES = [
     ("Viktor", "Novak", "Seattle, WA", "Streaming infrastructure, Kafka at petabyte scale",
      "Data Engineer", "Staff Data Engineer", "Netflix",
      ["Python", "Kafka", "Spark", "ETL", "AWS", "Data Warehousing"]),
-    ("Fatima", "El-Sayed", "Austin, TX", "Applied ML for pricing and demand forecasting",
+    ("Fatima", "El-Sayed", "Austin, TX", "Applied ML for travel pricing and demand forecasting",
      "Senior Data Scientist", "Senior Data Scientist", "Expedia",
      ["Python", "Machine Learning", "Statistics", "SQL", "TensorFlow", "Data Visualization"]),
-    ("Ben", "Castellano", "San Francisco, CA", "Backend generalist, Go and Postgres",
-     "Software Development Engineer", "Software Engineer II", "DoorDash",
+    ("Ben", "Castellano", "San Francisco, CA", "Backend generalist, Go and Postgres for insurance claims systems at an insurtech",
+     "Software Development Engineer", "Software Engineer II", "Lemonade",
      ["Go", "Python", "REST APIs", "Docker", "CI/CD", "PostgreSQL"]),
     ("Ingrid", "Sorensen", "Remote, US", "PM for data products, ex-analyst",
      "Product Manager", "Product Manager", "Tableau",
      ["Product Management", "Data Analysis", "User Research", "Roadmapping", "SQL", "Agile"]),
-    ("Kwame", "Boateng", "New York, NY", "Quant turned ML engineer, risk models",
+    ("Kwame", "Boateng", "New York, NY", "Quant turned ML engineer, financial services risk models",
      "Machine Learning Engineer", "Quantitative Developer", "Two Sigma",
      ["Python", "PyTorch", "Feature Engineering", "AWS", "SQL", "Statistics"]),
     ("Lucia", "Ferrari", "Boston, MA", "PhD NLP, evaluation harnesses for LLMs",
      "Gen AI Engineer", "Research Scientist", "Allen Institute for AI",
      ["Python", "NLP", "Transformers", "Large Language Models", "Deep Learning", "Hugging Face"]),
-    ("Derek", "Osei", "Chicago, IL", "Analytics engineer moving to platform work",
+    ("Derek", "Osei", "Chicago, IL", "Airline analytics engineer moving to platform work",
      "Data Engineer", "Analytics Engineer", "United Airlines",
      ["SQL", "dbt", "Airflow", "Python", "Snowflake", "Data Warehousing"]),
     ("Maya", "Lindholm", "Denver, CO", "Experimentation platform DS, ex-consultant",
@@ -354,11 +359,11 @@ NEW_CANDIDATES = [
     ("Ravi", "Chandran", "San Francisco, CA", "Distributed systems, service mesh migrations",
      "Engineering Manager, Platform", "Senior Staff Engineer", "LinkedIn",
      ["Distributed Systems", "Kubernetes", "Terraform", "Go", "Leadership", "Mentorship"]),
-    ("Sofia", "Reyes", "Miami, FL", "Bootcamp grad, strong SQL portfolio",
+    ("Sofia", "Reyes", "Miami, FL", "Bootcamp grad from travel and hospitality, strong SQL portfolio",
      "Junior Data Scientist", "Business Analyst", "Royal Caribbean",
      ["Python", "SQL", "Pandas", "Data Visualization", "Data Cleaning"]),
-    ("Ethan", "Caldwell", "Portland, OR", "Full stack with ML feature integration",
-     "Software Development Engineer", "Software Engineer", "New Relic",
+    ("Ethan", "Caldwell", "Portland, OR", "Full stack engineer on telehealth products, healthcare",
+     "Software Development Engineer", "Software Engineer", "Teladoc Health",
      ["TypeScript", "React", "Python", "REST APIs", "Docker", "Git"]),
     ("Zara", "Hussain", "Remote, US", "Platform PM, internal tooling and DX",
      "Product Manager", "Associate Product Manager", "GitLab",
@@ -366,16 +371,16 @@ NEW_CANDIDATES = [
     ("Anders", "Vik", "Seattle, WA", "Model serving at the edge, ONNX and Triton",
      "Machine Learning Engineer", "ML Infrastructure Engineer", "Adobe",
      ["Python", "Kubernetes", "MLflow", "AWS", "CI/CD", "Feature Engineering"]),
-    ("Camille", "Dubois", "New York, NY", "Data scientist, marketing mix and attribution",
-     "Senior Data Scientist", "Senior Analyst", "McKinsey",
+    ("Camille", "Dubois", "New York, NY", "Data scientist, health insurance marketing and attribution",
+     "Senior Data Scientist", "Senior Analyst", "Oscar Health",
      ["Python", "R", "Statistics", "SQL", "Machine Learning", "Data Visualization"]),
-    ("Jamal", "Winters", "Atlanta, GA", "Kafka-centric pipelines, CDC and lakehouse",
+    ("Jamal", "Winters", "Atlanta, GA", "Kafka pipelines for retail supply chain, CDC and lakehouse",
      "Data Engineer", "Data Engineer", "Home Depot",
      ["Python", "Kafka", "Spark", "Airflow", "AWS", "Docker"]),
     ("Rin", "Nakamura", "San Francisco, CA", "Agents and retrieval, shipped two LLM products",
      "Gen AI Engineer", "Senior Software Engineer", "Replit",
      ["Python", "Large Language Models", "RAG", "Prompt Engineering", "PostgreSQL", "Docker"]),
-    ("Olive", "Bennett", "Boston, MA", "MS CS, undergrad TA, one fintech internship",
+    ("Olive", "Bennett", "Boston, MA", "MS CS, undergrad TA, one fintech banking internship",
      "Junior Data Scientist", "Graduate Student", "Northeastern University",
      ["Python", "Scikit-learn", "Pandas", "SQL", "Statistics"]),
     ("Hugo", "Almeida", "Austin, TX", "SRE-flavored platform lead",
@@ -384,10 +389,10 @@ NEW_CANDIDATES = [
     ("Talia", "Rosen", "Chicago, IL", "Growth PM with experimentation depth",
      "Product Manager", "Growth Product Manager", "Duolingo",
      ["Product Management", "A/B Testing", "User Research", "Roadmapping", "Stakeholder Management"]),
-    ("George", "Antoniou", "Denver, CO", "C++ systems engineer exploring services",
-     "Software Development Engineer", "Systems Engineer", "Garmin",
+    ("George", "Antoniou", "Denver, CO", "C++ engineer, medical device firmware in healthcare",
+     "Software Development Engineer", "Systems Engineer", "Medtronic",
      ["C++", "Python", "REST APIs", "Git", "Agile", "Docker"]),
-    ("Leilani", "Kahale", "Remote, US", "Operations analyst pivoting into data science",
+    ("Leilani", "Kahale", "Remote, US", "Airline operations analyst pivoting into data science",
      "Junior Data Scientist", "Operations Analyst", "Hawaiian Airlines",
      ["SQL", "Python", "Data Visualization", "Pandas", "Data Cleaning"]),
     ("Stefan", "Weber", "Seattle, WA", "Recommender systems, embeddings and ranking",
@@ -558,7 +563,7 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
     db.commit()
 
 
-def embed(db, candidates: list[Candidate], jobs: list[Job]) -> None:
+def embed(db, candidates: list[Candidate], jobs: list[Job], force: bool = False) -> None:
     from backend.services.ollama_embeddings import OllamaEmbeddingAdapter
     from backend.services.vector_search_service import VectorSearchService
 
@@ -567,8 +572,8 @@ def embed(db, candidates: list[Candidate], jobs: list[Job]) -> None:
             base_url=os.getenv("OLLAMA_BASE_URL", "https://ollama.sentienttrader.ai")
         )
     )
-    missing_jobs = [j for j in jobs if j.embedding is None]
-    missing_candidates = [c for c in candidates if c.embedding is None]
+    missing_jobs = jobs if force else [j for j in jobs if j.embedding is None]
+    missing_candidates = candidates if force else [c for c in candidates if c.embedding is None]
 
     ok = sum(bool(svc.store_job_embedding(db, j.id)) for j in missing_jobs)
     print(f"  jobs embedded:       {ok}/{len(missing_jobs)} (of {len(jobs)} total)")
@@ -583,6 +588,15 @@ def main() -> int:
         action="store_true",
         help="skip the Ollama round trips (leaves new rows unsearchable by vector)",
     )
+    parser.add_argument(
+        "--re-embed",
+        action="store_true",
+        help=(
+            "recompute every embedding, not just missing ones. Required after "
+            "a change to the embedded text (profile fields or _candidate_text), "
+            "otherwise existing rows keep stale vectors"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -596,7 +610,7 @@ def main() -> int:
         if args.no_embeddings:
             print("  embeddings skipped (--no-embeddings)")
         else:
-            embed(db, candidates, jobs)
+            embed(db, candidates, jobs, force=args.re_embed)
 
         if len(candidates) < TARGET_CANDIDATES or len(jobs) < TARGET_JOBS:
             print(

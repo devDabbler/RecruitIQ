@@ -176,6 +176,54 @@ class TestLocationFilterPatterns:
         assert location_filter_patterns("Seattle") == ["%Seattle%"]
         assert location_filter_patterns("Austin, TX") == ["%Austin, TX%"]
 
+    def test_unconstrained_place_means_no_filter(self):
+        """"Anywhere" is not a place; empty patterns mean skip the WHERE.
+        Small models pass the user's word through even when the schema says
+        omit, so the catch has to live in the tool, not the prompt."""
+        from backend.services.vector_search_service import location_filter_patterns
+
+        for phrase in (
+            "Anywhere", "anywhere", "any location", "anyplace", "everywhere",
+            "no preference", "nationwide", "US", "USA", "the US",
+            "United States", "anywhere in the US", "anywhere in the world",
+        ):
+            assert location_filter_patterns(phrase) == [], phrase
+
+    def test_anywhere_in_a_region_still_filters(self):
+        from backend.services.vector_search_service import location_filter_patterns
+
+        assert location_filter_patterns("anywhere in the midwest") == location_filter_patterns(
+            "midwest"
+        )
+        assert location_filter_patterns("anywhere in Seattle") == ["%seattle%"]
+
+    def test_remote_is_a_real_filter_not_anywhere(self):
+        # Candidate locations are stored as "Remote, US": "remote" must keep
+        # filtering, not be swallowed by the unconstrained vocabulary.
+        from backend.services.vector_search_service import location_filter_patterns
+
+        assert location_filter_patterns("remote") == ["%remote%"]
+
+
+class TestCandidateEmbeddingText:
+    def test_includes_company_and_headline(self):
+        """Industry lives in the headline and employer; position+skills alone
+        made every candidate embed like the same tech resume."""
+        from types import SimpleNamespace
+
+        from backend.services.vector_search_service import _candidate_text
+
+        candidate = SimpleNamespace(
+            current_position="Data Platform Engineer",
+            current_company="Allstate",
+            headline="Lakehouse migrations at a national insurance carrier",
+            skills=[SimpleNamespace(skill_name="Python"), SimpleNamespace(skill_name="Spark")],
+        )
+        text = _candidate_text(candidate)
+        assert "Allstate" in text
+        assert "insurance" in text
+        assert "Python, Spark" in text
+
 
 class TestToolSpecs:
     def test_openai_and_anthropic_shapes(self):

@@ -33,20 +33,49 @@ _REGION_CITIES = {
     "dmv": ["Washington", "Arlington", "Alexandria", "Bethesda"],
 }
 
+# Phrases that mean "no location constraint". Despite the tool schema saying
+# to omit the filter, small models pass the user's word through verbatim, and
+# ILIKE '%Anywhere%' matches zero rows -- so the vocabulary lives here, not in
+# the prompt. The whole dataset is US-based, so US-wide asks are unconstrained
+# too. "remote" is deliberately NOT here: locations are stored as "Remote, US",
+# so it works as a real substring filter.
+_UNCONSTRAINED = {
+    "anywhere", "any", "anyplace", "any location", "any city", "any state",
+    "all", "all locations", "everywhere", "wherever", "no preference",
+    "none", "n/a", "na", "open", "flexible", "world", "worldwide", "global",
+    "country", "nationwide", "national", "us", "usa", "u.s", "u.s.a",
+    "united states", "america", "north america",
+}
+
+# Longer prefixes first: "anywhere in the midwest" must strip "anywhere in
+# the ", not "anywhere in " (which would leave "the midwest", matching nothing).
+_STRIP_PREFIXES = (
+    "anywhere on the ", "anywhere along the ", "anywhere in the ",
+    "anywhere in ", "anywhere near ", "along the ", "on the ", "in the ",
+    "the ",
+)
+
 
 def location_filter_patterns(location: str) -> List[str]:
     """ILIKE patterns for a location ask: a region expands to its states or
-    cities, anything else stays a plain substring match."""
-    key = location.strip().lower()
-    for prefix in ("anywhere on the ", "anywhere along the ", "along the ", "on the ", "the "):
+    cities, an unconstrained ask ("anywhere") expands to no patterns at all
+    (meaning: do not filter), anything else stays a plain substring match."""
+    key = location.strip().lower().rstrip(".!?")
+    stripped = False
+    for prefix in _STRIP_PREFIXES:
         if key.startswith(prefix):
             key = key[len(prefix):]
+            stripped = True
             break
+    if key in _UNCONSTRAINED:
+        return []
     if key in _REGION_STATES:
         return [f"%, {state}%" for state in _REGION_STATES[key]]
     if key in _REGION_CITIES:
         return [f"%{city}%" for city in _REGION_CITIES[key]]
-    return [f"%{location.strip()}%"]
+    # After stripping a filler prefix, match the remainder ("anywhere in
+    # Austin" -> "%austin%"); ILIKE makes the lowercasing irrelevant.
+    return [f"%{key}%"] if stripped else [f"%{location.strip()}%"]
 
 
 def _job_text(job) -> str:
@@ -62,7 +91,19 @@ def _candidate_text(candidate) -> str:
     skills = ""
     if getattr(candidate, "skills", None):
         skills = ", ".join(s.skill_name for s in candidate.skills)
-    return " | ".join(p for p in [candidate.current_position, skills] if p)
+    # Headline and company carry the industry signal (a claims platform at an
+    # insurer reads nothing like a recsys at a grocery marketplace); position
+    # and skills alone made every candidate look like the same tech resume.
+    return " | ".join(
+        p
+        for p in [
+            candidate.current_position,
+            getattr(candidate, "current_company", None),
+            getattr(candidate, "headline", None),
+            skills,
+        ]
+        if p
+    )
 
 
 class VectorSearchService:
@@ -112,15 +153,17 @@ class VectorSearchService:
         location_clause = ""
         params = {"qvec": str(query_vec), "limit": limit}
         if location:
+            # An unconstrained ask ("anywhere") yields no patterns: no filter.
             patterns = location_filter_patterns(location)
-            ors = " OR ".join(f"c.location ILIKE :loc{i}" for i in range(len(patterns)))
-            location_clause = f"AND ({ors})"
-            params.update({f"loc{i}": p for i, p in enumerate(patterns)})
+            if patterns:
+                ors = " OR ".join(f"c.location ILIKE :loc{i}" for i in range(len(patterns)))
+                location_clause = f"AND ({ors})"
+                params.update({f"loc{i}": p for i, p in enumerate(patterns)})
         rows = db.execute(
             text(
                 f"""
                 SELECT c.id, c.first_name, c.last_name, c.email, c.current_position,
-                       c.location,
+                       c.current_company, c.headline, c.location,
                        1 - (c.embedding <=> CAST(:qvec AS vector)) AS similarity
                 FROM candidates c
                 WHERE c.embedding IS NOT NULL
@@ -137,6 +180,8 @@ class VectorSearchService:
                 "name": f"{r.first_name or ''} {r.last_name or ''}".strip(),
                 "email": r.email,
                 "position": r.current_position,
+                "company": r.current_company,
+                "headline": r.headline,
                 "location": r.location,
                 "similarity": max(0.0, min(1.0, float(r.similarity))),
             }
