@@ -185,3 +185,26 @@ class TestToolSpecs:
         an = tl._anthropic_tool_spec(TOOLS)
         assert an[0]["name"] == "echo"
         assert "input_schema" in an[0]
+
+
+class TestOpenRouterChatUrl:
+    """Both base-url forms are in the wild (dev .env carries the suffix, prod
+    doesn't). The doubled-suffix 404 silently killed the whole tier."""
+
+    def test_bare_base_gets_suffix(self):
+        assert (
+            tl._openrouter_chat_url("https://openrouter.ai/api/v1")
+            == "https://openrouter.ai/api/v1/chat/completions"
+        )
+
+    def test_suffixed_base_is_not_doubled(self):
+        assert (
+            tl._openrouter_chat_url("https://openrouter.ai/api/v1/chat/completions")
+            == "https://openrouter.ai/api/v1/chat/completions"
+        )
+
+    def test_trailing_slash_is_stripped(self):
+        assert (
+            tl._openrouter_chat_url("https://openrouter.ai/api/v1/")
+            == "https://openrouter.ai/api/v1/chat/completions"
+        )
