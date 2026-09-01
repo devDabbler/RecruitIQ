@@ -47,7 +47,7 @@ class Candidate(Base):
     notes = Column(Text, nullable=True)
     current_position = Column(String(255), nullable=True)
     current_company = Column(String(255), nullable=True)
-    embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over position+skills
+    embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over position+company+headline+skills
     created_at = Column(DateTime, default=datetime.utcnow, index=True)  # Add index for sorting
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
