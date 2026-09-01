@@ -114,6 +114,17 @@ def _json_dumps(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, default=str)
 
 
+def _openrouter_chat_url(base_url: str) -> str:
+    """OPENROUTER_BASE_URL is configured both with and without the
+    /chat/completions suffix (dev .env has it, prod doesn't), and
+    OpenAICompatProvider accepts either. Doubling the suffix 404s every call,
+    which silently killed this whole tier."""
+    base = base_url.rstrip("/")
+    if base.endswith("/chat/completions"):
+        return base
+    return f"{base}/chat/completions"
+
+
 async def _run_ollama(settings, system: str, messages: List[dict], tools: List[Tool], trace: list) -> str:
     base_url = getattr(settings, "ollama_base_url", "https://ollama.sentienttrader.ai").rstrip("/")
     model = getattr(settings, "ollama_chat_model", "qwen3:8b")
@@ -154,8 +165,8 @@ async def _run_ollama(settings, system: str, messages: List[dict], tools: List[T
 
 async def _run_openrouter(settings, system: str, messages: List[dict], tools: List[Tool], trace: list) -> str:
     api_key = getattr(settings, "openrouter_api_key", "")
-    base_url = getattr(settings, "openrouter_base_url", "https://openrouter.ai/api/v1").rstrip("/")
-    model = getattr(settings, "openrouter_default_model", "meta-llama/llama-3.3-8b-instruct:free")
+    url = _openrouter_chat_url(getattr(settings, "openrouter_base_url", "https://openrouter.ai/api/v1"))
+    model = getattr(settings, "openrouter_default_model", "qwen/qwen3.8-27b")
     timeout = getattr(settings, "openrouter_timeout", 60.0)
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     convo = [{"role": "system", "content": system}] + list(messages)
@@ -163,7 +174,7 @@ async def _run_openrouter(settings, system: str, messages: List[dict], tools: Li
     for _ in range(MAX_ITERATIONS):
         payload = {"model": model, "messages": convo, "tools": _openai_tool_spec(tools)}
         async with httpx.AsyncClient(timeout=timeout, trust_env=True) as client:
-            resp = await client.post(f"{base_url}/chat/completions", json=payload, headers=headers)
+            resp = await client.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         choices = resp.json().get("choices") or []
         if not choices:

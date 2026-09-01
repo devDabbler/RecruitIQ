@@ -17,8 +17,12 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default=os.getenv("GOOGLE_GEMINI_API_KEY", ""))
     cohere_api_key: str = Field(default=os.getenv("COHERE_API_KEY", ""))
     openrouter_api_key: str = Field(default=os.getenv("OPENROUTER_API_KEY", ""))
-    # llama-3.3-8b:free was delisted by OpenRouter (404 "No endpoints found", found by evals 2026-08-27)
-    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "google/gemma-4-31b-it:free"))
+    # Free-tier defaults keep dying: llama-3.3-8b:free was delisted (2026-08-27),
+    # then gemma-4-31b-it:free was blocked by our OpenRouter account data policy;
+    # free endpoints may train on prompts, which the policy excludes (404 "no
+    # endpoints", found by evals/chat_smoke.py 2026-09-01). Paid qwen3.8-27b has
+    # ~10 hosts, passes the policy, and won the chat smoke on answer quality.
+    openrouter_default_model: str = Field(default=os.getenv("OPENROUTER_DEFAULT_MODEL", "qwen/qwen3.8-27b"))
     openrouter_base_url: str = Field(default=os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"))
     openrouter_timeout: float = Field(default=float(os.getenv("OPENROUTER_TIMEOUT", "60.0")))
     openrouter_max_retries: int = Field(default=int(os.getenv("OPENROUTER_MAX_RETRIES", "3")))

@@ -64,7 +64,9 @@ Rules:
   instead of repeating one template.
 - Be concise and recruiter-friendly: short paragraphs or tight bullet lists,
   scores as percentages. No preamble.
-- Never use em dashes. Use a period, comma, or colon instead.
+- Never use em dashes or en dashes anywhere, including between a name and a
+  title in a list. Use a period, comma, colon, or hyphen instead. This is a
+  hard formatting rule, not a style preference.
 """
 
 MAX_MESSAGE_CHARS = 2000
