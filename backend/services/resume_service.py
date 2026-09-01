@@ -20,8 +20,7 @@ import uuid
 import redis.asyncio as redis_asyncio
 
 # Import utilities
-from backend.utils.date_normalizer import normalize_education_dates
-from backend.utils.date_utils import normalize_date_range
+from backend.utils.date_utils import normalize_date
 from backend.utils.cache_utils import (
     redis_cache, 
     make_cache_key, 
@@ -452,52 +451,16 @@ class ResumeService:
             # Insert education
             if resume_data.education:
                 for edu in resume_data.education:
-                    # Use the already parsed start_date and end_date from the Education model
+                    # Use the already parsed start_date and end_date from the Education model.
+                    # Each side is normalized on its own with the dateutil-backed helper:
+                    # the previous code glued them into a "start - end" string and split on
+                    # '-', which shredded ISO inputs like "2022-03", and then called .get()
+                    # on the tuple the helper returns -- so every date silently became NULL.
                     raw_start_date = edu.start_date if hasattr(edu, 'start_date') else None
                     raw_end_date = edu.end_date if hasattr(edu, 'end_date') else None
-                    
-                    # Normalize dates to PostgreSQL format (YYYY-MM-DD)
-                    start_date = None
-                    end_date = None
-                    
-                    if raw_start_date:
-                        try:
-                            normalized_dates = normalize_education_dates(raw_start_date, raw_end_date or "")
-                            start_date = normalized_dates.get('start_date')
-                        except Exception as e:
-                            self.logger.warning(f"Failed to normalize start date '{raw_start_date}': {e}")
-                            # Try simple date parsing as fallback
-                            try:
-                                from datetime import datetime
-                                if "January" in str(raw_start_date):
-                                    # Handle "January 2011" format
-                                    year = str(raw_start_date).split()[-1]
-                                    start_date = f"{year}-01-01"
-                                elif len(str(raw_start_date)) == 4 and str(raw_start_date).isdigit():
-                                    # Handle "2011" format
-                                    start_date = f"{raw_start_date}-01-01"
-                            except:
-                                start_date = None
-                    
-                    if raw_end_date:
-                        try:
-                            normalized_dates = normalize_education_dates(raw_start_date or "", raw_end_date)
-                            end_date = normalized_dates.get('end_date')
-                        except Exception as e:
-                            self.logger.warning(f"Failed to normalize end date '{raw_end_date}': {e}")
-                            # Try simple date parsing as fallback
-                            try:
-                                from datetime import datetime
-                                if "June" in str(raw_end_date):
-                                    # Handle "June 2015" format
-                                    year = str(raw_end_date).split()[-1]
-                                    end_date = f"{year}-06-01"
-                                elif len(str(raw_end_date)) == 4 and str(raw_end_date).isdigit():
-                                    # Handle "2015" format
-                                    end_date = f"{raw_end_date}-12-31"
-                            except:
-                                end_date = None
-                    
+                    start_date = self._normalize_resume_date(raw_start_date)
+                    end_date = self._normalize_resume_date(raw_end_date, none_if_present=True)
+
                     # Clean text fields
                     institution = self._clean_text_for_database(edu.institution) if edu.institution else None
                     degree = self._clean_text_for_database(edu.degree) if edu.degree else None
@@ -534,50 +497,19 @@ class ResumeService:
             most_recent_job = None
             most_recent_company = None
             most_recent_end_date = None
-            
+            found_current = False
+
             # Insert experience
             if resume_data.experience:
                 for exp in resume_data.experience:
-                    # Use the already parsed start_date and end_date from the Experience model
+                    # Use the already parsed start_date and end_date from the Experience
+                    # model, normalized one side at a time (see the education block above
+                    # for why the range-string approach lost every date).
                     raw_start_date = exp.start_date if hasattr(exp, 'start_date') else None
                     raw_end_date = exp.end_date if hasattr(exp, 'end_date') else None
-                    
-                    # Normalize dates to PostgreSQL format (YYYY-MM-DD)
-                    start_date = None
-                    end_date = None
-                    
-                    if raw_start_date:
-                        try:
-                            normalized_range = normalize_date_range(f"{raw_start_date} - {raw_end_date or 'Present'}")
-                            start_date = normalized_range.get('start_date')
-                        except Exception as e:
-                            self.logger.warning(f"Failed to normalize experience start date '{raw_start_date}': {e}")
-                            # Try simple date parsing as fallback
-                            try:
-                                if "January" in str(raw_start_date):
-                                    year = str(raw_start_date).split()[-1]
-                                    start_date = f"{year}-01-01"
-                                elif len(str(raw_start_date)) == 4 and str(raw_start_date).isdigit():
-                                    start_date = f"{raw_start_date}-01-01"
-                            except:
-                                start_date = None
-                    
-                    if raw_end_date and str(raw_end_date).lower() not in ['present', 'current']:
-                        try:
-                            normalized_range = normalize_date_range(f"{raw_start_date or ''} - {raw_end_date}")
-                            end_date = normalized_range.get('end_date')
-                        except Exception as e:
-                            self.logger.warning(f"Failed to normalize experience end date '{raw_end_date}': {e}")
-                            # Try simple date parsing as fallback
-                            try:
-                                if "December" in str(raw_end_date):
-                                    year = str(raw_end_date).split()[-1]
-                                    end_date = f"{year}-12-31"
-                                elif len(str(raw_end_date)) == 4 and str(raw_end_date).isdigit():
-                                    end_date = f"{raw_end_date}-12-31"
-                            except:
-                                end_date = None
-                    
+                    start_date = self._normalize_resume_date(raw_start_date)
+                    end_date = self._normalize_resume_date(raw_end_date, none_if_present=True)
+
                     # Clean text fields
                     company = self._clean_text_for_database(exp.company) if exp.company else None
                     title = self._clean_text_for_database(exp.title) if exp.title else None
@@ -605,18 +537,23 @@ class ResumeService:
                     # Determine if this is the most recent position
                     # If end_date is None/empty, it's likely a current position
                     is_current = not end_date
-                    
+
                     # Logic to identify the most recent position:
                     # 1. Current positions (no end date) take priority
                     # 2. Otherwise, compare end dates to find the most recent
-                    if is_current:
-                        # Current position takes precedence
+                    # No `break` here: earlier versions stopped the loop at the
+                    # first current position, which silently dropped every older
+                    # experience entry from candidate_experience.
+                    if is_current and not found_current:
+                        found_current = True
                         most_recent_job = title
                         most_recent_company = company
                         most_recent_end_date = None
-                        # Exit the loop as we found a current position
-                        break
-                    elif end_date and (most_recent_end_date is None or end_date > most_recent_end_date):
+                    elif (
+                        not found_current
+                        and end_date
+                        and (most_recent_end_date is None or end_date > most_recent_end_date)
+                    ):
                         # This has a more recent end date
                         most_recent_job = title
                         most_recent_company = company
@@ -650,9 +587,48 @@ class ResumeService:
                         id=candidate_id
                     )
                 )
-            
+
+            # Complete the rest of the profile so an uploaded candidate looks
+            # like a seeded one: location feeds the assistant's place filter,
+            # the headline (resume summary) carries industry into the
+            # embedding, and a NULL status would render as a blank column on
+            # the Dashboard (the raw INSERTs above bypass the ORM default).
+            personal = resume_data.personal_info
+            location = self._clean_text_for_database(personal.location) if personal and personal.location else None
+            headline = self._clean_text_for_database(personal.summary) if personal and personal.summary else None
+            if headline:
+                headline = " ".join(headline.split())[:255]
+            db_session.execute(
+                text("""
+                UPDATE candidates SET
+                    location = COALESCE(:location, location),
+                    headline = COALESCE(:headline, headline),
+                    status = COALESCE(status, 'active'),
+                    source = COALESCE(source, 'direct_application')
+                WHERE id = :id
+                """).bindparams(location=location, headline=headline, id=candidate_id)
+            )
+
             # Commit the session here
             db_session.commit()
+
+            # Embed the candidate so semantic search and matching can see them.
+            # Everything above them in this method is already committed: an
+            # unreachable embedding model (tests run with Ollama pointed at a
+            # dead port) must degrade to a saved-but-unindexed candidate, the
+            # same state seed_demo --no-embeddings leaves rows in.
+            try:
+                from backend.services.vector_search_service import VectorSearchService
+
+                VectorSearchService(self.llm_service.get_embedding_model()).store_candidate_embedding(
+                    db_session, candidate_id
+                )
+            except Exception as embed_error:
+                db_session.rollback()
+                self.logger.warning(
+                    f"Embedding skipped for candidate {candidate_id} (saved without vector): {embed_error}"
+                )
+
             # Return the resume ID
             return resume_id
 
@@ -661,6 +637,19 @@ class ResumeService:
             self.logger.error(f"Database operation failed: {e}", exc_info=True)
             raise ValueError(f"Database error: {e}")
     
+    def _normalize_resume_date(self, raw, none_if_present: bool = False):
+        """One resume date (str or datetime.date) to 'YYYY-MM-DD', or None.
+
+        `none_if_present=True` maps 'Present'/'Current' to None -- the DB
+        convention for an ongoing role -- instead of today's date.
+        """
+        if not raw:
+            return None
+        value = raw.isoformat() if hasattr(raw, "isoformat") else str(raw)
+        if none_if_present and value.strip().lower() in ("present", "current", "now", "today"):
+            return None
+        return normalize_date(value)
+
     def _clean_text_for_database(self, text: str) -> str:
         """
         Clean text to remove NUL characters and other problematic characters for PostgreSQL.
