@@ -904,8 +904,10 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
                         r'\bwww\.[a-zA-Z0-9-]+(?:\.[a-zA-Z]{2,})+(?:/[^\s]*)?\b',
                         # Domain names that appear in common website contexts
                         r'\b(?:website|portfolio|site)[:\s]+(?:https?://)?(?:www\.)?([a-zA-Z0-9-]+(?:\.[a-zA-Z]{2,})+)(?:/[^\s]*)?\b',
-                        # Standalone domains with clear TLDs that are commonly used for websites
-                        r'\b[a-zA-Z0-9-]+\.(?:com|org|net|io|dev|me|co|tech|design|portfolio|works)\b(?:/[^\s]*)?'
+                        # Standalone domains with clear TLDs that are commonly used for websites.
+                        # The lookbehind keeps the match from starting inside an email
+                        # address ("jane@example.org") or partway through a longer token.
+                        r'(?<![\w@.\-/])[a-zA-Z0-9-]+\.(?:com|org|net|io|dev|me|co|tech|design|portfolio|works)\b(?:/[^\s]*)?'
                     ]
                     
                     for pattern in website_patterns:
@@ -1024,72 +1026,68 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
         """
         if not candidate or len(candidate.strip()) < 4:
             return False
-            
+
         candidate = candidate.strip().lower()
-        
+
+        # Basic format checks
+        if '@' in candidate or candidate.startswith('mailto:'):
+            return False
+
+        # Judge the host, not the whole string: "https://janedoe.io/portfolio"
+        # must be assessed as "janedoe.io", not split on every dot in the URL.
+        host = re.sub(r'^https?://', '', candidate).split('/')[0].split('?')[0]
+        if host.startswith('www.'):
+            host = host[4:]
+
+        host_pattern = r'^[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?)*\.[a-z]{2,}$'
+        if not re.match(host_pattern, host):
+            return False
+
+        # LinkedIn and GitHub have their own fields.
+        if 'linkedin.com' in host or 'github.com' in host:
+            return False
+
         # Get email information for comparison
         email = parsed_data.get('personal_info', {}).get('email', '')
         email_domain = ""
         if email and '@' in email:
             email_domain = email.split('@')[-1].lower()
-        
-        # Get name information for comparison
-        name = parsed_data.get('personal_info', {}).get('name', '').lower()
-        name_parts = name.split() if name else []
-        
+
         # Exclude email domains and providers
         email_providers = {
-            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com', 
-            'aol.com', 'protonmail.com', 'mail.com', 'zoho.com', 'yandex.com', 
+            'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com', 'icloud.com',
+            'aol.com', 'protonmail.com', 'mail.com', 'zoho.com', 'yandex.com',
             'gmx.com', 'live.com', 'msn.com', 'comcast.net', 'verizon.net'
         }
-        
-        # Basic format checks
-        if (
-            '@' in candidate or  # Exclude email addresses
-            candidate.startswith('mailto:') or  # Exclude mailto links
-            candidate in email_providers or  # Exclude email providers
-            candidate == email_domain or  # Exclude user's email domain
-            'linkedin.com' in candidate or  # Exclude LinkedIn (handled separately)
-            'github.com' in candidate  # Exclude GitHub (handled separately)
-        ):
+        if host in email_providers or host == email_domain:
             return False
-        
-        # Check if candidate is just a name part without a proper domain
-        # This prevents "jacob.smith" type false positives
-        if '.' in candidate:
-            parts = candidate.split('.')
-            # If it's just two parts and both are likely name components
-            if len(parts) == 2:
-                first_part, second_part = parts[0], parts[1]
-                
-                # Check if this looks like firstname.lastname pattern
-                if (
-                    len(first_part) <= 15 and  # Reasonable name length
-                    len(second_part) <= 15 and  # Reasonable name length
-                    first_part.isalpha() and  # Only letters
-                    second_part.isalpha() and  # Only letters
-                    (first_part in name_parts or second_part in name_parts)  # Matches name parts
-                ):
-                    return False
-                    
-                # Check if second part is not a valid TLD or common website domain
-                common_tlds = {
-                    'com', 'org', 'net', 'io', 'dev', 'me', 'co', 'tech', 'design', 
-                    'portfolio', 'works', 'site', 'app', 'web', 'online', 'xyz'
-                }
-                if second_part not in common_tlds:
-                    return False
-        
-        # Must have at least one dot to be a valid domain
-        if '.' not in candidate:
+
+        labels = host.split('.')
+
+        # Degree abbreviations look exactly like domains once the TLD list
+        # includes "tech" and "com": "B.Tech", "M.Tech", "B.Com", "M.Com".
+        # Nobody's personal site is a single-letter domain, so refuse those.
+        if len(labels[0]) < 2:
             return False
-            
-        # Additional validation: must look like a proper domain
-        domain_pattern = r'^(?:https?://)?(?:www\.)?[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$'
-        if not re.match(domain_pattern, candidate):
+
+        # Dotted product names that happen to end in a real TLD.
+        dotted_technologies = {
+            'asp.net', 'vb.net', 'ado.net', 'ml.net', 'dot.net', 'socket.io',
+        }
+        if host in dotted_technologies:
             return False
-            
+
+        # "jacob.smith" is a name, not a domain, even if "smith" were a TLD.
+        name = parsed_data.get('personal_info', {}).get('name', '').lower()
+        name_parts = name.split() if name else []
+        if len(labels) == 2:
+            first_part, second_part = labels
+            if (
+                first_part.isalpha() and second_part.isalpha()
+                and (first_part in name_parts or second_part in name_parts)
+            ):
+                return False
+
         return True
 
     async def _assess_resume_quality(self, parsed_data: Dict[str, Any]) -> Dict[str, Any]:
