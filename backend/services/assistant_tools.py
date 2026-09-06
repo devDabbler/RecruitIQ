@@ -60,6 +60,17 @@ def _job_summary(j, include_details: bool = False) -> dict:
     return data
 
 
+def _label_relevance(results: List[dict]) -> List[dict]:
+    """Tag each search hit with a coarse relevance band derived from its raw
+    cosine similarity. Small tool-calling models are bad at reading a raw
+    0.41 and correctly concluding "weak"; a plain-English label they can
+    quote back is what actually changes the wording of the final answer."""
+    for r in results:
+        sim = r["similarity"]
+        r["relevance"] = "strong" if sim >= 0.55 else "moderate" if sim >= 0.45 else "weak"
+    return results
+
+
 def build_assistant_tools(db: Session) -> List[Tool]:
     """Build the tool set bound to this request's DB session."""
     from backend.models.models import Candidate, Job, Resume
@@ -73,7 +84,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         return VectorSearchService(registry.llm_service.get_embedding_model())
 
     async def search_candidates(query: str, limit: int = 8, location: Optional[str] = None) -> dict:
-        from backend.services.vector_search_service import location_filter_patterns
+        from backend.services.vector_search_service import MIN_SEARCH_RELEVANCE, location_filter_patterns
 
         if location and not location_filter_patterns(location):
             # "Anywhere" / "any location" / "US" is not a filter. Dropping it
@@ -82,12 +93,24 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             # that nobody matched the location "Anywhere".
             location = None
         service = _vector_service()
-        results = service.search_candidates_by_text(db, query, limit=int(limit), location=location)
+        # min_similarity: with a narrow location filter the pool can be a
+        # handful of people, and ORDER BY/LIMIT still returns that many rows
+        # even if none of them actually relate to the query -- the "closest
+        # of 3 unrelated profiles" read to a recruiter as a confirmed match.
+        results = _label_relevance(
+            service.search_candidates_by_text(
+                db, query, limit=int(limit), location=location, min_similarity=MIN_SEARCH_RELEVANCE
+            )
+        )
         if not results and location and "," in location:
             # "Seattle, WA" misses rows stored as plain "Seattle"; the city
             # alone is the broadest substring that is still a location match.
             city = location.split(",")[0].strip()
-            results = service.search_candidates_by_text(db, query, limit=int(limit), location=city)
+            results = _label_relevance(
+                service.search_candidates_by_text(
+                    db, query, limit=int(limit), location=city, min_similarity=MIN_SEARCH_RELEVANCE
+                )
+            )
         out = {"query": query, "candidates": results, "count": len(results)}
         if location:
             out["location_filter"] = location
@@ -95,15 +118,32 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 # Do the no-filter follow-up here instead of asking the model
                 # to: small models announce "let me search again" as their
                 # final answer and never make the second call.
-                elsewhere = service.search_candidates_by_text(db, query, limit=int(limit))
+                elsewhere = _label_relevance(
+                    service.search_candidates_by_text(db, query, limit=int(limit), min_similarity=MIN_SEARCH_RELEVANCE)
+                )
                 out["candidates_elsewhere"] = elsewhere
                 out["note"] = (
-                    f"No candidates matched the location {location!r}. "
-                    "candidates_elsewhere is the same search with no location filter: "
-                    "tell the user nobody matched in that location and where the "
-                    "matching candidates actually are. Do not present them as being "
-                    "in the requested location."
+                    f"Nobody in {location!r} was a real match for {query!r} (either nobody "
+                    "is there, or the people there just are not relevant to what was asked). "
+                    "candidates_elsewhere is the same search with no location filter: tell "
+                    "the user nobody in that location was a strong match and where the "
+                    "closer matches actually are. Do not present candidates_elsewhere as "
+                    "being in the requested location, and do not claim the requested skill "
+                    "or experience for anyone the tool did not actually show evidence for."
                 )
+        if results and all(r["relevance"] == "weak" for r in results):
+            # Everything that cleared the relevance floor is still a weak
+            # match (this is the common case for a narrow location filter:
+            # the whole pool is 2-3 people and none of them is a real fit).
+            # Without this, a model reads "count: 2" as "found 2 matches" and
+            # presents them with the confidence of a real hit.
+            out["note"] = (
+                "Every candidate here is only a weak/loose semantic match for "
+                f"{query!r} (see each one's 'relevance'). Tell the user there is no "
+                "strong match, and only describe a candidate as having the specific "
+                "skill or experience asked for if it actually appears in their "
+                "position, company, or headline, not just because they were returned."
+            )
         return out
 
     async def get_candidate(candidate: str) -> dict:
@@ -243,7 +283,11 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "(e.g. 'machine learning engineers with python', 'people with insurance or healthcare "
                 "experience'). Matches by meaning, not keywords. "
                 "For place-based asks like 'python developers in Seattle', put the skills/role in "
-                "query and the place in location; do not put the place in query."
+                "query and the place in location; do not put the place in query. "
+                "Each result carries a 'relevance' band (strong/moderate/weak): a 'weak' result is "
+                "the closest available person, not a confirmed match, and must not be described as "
+                "having the requested skill or experience unless it actually shows up in their "
+                "position, company, or headline."
             ),
             parameters={
                 "type": "object",
