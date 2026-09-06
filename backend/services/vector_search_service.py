@@ -55,6 +55,16 @@ _STRIP_PREFIXES = (
     "the ",
 )
 
+# Cosine similarity floor the chat tool treats as "an actual match" (see
+# assistant_tools.search_candidates). ORDER BY + LIMIT always returns the
+# closest available rows even when nothing in the pool is truly relevant --
+# with a narrow location filter (a handful of candidates in one city) the
+# "best of a bad bunch" reads to a user as a confirmed match. 0.35 sits just
+# above matching_enhancer's 30% "no real signal" fallback score for this same
+# embedding model. Not applied inside this method itself (existing direct
+# callers/tests rank an unfiltered pool), only passed in via `min_similarity`.
+MIN_SEARCH_RELEVANCE = 0.35
+
 
 def location_filter_patterns(location: str) -> List[str]:
     """ILIKE patterns for a location ask: a region expands to its states or
@@ -139,7 +149,7 @@ class VectorSearchService:
         return True
 
     def search_candidates_by_text(
-        self, db, query: str, limit: int = 10, location: str = None
+        self, db, query: str, limit: int = 10, location: str = None, min_similarity: float = 0.0
     ) -> List[Dict[str, Any]]:
         """Semantic candidate search: embed the natural-language query, cosine-rank
         candidates. This is the pgvector successor to the old (non-functional)
@@ -148,10 +158,21 @@ class VectorSearchService:
         `location` is a structured substring filter, not part of the embedding:
         candidate embeddings cover position and skills only, so "in Seattle" must
         be a WHERE clause or it silently matches nothing. Region names ("west
-        coast") expand to their states via location_filter_patterns."""
+        coast") expand to their states via location_filter_patterns.
+
+        `min_similarity` drops rows below a cosine similarity floor instead of
+        always returning the top `limit` regardless of how weak the closest
+        match is (see MIN_SEARCH_RELEVANCE). Default 0.0 is a no-op (omitted
+        from the query entirely, not compared as ">= 0.0": cosine similarity
+        can be negative, and a literal ">= 0.0" would silently start filtering
+        rows that every existing caller expects ranked, not dropped)."""
         query_vec = self.embedding_model.embed_query(query)
         location_clause = ""
+        relevance_clause = ""
         params = {"qvec": str(query_vec), "limit": limit}
+        if min_similarity:
+            relevance_clause = "AND 1 - (c.embedding <=> CAST(:qvec AS vector)) >= :min_sim"
+            params["min_sim"] = min_similarity
         if location:
             # An unconstrained ask ("anywhere") yields no patterns: no filter.
             patterns = location_filter_patterns(location)
@@ -167,6 +188,7 @@ class VectorSearchService:
                        1 - (c.embedding <=> CAST(:qvec AS vector)) AS similarity
                 FROM candidates c
                 WHERE c.embedding IS NOT NULL
+                {relevance_clause}
                 {location_clause}
                 ORDER BY c.embedding <=> CAST(:qvec AS vector)
                 LIMIT :limit
