@@ -15,9 +15,12 @@ import {
 import { cn } from "@/lib/utils";
 
 /**
- * Exactly the eight screens from the spec (§6). Interviews and Tasks keep their
- * API routes and stay visible in /docs, but get no nav entry: a tight, finished
- * eight reads better than ten where two feel thin.
+ * The eight screens from the spec (§6) plus Transparency, which joined the
+ * public nav on 2026-09-28: it started admin-only, but a transparency page
+ * that hides behind a login undercuts its own point, and everything it shows
+ * about a candidate is already on the demo-visible screens. Interviews and
+ * Tasks keep their API routes and stay visible in /docs, but get no nav
+ * entry: a tight, finished set reads better than one where tabs feel thin.
  */
 const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
@@ -26,15 +29,8 @@ const LINKS = [
   { href: "/matching", label: "Matching", icon: Sparkles },
   { href: "/upload", label: "Upload", icon: Upload },
   { href: "/assistant", label: "Assistant", icon: Bot },
+  { href: "/transparency", label: "Transparency", icon: Scale },
 ] as const;
-
-/**
- * Screens only an administrator can open. Not listed for the demo role: a
- * link that lands on a sign-in wall is a dead tab, and the spec is explicit
- * that nothing ships that way. The route itself redirects non-admins, so
- * hiding the link is courtesy, not the access control.
- */
-const ADMIN_LINKS = [{ href: "/transparency", label: "Transparency", icon: Scale }] as const;
 
 /**
  * A dot that appears only if the click did not resolve straight away.
@@ -52,13 +48,12 @@ function PendingDot() {
   return <span aria-hidden className={cn("nav-hint", pending && "is-pending")} />;
 }
 
-export function Nav({ admin = false }: { admin?: boolean }) {
+export function Nav() {
   const pathname = usePathname();
-  const links = admin ? [...LINKS, ...ADMIN_LINKS] : LINKS;
 
   return (
     <nav className="flex items-center gap-1">
-      {links.map(({ href, label, icon: Icon }) => {
+      {LINKS.map(({ href, label, icon: Icon }) => {
         // "/" would otherwise prefix-match every route and light up permanently.
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (

@@ -26,7 +26,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
         <CardContent className="space-y-4">
           <p className="text-sm text-slate-500">
             Visitors browse as the read-only demo automatically. Sign in to save
-            candidates, change data, and open the scoring transparency view.
+            candidates and change data.
           </p>
           <LoginForm next={next} />
         </CardContent>

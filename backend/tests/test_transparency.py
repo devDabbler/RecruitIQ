@@ -1,6 +1,6 @@
-"""The admin scoring-transparency endpoints and the contract behind them.
+"""The scoring-transparency endpoints and the contract behind them.
 
-Two things matter here beyond "the routes answer":
+Three things matter here beyond "the routes answer":
 
 * The trace is the computation. `/match-trace` must produce the same number
   for a candidate that `/enhanced-matching/match-candidates` ranks them by,
@@ -9,6 +9,10 @@ Two things matter here beyond "the routes answer":
   `test_unscored_fields_do_not_move_the_score` rewrites every one of them and
   asserts the score is bit-identical, so the published list is a checked
   claim rather than a comment.
+* The traces carry no contact details. That property is what made it safe to
+  open these endpoints to the demo role (2026-09-28), so it is pinned by
+  `test_traces_carry_no_contact_details` rather than left as an argument in
+  a code review.
 """
 from __future__ import annotations
 
@@ -28,21 +32,32 @@ from backend.services.matching_integrator import (
 # --- access -----------------------------------------------------------------
 
 
-@pytest.mark.parametrize("path", ["/api/transparency/policy", "/api/transparency/match-trace?job_id=1"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/transparency/policy",
+        "/api/transparency/match-trace?job_id=1",
+        "/api/transparency/search-trace?q=python",
+    ],
+)
 def test_anonymous_is_refused(client, path):
+    """A token is still required. Site visitors always hold a demo token (the
+    proxy issues one), so this only shuts out bare tokenless scraping."""
     assert client.get(path).status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/api/transparency/policy", "/api/transparency/match-trace?job_id=1"])
-def test_demo_role_is_refused(demo_client, path):
-    response = demo_client.get(path)
-    assert response.status_code == 403
-    assert "Administrator" in response.json()["detail"]
+def test_demo_role_can_read_the_policy(demo_client):
+    """Transparency is demo-visible by design: the dataset is synthetic and
+    the traces show less about a person than the demo's own candidate pages."""
+    response = demo_client.get("/api/transparency/policy")
+    assert response.status_code == 200
+    assert response.json()["weight_tiers"]
 
 
-def test_search_trace_is_admin_only(client, demo_client):
-    assert client.get("/api/transparency/search-trace?q=python").status_code == 401
-    assert demo_client.get("/api/transparency/search-trace?q=python").status_code == 403
+def test_demo_role_can_trace_a_search(demo_client):
+    response = demo_client.get("/api/transparency/search-trace?q=python")
+    assert response.status_code == 200
+    assert "hits" in response.json()
 
 
 # --- policy -----------------------------------------------------------------
@@ -156,6 +171,30 @@ def test_trace_intermediates_add_up(full_trace):
             assert t["skills"]["score"] == pytest.approx(t["skills"]["raw_score"] * t["skills"]["penalty_factor"])
         else:
             assert t["skills"]["score"] == pytest.approx(t["skills"]["raw_score"])
+
+
+def _keys_in(value) -> set:
+    """Every dict key anywhere in a JSON-shaped value."""
+    found = set()
+    if isinstance(value, dict):
+        for key, inner in value.items():
+            found.add(key)
+            found |= _keys_in(inner)
+    elif isinstance(value, list):
+        for inner in value:
+            found |= _keys_in(inner)
+    return found
+
+
+def test_traces_carry_no_contact_details(demo_client, full_trace):
+    """The property that makes demo access safe: no email, phone, or notes
+    anywhere in a trace, so these endpoints reveal strictly less about a
+    person than the demo-visible candidate and matching screens already do."""
+    banned = {"email", "phone", "notes"}
+    assert not _keys_in(full_trace) & banned
+
+    search = demo_client.get("/api/transparency/search-trace?q=python").json()
+    assert not _keys_in(search) & banned
 
 
 def test_single_candidate_trace_keeps_its_rank(admin_client, seed, full_trace):

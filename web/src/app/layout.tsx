@@ -5,7 +5,6 @@ import { Suspense } from "react";
 
 import { Nav } from "@/components/nav";
 import { SessionBadge, SessionBadgeFallback } from "@/components/session-badge";
-import { SessionNav } from "@/components/session-nav";
 import "./globals.css";
 
 // globals.css resolves the Tailwind font tokens from --font-sans; the variable
@@ -34,11 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               <span className="hidden sm:inline">RecruitIQ</span>
             </Link>
             <div className="flex-1">
-              {/* The public nav paints at once; the admin-only entry arrives
-                  with the session. See SessionNav. */}
-              <Suspense fallback={<Nav />}>
-                <SessionNav />
-              </Suspense>
+              <Nav />
             </div>
             {/* Suspended on purpose, and load-bearing for every `loading.tsx`
                 in the app. `SessionBadge` reads `cookies()` and calls
