@@ -60,14 +60,26 @@ def _job_summary(j, include_details: bool = False) -> dict:
     return data
 
 
+# Cosine similarity floors for each relevance band. Published by the
+# transparency endpoint, so keep them here rather than inline.
+RELEVANCE_BANDS: Dict[str, float] = {"strong": 0.55, "moderate": 0.45}
+
+
+def relevance_band(similarity: float) -> str:
+    if similarity >= RELEVANCE_BANDS["strong"]:
+        return "strong"
+    if similarity >= RELEVANCE_BANDS["moderate"]:
+        return "moderate"
+    return "weak"
+
+
 def _label_relevance(results: List[dict]) -> List[dict]:
     """Tag each search hit with a coarse relevance band derived from its raw
     cosine similarity. Small tool-calling models are bad at reading a raw
     0.41 and correctly concluding "weak"; a plain-English label they can
     quote back is what actually changes the wording of the final answer."""
     for r in results:
-        sim = r["similarity"]
-        r["relevance"] = "strong" if sim >= 0.55 else "moderate" if sim >= 0.45 else "weak"
+        r["relevance"] = relevance_band(r["similarity"])
     return results
 
 

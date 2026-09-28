@@ -202,6 +202,21 @@ def enforce_read_only(request: Request) -> None:
     )
 
 
+def require_admin(user: User = Depends(get_current_user)) -> User:
+    """For read routes that are admin-only.
+
+    `enforce_read_only` only looks at mutating verbs, so a GET that should not
+    be visible to the demo account needs this explicitly. Anonymous callers
+    get 401 from `get_current_user`; the demo role gets 403 here.
+    """
+    if user.role != ROLE_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator sign-in required.",
+        )
+    return user
+
+
 def require_write_access(user: User = Depends(get_current_user)) -> User:
     """For routes that want an explicit, authenticated writer."""
     if user.role == ROLE_DEMO:

@@ -21,6 +21,13 @@ export type CandidateMatch = Schemas["CandidateMatchResult"];
 export type JobMatch = Schemas["JobMatchResult"];
 export type ResumeSummary = Schemas["CandidateResumeSummary"];
 
+/** Admin-only scoring transparency (`/api/transparency/*`). */
+export type ScoringPolicy = Schemas["ScoringPolicy"];
+export type MatchTrace = Schemas["MatchTraceResponse"];
+export type PairTrace = Schemas["PairTrace"];
+export type SearchTrace = Schemas["SearchTraceResponse"];
+export type SearchHit = Schemas["SearchHit"];
+
 /** `GET /api/jobs/` is paginated the same way the candidate list is. */
 export interface JobList {
   results: Job[];

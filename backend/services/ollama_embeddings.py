@@ -27,6 +27,15 @@ class OllamaEmbeddingAdapter:
         self._client = httpx.Client(timeout=timeout)
         self._warned_offline = False
 
+    @property
+    def is_degraded(self) -> bool:
+        """True after the most recent call had to use the placeholder vectors.
+
+        The transparency view reads this so a similarity computed on
+        placeholders is labelled as such instead of shown as a real number.
+        """
+        return self._warned_offline
+
     def _fallback(self, text: str) -> List[float]:
         # Deterministic pseudo-embedding: stable across calls so Redis-cached
         # scores don't jitter while the tunnel is down. Not semantically useful.

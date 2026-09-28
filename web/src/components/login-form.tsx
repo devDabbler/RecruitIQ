@@ -7,7 +7,7 @@ import { Loader2, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function LoginForm() {
+export function LoginForm({ next = "/" }: { next?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -34,7 +34,7 @@ export function LoginForm() {
       }
       // refresh() drops the client router cache so every Server Component,
       // including the header badge, re-renders with the new cookie.
-      router.push("/");
+      router.push(next);
       router.refresh();
     } catch (err) {
       setError((err as Error).message);

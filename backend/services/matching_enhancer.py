@@ -141,20 +141,28 @@ class MatchingEnhancer:
             
         return found_level, years
     
-    def calculate_experience_match_score(self, job_level: str, job_years: int, 
+    def calculate_experience_match_score(self, job_level: str, job_years: int,
                                         candidate_level: str, candidate_years: int) -> float:
         """
         Calculate an experience match score between job requirements and candidate experience.
-        
+
         Args:
             job_level: Job experience level (entry, junior, mid, senior, etc.)
             job_years: Job required years of experience
             candidate_level: Candidate experience level
             candidate_years: Candidate years of experience
-            
+
         Returns:
             Match score between 0-100
         """
+        return self.experience_match_details(job_level, job_years, candidate_level, candidate_years)["score"]
+
+    def experience_match_details(self, job_level: str, job_years: int,
+                                 candidate_level: str, candidate_years: int) -> Dict[str, Any]:
+        """The experience score plus every intermediate the transparency view
+        shows: the level and years components, the diffs that picked them, and
+        any over/under-qualification adjustment. `calculate_experience_match_score`
+        is this function's `score` key, so the trace cannot drift from the score."""
         # Define level hierarchy for comparison
         level_hierarchy = ['entry', 'junior', 'mid', 'senior', 'lead', 'principal', 'executive']
         
@@ -203,17 +211,30 @@ class MatchingEnhancer:
             
         # Blend level and years match scores (level is more important)
         final_score = (level_match * 0.7) + (years_match * 0.3)
-        
+
         # Add context to score
+        adjustment = 0
         if job_level in ['entry', 'junior'] and candidate_level in ['senior', 'lead', 'principal']:
             # Significant overqualification penalty for entry roles
-            final_score -= 20
-            
+            adjustment -= 20
+
         if job_level in ['principal', 'executive'] and candidate_level in ['entry', 'junior']:
             # Significant underqualification penalty for senior roles
-            final_score -= 25
-            
-        return max(min(final_score, 100), 0)  # Ensure score is between 0-100
+            adjustment -= 25
+        final_score += adjustment
+
+        return {
+            "score": max(min(final_score, 100), 0),  # Ensure score is between 0-100
+            "job_level": job_level,
+            "job_years": job_years,
+            "candidate_level": candidate_level,
+            "candidate_years": candidate_years,
+            "level_diff": level_diff,
+            "level_match": level_match,
+            "years_diff": years_diff,
+            "years_match": years_match,
+            "adjustment": adjustment,
+        }
     
     def calculate_skill_match_score(self, job_skills: List[str], candidate_skills: List[str]) -> Tuple[float, List[str]]:
         """
@@ -226,9 +247,23 @@ class MatchingEnhancer:
         Returns:
             Tuple of (score, matching_skills)
         """
+        details = self.skill_match_details(job_skills, candidate_skills)
+        return details["score"], details["matching_skills"]
+
+    def skill_match_details(self, job_skills: List[str], candidate_skills: List[str]) -> Dict[str, Any]:
+        """The skill score plus the exact, partial and missing skills behind it.
+        `calculate_skill_match_score` is a projection of this dict."""
         if not job_skills or not candidate_skills:
-            return 30.0, []
-            
+            return {
+                "score": 30.0,
+                "matching_skills": [],
+                "exact": [],
+                "partial": [],
+                "missing": [s for s in (job_skills or []) if s and s.strip()],
+                "coverage_bonus": False,
+                "no_data": True,
+            }
+
         # Normalize skills for comparison
         job_skills_norm = [s.lower().strip() for s in job_skills]
         candidate_skills_norm = [s.lower().strip() for s in candidate_skills]
@@ -261,22 +296,37 @@ class MatchingEnhancer:
         combined_score = exact_score + partial_score
         
         # Add bonus for having more skills than required
-        if len(exact_matches) + len(partial_matches) >= total_required * 0.8:
+        coverage_bonus = len(exact_matches) + len(partial_matches) >= total_required * 0.8
+        if coverage_bonus:
             combined_score *= 1.1  # 10% bonus for high skill coverage
-            
+
         # Ensure score doesn't exceed 100
         final_score = min(combined_score, 100.0)
-        
+
         # Return original skill names (not normalized) for the matches
-        original_matches = []
-        for match in exact_matches + partial_matches:
-            for orig_skill in job_skills:
-                if match == orig_skill.lower().strip():
-                    original_matches.append(orig_skill)
-                    break
-        
+        def originals(normalized: List[str]) -> List[str]:
+            out = []
+            for match in normalized:
+                for orig_skill in job_skills:
+                    if match == orig_skill.lower().strip():
+                        out.append(orig_skill)
+                        break
+            return out
+
+        original_matches = originals(exact_matches + partial_matches)
+        matched = set(exact_matches + partial_matches)
+        missing = originals([s for s in job_skills_norm if s and s not in matched])
+
         logger.debug(f"Skill match: {len(exact_matches)} exact + {len(partial_matches)} partial out of {total_required} required = {final_score:.1f}%")
-        return final_score, original_matches
+        return {
+            "score": final_score,
+            "matching_skills": original_matches,
+            "exact": originals(exact_matches),
+            "partial": originals(partial_matches),
+            "missing": missing,
+            "coverage_bonus": coverage_bonus,
+            "no_data": False,
+        }
     
     def apply_cross_domain_skill_penalty(self, skill_score: float, job_title: str, candidate_position: str) -> float:
         """
@@ -291,9 +341,14 @@ class MatchingEnhancer:
         Returns:
             Adjusted skill score with cross-domain penalty applied
         """
+        return self.cross_domain_skill_penalty_details(skill_score, job_title, candidate_position)["score"]
+
+    def cross_domain_skill_penalty_details(self, skill_score: float, job_title: str, candidate_position: str) -> Dict[str, Any]:
+        """The penalised skill score plus the role categories that decided it.
+        `apply_cross_domain_skill_penalty` is this function's `score` key."""
         job_title = job_title.lower() if job_title else ""
         candidate_position = candidate_position.lower() if candidate_position else ""
-        
+
         # Define role categories (same as in role matching)
         role_categories = {
             'data_science': ['data scientist', 'data analyst', 'machine learning', 'ai researcher', 'statistician', 'analytics', 'data engineer', 'ml engineer'],
@@ -372,10 +427,22 @@ class MatchingEnhancer:
             penalty_factor = 0.3  # Reduce skill relevance by 70% (more aggressive)
             adjusted_score = skill_score * penalty_factor
             logger.info(f"[CrossDomainDebug] Cross-domain skill penalty applied: {skill_score:.1f}% → {adjusted_score:.1f}% for {job_category} vs {candidate_category}")
-            return adjusted_score
-        
+            return {
+                "score": adjusted_score,
+                "applied": True,
+                "factor": penalty_factor,
+                "job_category": job_category,
+                "candidate_category": candidate_category,
+            }
+
         logger.debug(f"[CrossDomainDebug] No cross-domain penalty applied - Job: {job_category}, Candidate: {candidate_category}")
-        return skill_score
+        return {
+            "score": skill_score,
+            "applied": False,
+            "factor": 1.0,
+            "job_category": job_category,
+            "candidate_category": candidate_category,
+        }
     
     def calculate_role_match_score(self, job_title: str, job_description: str, candidate_position: str) -> float:
         """
@@ -390,14 +457,28 @@ class MatchingEnhancer:
         Returns:
             Match score between 0-100
         """
+        return self.role_match_details(job_title, job_description, candidate_position)["score"]
+
+    def role_match_details(self, job_title: str, job_description: str, candidate_position: str) -> Dict[str, Any]:
+        """The role score plus how it was reached: the raw title similarity
+        (None when no embedding model answered), the category each title fell
+        into, and which relationship rule adjusted the number.
+        `calculate_role_match_score` is this function's `score` key."""
         job_title = job_title.lower() if job_title else ""
         candidate_position = candidate_position.lower() if candidate_position else ""
-        
+
         logger.debug(f"[RoleMatchDebug] Calculating role match - Job: '{job_title}' vs Candidate: '{candidate_position}'")
-        
+
         if not job_title or not candidate_position:
             logger.debug("[RoleMatchDebug] Role match score defaulting due to missing title.")
-            return 30.0  # Default score if missing data
+            return {  # Default score if missing data
+                "score": 30.0,
+                "semantic_similarity": None,
+                "base_score": 30.0,
+                "job_category": None,
+                "candidate_category": None,
+                "relationship": "missing_title",
+            }
 
         # Enhanced role detection - normalize titles to handle prefixes
         def normalize_title(title):
@@ -481,7 +562,8 @@ class MatchingEnhancer:
         
         # Calculate base semantic similarity
         base_score = 30.0  # Default fallback
-        
+        semantic_similarity = None
+
         if self.embedding_model:
             try:
                 vec1 = self._embed(job_title)
@@ -489,38 +571,51 @@ class MatchingEnhancer:
 
                 # Calculate cosine similarity and scale to 0-100
                 similarity = cosine_similarity(vec1, vec2)[0][0]
+                semantic_similarity = float(similarity)
                 base_score = float(similarity * 100)
                 logger.debug(f"[RoleMatchDebug] Semantic similarity: {similarity:.3f} → {base_score:.2f}%")
             except Exception as e:
                 logger.warning(f"[RoleMatchDebug] Could not calculate semantic role similarity: {e}")
-        
+
         # Apply category-based penalties
         final_score = base_score
-        
+        relationship = "uncategorized"
+
         if job_category and candidate_category:
             logger.debug(f"[RoleMatchDebug] Comparing categories: {job_category} vs {candidate_category}")
-            
+            relationship = "unrelated"
+
             # Check for highly incompatible roles
-            if ((job_category, candidate_category) in incompatible_pairs or 
+            if ((job_category, candidate_category) in incompatible_pairs or
                 (candidate_category, job_category) in incompatible_pairs):
                 final_score = min(final_score * 0.15, 12.0)  # Cap at 12% for highly incompatible (more aggressive)
+                relationship = "highly_incompatible"
                 logger.info(f"[RoleMatchDebug] HIGH INCOMPATIBILITY penalty: {base_score:.2f}% → {final_score:.2f}% ({job_category} vs {candidate_category})")
-                
+
             # Check for moderately incompatible roles - CRITICAL FIX
-            elif ((job_category, candidate_category) in moderate_incompatible_pairs or 
+            elif ((job_category, candidate_category) in moderate_incompatible_pairs or
                   (candidate_category, job_category) in moderate_incompatible_pairs):
-                final_score = min(final_score * 0.2, 20.0)  # Much more aggressive: Cap at 20% for moderately incompatible  
+                final_score = min(final_score * 0.2, 20.0)  # Much more aggressive: Cap at 20% for moderately incompatible
+                relationship = "moderately_incompatible"
                 logger.info(f"[RoleMatchDebug] MODERATE INCOMPATIBILITY penalty: {base_score:.2f}% → {final_score:.2f}% ({job_category} vs {candidate_category})")
-                
+
             # Same category bonus
             elif job_category == candidate_category:
                 final_score = min(final_score * 1.3, 100.0)  # Increased boost for same category
+                relationship = "same_category"
                 logger.debug(f"[RoleMatchDebug] SAME CATEGORY bonus: {base_score:.2f}% → {final_score:.2f}% ({job_category})")
         else:
             logger.debug(f"[RoleMatchDebug] No category detected - Job: {job_category}, Candidate: {candidate_category}")
-        
+
         logger.info(f"[RoleMatchDebug] FINAL role match score: {final_score:.2f}% (Job: '{job_title}' vs Candidate: '{candidate_position}')")
-        return max(min(final_score, 100.0), 0.0)
+        return {
+            "score": max(min(final_score, 100.0), 0.0),
+            "semantic_similarity": semantic_similarity,
+            "base_score": base_score,
+            "job_category": job_category,
+            "candidate_category": candidate_category,
+            "relationship": relationship,
+        }
     
     def generate_match_explanation(self, job, candidate, matching_skills, 
                              role_score, skill_score, experience_score) -> str:

@@ -1357,6 +1357,82 @@
         "title": "ExperienceLevel",
         "type": "string"
       },
+      "ExperienceStep": {
+        "properties": {
+          "adjustment": {
+            "title": "Adjustment",
+            "type": "number"
+          },
+          "candidate_level": {
+            "title": "Candidate Level",
+            "type": "string"
+          },
+          "candidate_years": {
+            "title": "Candidate Years",
+            "type": "integer"
+          },
+          "job_level": {
+            "title": "Job Level",
+            "type": "string"
+          },
+          "job_years": {
+            "title": "Job Years",
+            "type": "integer"
+          },
+          "level_diff": {
+            "title": "Level Diff",
+            "type": "integer"
+          },
+          "level_match": {
+            "title": "Level Match",
+            "type": "number"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "years_diff": {
+            "title": "Years Diff",
+            "type": "integer"
+          },
+          "years_match": {
+            "title": "Years Match",
+            "type": "number"
+          }
+        },
+        "required": [
+          "job_level",
+          "job_years",
+          "candidate_level",
+          "candidate_years",
+          "level_diff",
+          "level_match",
+          "years_diff",
+          "years_match",
+          "adjustment",
+          "score"
+        ],
+        "title": "ExperienceStep",
+        "type": "object"
+      },
+      "FinalPenalty": {
+        "properties": {
+          "condition": {
+            "title": "Condition",
+            "type": "string"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          }
+        },
+        "required": [
+          "condition",
+          "multiplier"
+        ],
+        "title": "FinalPenalty",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2064,6 +2140,53 @@
         "title": "JobMatchResult",
         "type": "object"
       },
+      "JobRef": {
+        "properties": {
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "level": {
+            "title": "Level",
+            "type": "string"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "years": {
+            "title": "Years",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "skills",
+          "level",
+          "years"
+        ],
+        "title": "JobRef",
+        "type": "object"
+      },
       "JobResponse": {
         "description": "Schema for job response with all details. 'skills' is a list of required skills for the job.",
         "properties": {
@@ -2369,6 +2492,115 @@
           "candidate_id"
         ],
         "title": "MatchReportRequest",
+        "type": "object"
+      },
+      "MatchTraceResponse": {
+        "properties": {
+          "candidates_above_threshold": {
+            "title": "Candidates Above Threshold",
+            "type": "integer"
+          },
+          "candidates_scored": {
+            "title": "Candidates Scored",
+            "type": "integer"
+          },
+          "embedding_degraded": {
+            "title": "Embedding Degraded",
+            "type": "boolean"
+          },
+          "job": {
+            "$ref": "#/components/schemas/JobRef"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "traces": {
+            "items": {
+              "$ref": "#/components/schemas/PairTrace"
+            },
+            "title": "Traces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job",
+          "threshold",
+          "candidates_scored",
+          "candidates_above_threshold",
+          "embedding_degraded",
+          "traces"
+        ],
+        "title": "MatchTraceResponse",
+        "type": "object"
+      },
+      "PairTrace": {
+        "properties": {
+          "above_threshold": {
+            "title": "Above Threshold",
+            "type": "boolean"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "title": "Candidate Name",
+            "type": "string"
+          },
+          "experience": {
+            "$ref": "#/components/schemas/ExperienceStep"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "final_penalty_applied": {
+            "title": "Final Penalty Applied",
+            "type": "boolean"
+          },
+          "final_penalty_multiplier": {
+            "title": "Final Penalty Multiplier",
+            "type": "number"
+          },
+          "match_score": {
+            "title": "Match Score",
+            "type": "number"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "role": {
+            "$ref": "#/components/schemas/RoleStep"
+          },
+          "skills": {
+            "$ref": "#/components/schemas/SkillStep"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/WeightTier"
+          },
+          "weighted_score": {
+            "title": "Weighted Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "rank",
+          "candidate_id",
+          "candidate_name",
+          "above_threshold",
+          "match_score",
+          "weighted_score",
+          "skills",
+          "role",
+          "experience",
+          "tier",
+          "final_penalty_applied",
+          "final_penalty_multiplier",
+          "explanation"
+        ],
+        "title": "PairTrace",
         "type": "object"
       },
       "ParsedResumeSaveResponse": {
@@ -2797,6 +3029,72 @@
         "title": "ResumeUploadResponse",
         "type": "object"
       },
+      "RoleStep": {
+        "properties": {
+          "base_score": {
+            "title": "Base Score",
+            "type": "number"
+          },
+          "candidate_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Category"
+          },
+          "candidate_position": {
+            "title": "Candidate Position",
+            "type": "string"
+          },
+          "job_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Category"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "relationship": {
+            "title": "Relationship",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "semantic_similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Semantic Similarity"
+          }
+        },
+        "required": [
+          "job_title",
+          "candidate_position",
+          "base_score",
+          "relationship",
+          "score"
+        ],
+        "title": "RoleStep",
+        "type": "object"
+      },
       "SalaryBenchmarkRequest": {
         "properties": {
           "experience_level": {
@@ -2930,6 +3228,198 @@
         "title": "SavedJobResponse",
         "type": "object"
       },
+      "ScoredField": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "used_for": {
+            "title": "Used For",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "used_for"
+        ],
+        "title": "ScoredField",
+        "type": "object"
+      },
+      "ScoringPolicy": {
+        "properties": {
+          "candidate_fields_never_scored": {
+            "items": {
+              "$ref": "#/components/schemas/UnscoredField"
+            },
+            "title": "Candidate Fields Never Scored",
+            "type": "array"
+          },
+          "candidate_fields_scored": {
+            "items": {
+              "$ref": "#/components/schemas/ScoredField"
+            },
+            "title": "Candidate Fields Scored",
+            "type": "array"
+          },
+          "cross_domain_skill_penalty_factor": {
+            "title": "Cross Domain Skill Penalty Factor",
+            "type": "number"
+          },
+          "default_match_threshold": {
+            "title": "Default Match Threshold",
+            "type": "number"
+          },
+          "fields_not_collected": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields Not Collected",
+            "type": "array"
+          },
+          "final_penalty": {
+            "$ref": "#/components/schemas/FinalPenalty"
+          },
+          "job_fields_scored": {
+            "items": {
+              "$ref": "#/components/schemas/ScoredField"
+            },
+            "title": "Job Fields Scored",
+            "type": "array"
+          },
+          "role_score_caps": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Role Score Caps",
+            "type": "object"
+          },
+          "search_embedded_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Search Embedded Fields",
+            "type": "array"
+          },
+          "search_relevance_bands": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Search Relevance Bands",
+            "type": "object"
+          },
+          "search_relevance_floor": {
+            "title": "Search Relevance Floor",
+            "type": "number"
+          },
+          "weight_tiers": {
+            "items": {
+              "$ref": "#/components/schemas/WeightTier"
+            },
+            "title": "Weight Tiers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_fields_scored",
+          "job_fields_scored",
+          "candidate_fields_never_scored",
+          "fields_not_collected",
+          "weight_tiers",
+          "final_penalty",
+          "cross_domain_skill_penalty_factor",
+          "role_score_caps",
+          "default_match_threshold",
+          "search_relevance_floor",
+          "search_relevance_bands",
+          "search_embedded_fields"
+        ],
+        "title": "ScoringPolicy",
+        "type": "object"
+      },
+      "SearchHit": {
+        "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "embedded_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedded Text"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "location": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Position"
+          },
+          "relevance": {
+            "title": "Relevance",
+            "type": "string"
+          },
+          "similarity": {
+            "title": "Similarity",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "similarity",
+          "relevance"
+        ],
+        "title": "SearchHit",
+        "type": "object"
+      },
       "SearchRequest": {
         "properties": {
           "crawl_type": {
@@ -2951,6 +3441,85 @@
           "query"
         ],
         "title": "SearchRequest",
+        "type": "object"
+      },
+      "SearchTraceResponse": {
+        "properties": {
+          "dropped_by_floor": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Dropped By Floor",
+            "type": "array"
+          },
+          "embedded_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Embedded Fields",
+            "type": "array"
+          },
+          "embedding_degraded": {
+            "title": "Embedding Degraded",
+            "type": "boolean"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "location_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Filter"
+          },
+          "location_ignored": {
+            "title": "Location Ignored",
+            "type": "boolean"
+          },
+          "location_patterns": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Location Patterns",
+            "type": "array"
+          },
+          "query": {
+            "title": "Query",
+            "type": "string"
+          },
+          "relevance_bands": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Relevance Bands",
+            "type": "object"
+          },
+          "relevance_floor": {
+            "title": "Relevance Floor",
+            "type": "number"
+          }
+        },
+        "required": [
+          "query",
+          "location_patterns",
+          "location_ignored",
+          "relevance_floor",
+          "relevance_bands",
+          "embedded_fields",
+          "embedding_degraded",
+          "hits",
+          "dropped_by_floor"
+        ],
+        "title": "SearchTraceResponse",
         "type": "object"
       },
       "SimilarJobResult": {
@@ -3050,6 +3619,106 @@
           "similar_jobs"
         ],
         "title": "SimilarJobsResponse",
+        "type": "object"
+      },
+      "SkillStep": {
+        "properties": {
+          "candidate_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Category"
+          },
+          "candidate_skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Candidate Skills",
+            "type": "array"
+          },
+          "coverage_bonus": {
+            "title": "Coverage Bonus",
+            "type": "boolean"
+          },
+          "exact": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Exact",
+            "type": "array"
+          },
+          "job_category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Category"
+          },
+          "job_skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Job Skills",
+            "type": "array"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "no_data": {
+            "title": "No Data",
+            "type": "boolean"
+          },
+          "partial": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Partial",
+            "type": "array"
+          },
+          "penalty_applied": {
+            "title": "Penalty Applied",
+            "type": "boolean"
+          },
+          "penalty_factor": {
+            "title": "Penalty Factor",
+            "type": "number"
+          },
+          "raw_score": {
+            "title": "Raw Score",
+            "type": "number"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "job_skills",
+          "candidate_skills",
+          "exact",
+          "partial",
+          "missing",
+          "coverage_bonus",
+          "no_data",
+          "raw_score",
+          "penalty_applied",
+          "penalty_factor",
+          "score"
+        ],
+        "title": "SkillStep",
         "type": "object"
       },
       "Task": {
@@ -3408,6 +4077,24 @@
         "title": "TrackViewResponse",
         "type": "object"
       },
+      "UnscoredField": {
+        "properties": {
+          "field": {
+            "title": "Field",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "reason"
+        ],
+        "title": "UnscoredField",
+        "type": "object"
+      },
       "UserResponse": {
         "properties": {
           "created_at": {
@@ -3472,6 +4159,42 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WeightTier": {
+        "properties": {
+          "condition": {
+            "title": "Condition",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "weights": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Weights",
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "condition",
+          "weights",
+          "multiplier"
+        ],
+        "title": "WeightTier",
         "type": "object"
       },
       "backend__routers__candidates__MessageResponse": {
@@ -7903,6 +8626,183 @@
         "tags": [
           "tasks",
           "tasks"
+        ]
+      }
+    },
+    "/api/transparency/match-trace": {
+      "get": {
+        "description": "Every candidate scored against one job, with each step of the score.\n\nUnlike the ranking endpoints this does not stop at the threshold: the\npeople who fell below it are the more interesting half of an audit.\nWith `candidate_id`, only that person's trace is returned, still ranked\nagainst everyone else.",
+        "operationId": "match_trace_api_transparency_match_trace_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "candidate_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Candidate Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "threshold",
+            "required": false,
+            "schema": {
+              "default": 20.0,
+              "maximum": 100.0,
+              "minimum": 0.0,
+              "title": "Threshold",
+              "type": "number"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MatchTraceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Match Trace",
+        "tags": [
+          "transparency"
+        ]
+      }
+    },
+    "/api/transparency/policy": {
+      "get": {
+        "description": "The scoring rules, read from the constants the ranker applies.",
+        "operationId": "scoring_policy_api_transparency_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Scoring Policy",
+        "tags": [
+          "transparency"
+        ]
+      }
+    },
+    "/api/transparency/search-trace": {
+      "get": {
+        "description": "The assistant's candidate search, with what the embedding saw and what\nthe relevance floor removed.\n\nRuns the same query twice: once as the assistant runs it (with the floor)\nand once without, so the second list is exactly the set of \"closest\navailable people\" the floor keeps the model from presenting as matches.",
+        "operationId": "search_trace_api_transparency_search_trace_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "location",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Location"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchTraceResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Search Trace",
+        "tags": [
+          "transparency"
         ]
       }
     },

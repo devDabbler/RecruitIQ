@@ -20,8 +20,11 @@ import type {
   Job,
   JobList,
   JobMatch,
+  MatchTrace,
   ResumeSummary,
   SavedJob,
+  ScoringPolicy,
+  SearchTrace,
   SkillsBreakdown,
 } from "./domain";
 import { getToken } from "./session";
@@ -153,4 +156,35 @@ export async function getCandidateSavedJobs(candidateId: string): Promise<SavedJ
       { token: await getToken() },
     )) ?? []
   );
+}
+
+// --- admin-only scoring transparency ---------------------------------------
+//
+// These three throw an ApiError with status 401/403 for anyone but an admin;
+// the /transparency page redirects to sign-in before it ever calls them.
+
+export async function getScoringPolicy(): Promise<ScoringPolicy> {
+  return apiFetch<ScoringPolicy>("/api/transparency/policy", { token: await getToken() });
+}
+
+/**
+ * Every candidate scored against one job, below-threshold ones included.
+ * Same cost as the Matching screen (it is the same scoring pass), so it is
+ * streamed behind a Suspense boundary like that screen's results.
+ */
+export async function getMatchTrace(
+  jobId: number,
+  options: { candidateId?: string; limit?: number } = {},
+): Promise<MatchTrace> {
+  return apiFetch<MatchTrace>("/api/transparency/match-trace", {
+    token: await getToken(),
+    query: { job_id: jobId, candidate_id: options.candidateId, limit: options.limit },
+  });
+}
+
+export async function getSearchTrace(q: string, location?: string): Promise<SearchTrace> {
+  return apiFetch<SearchTrace>("/api/transparency/search-trace", {
+    token: await getToken(),
+    query: { q, location },
+  });
 }

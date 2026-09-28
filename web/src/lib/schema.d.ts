@@ -1533,6 +1533,76 @@ export interface paths {
         patch: operations["complete_task_api_tasks__task_id__complete_patch"];
         trace?: never;
     };
+    "/api/transparency/match-trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Match Trace
+         * @description Every candidate scored against one job, with each step of the score.
+         *
+         *     Unlike the ranking endpoints this does not stop at the threshold: the
+         *     people who fell below it are the more interesting half of an audit.
+         *     With `candidate_id`, only that person's trace is returned, still ranked
+         *     against everyone else.
+         */
+        get: operations["match_trace_api_transparency_match_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transparency/policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Scoring Policy
+         * @description The scoring rules, read from the constants the ranker applies.
+         */
+        get: operations["scoring_policy_api_transparency_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/transparency/search-trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search Trace
+         * @description The assistant's candidate search, with what the embedding saw and what
+         *     the relevance floor removed.
+         *
+         *     Runs the same query twice: once as the assistant runs it (with the floor)
+         *     and once without, so the second list is exactly the set of "closest
+         *     available people" the floor keeps the model from presenting as matches.
+         */
+        get: operations["search_trace_api_transparency_search_trace_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/demo": {
         parameters: {
             query?: never;
@@ -2061,6 +2131,36 @@ export interface components {
          * @enum {string}
          */
         ExperienceLevel: "entry" | "mid" | "senior" | "lead" | "executive";
+        /** ExperienceStep */
+        ExperienceStep: {
+            /** Adjustment */
+            adjustment: number;
+            /** Candidate Level */
+            candidate_level: string;
+            /** Candidate Years */
+            candidate_years: number;
+            /** Job Level */
+            job_level: string;
+            /** Job Years */
+            job_years: number;
+            /** Level Diff */
+            level_diff: number;
+            /** Level Match */
+            level_match: number;
+            /** Score */
+            score: number;
+            /** Years Diff */
+            years_diff: number;
+            /** Years Match */
+            years_match: number;
+        };
+        /** FinalPenalty */
+        FinalPenalty: {
+            /** Condition */
+            condition: string;
+            /** Multiplier */
+            multiplier: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -2290,6 +2390,21 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** JobRef */
+        JobRef: {
+            /** Department */
+            department?: string | null;
+            /** Id */
+            id: number;
+            /** Level */
+            level: string;
+            /** Skills */
+            skills: string[];
+            /** Title */
+            title: string;
+            /** Years */
+            years: number;
+        };
         /**
          * JobResponse
          * @description Schema for job response with all details. 'skills' is a list of required skills for the job.
@@ -2407,6 +2522,45 @@ export interface components {
             candidate_id: number | string;
             /** Job Id */
             job_id: number;
+        };
+        /** MatchTraceResponse */
+        MatchTraceResponse: {
+            /** Candidates Above Threshold */
+            candidates_above_threshold: number;
+            /** Candidates Scored */
+            candidates_scored: number;
+            /** Embedding Degraded */
+            embedding_degraded: boolean;
+            job: components["schemas"]["JobRef"];
+            /** Threshold */
+            threshold: number;
+            /** Traces */
+            traces: components["schemas"]["PairTrace"][];
+        };
+        /** PairTrace */
+        PairTrace: {
+            /** Above Threshold */
+            above_threshold: boolean;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            experience: components["schemas"]["ExperienceStep"];
+            /** Explanation */
+            explanation: string;
+            /** Final Penalty Applied */
+            final_penalty_applied: boolean;
+            /** Final Penalty Multiplier */
+            final_penalty_multiplier: number;
+            /** Match Score */
+            match_score: number;
+            /** Rank */
+            rank: number;
+            role: components["schemas"]["RoleStep"];
+            skills: components["schemas"]["SkillStep"];
+            tier: components["schemas"]["WeightTier"];
+            /** Weighted Score */
+            weighted_score: number;
         };
         /** ParsedResumeSaveResponse */
         ParsedResumeSaveResponse: {
@@ -2533,6 +2687,25 @@ export interface components {
             /** Resume Id */
             resume_id: number;
         };
+        /** RoleStep */
+        RoleStep: {
+            /** Base Score */
+            base_score: number;
+            /** Candidate Category */
+            candidate_category?: string | null;
+            /** Candidate Position */
+            candidate_position: string;
+            /** Job Category */
+            job_category?: string | null;
+            /** Job Title */
+            job_title: string;
+            /** Relationship */
+            relationship: string;
+            /** Score */
+            score: number;
+            /** Semantic Similarity */
+            semantic_similarity?: number | null;
+        };
         /** SalaryBenchmarkRequest */
         SalaryBenchmarkRequest: {
             /** Experience Level */
@@ -2588,6 +2761,64 @@ export interface components {
             /** Saved At */
             saved_at: string;
         };
+        /** ScoredField */
+        ScoredField: {
+            /** Field */
+            field: string;
+            /** Used For */
+            used_for: string;
+        };
+        /** ScoringPolicy */
+        ScoringPolicy: {
+            /** Candidate Fields Never Scored */
+            candidate_fields_never_scored: components["schemas"]["UnscoredField"][];
+            /** Candidate Fields Scored */
+            candidate_fields_scored: components["schemas"]["ScoredField"][];
+            /** Cross Domain Skill Penalty Factor */
+            cross_domain_skill_penalty_factor: number;
+            /** Default Match Threshold */
+            default_match_threshold: number;
+            /** Fields Not Collected */
+            fields_not_collected: string[];
+            final_penalty: components["schemas"]["FinalPenalty"];
+            /** Job Fields Scored */
+            job_fields_scored: components["schemas"]["ScoredField"][];
+            /** Role Score Caps */
+            role_score_caps: {
+                [key: string]: number;
+            };
+            /** Search Embedded Fields */
+            search_embedded_fields: string[];
+            /** Search Relevance Bands */
+            search_relevance_bands: {
+                [key: string]: number;
+            };
+            /** Search Relevance Floor */
+            search_relevance_floor: number;
+            /** Weight Tiers */
+            weight_tiers: components["schemas"]["WeightTier"][];
+        };
+        /** SearchHit */
+        SearchHit: {
+            /** Company */
+            company?: string | null;
+            /** Embedded Text */
+            embedded_text?: string | null;
+            /** Headline */
+            headline?: string | null;
+            /** Id */
+            id: string;
+            /** Location */
+            location?: string | null;
+            /** Name */
+            name: string;
+            /** Position */
+            position?: string | null;
+            /** Relevance */
+            relevance: string;
+            /** Similarity */
+            similarity: number;
+        };
         /** SearchRequest */
         SearchRequest: {
             /**
@@ -2602,6 +2833,31 @@ export interface components {
             max_results: number;
             /** Query */
             query: string;
+        };
+        /** SearchTraceResponse */
+        SearchTraceResponse: {
+            /** Dropped By Floor */
+            dropped_by_floor: components["schemas"]["SearchHit"][];
+            /** Embedded Fields */
+            embedded_fields: string[];
+            /** Embedding Degraded */
+            embedding_degraded: boolean;
+            /** Hits */
+            hits: components["schemas"]["SearchHit"][];
+            /** Location Filter */
+            location_filter?: string | null;
+            /** Location Ignored */
+            location_ignored: boolean;
+            /** Location Patterns */
+            location_patterns: string[];
+            /** Query */
+            query: string;
+            /** Relevance Bands */
+            relevance_bands: {
+                [key: string]: number;
+            };
+            /** Relevance Floor */
+            relevance_floor: number;
         };
         /** SimilarJobResult */
         SimilarJobResult: {
@@ -2637,6 +2893,35 @@ export interface components {
         SimilarJobsResponse: {
             /** Similar Jobs */
             similar_jobs: components["schemas"]["SimilarJobResult"][];
+        };
+        /** SkillStep */
+        SkillStep: {
+            /** Candidate Category */
+            candidate_category?: string | null;
+            /** Candidate Skills */
+            candidate_skills: string[];
+            /** Coverage Bonus */
+            coverage_bonus: boolean;
+            /** Exact */
+            exact: string[];
+            /** Job Category */
+            job_category?: string | null;
+            /** Job Skills */
+            job_skills: string[];
+            /** Missing */
+            missing: string[];
+            /** No Data */
+            no_data: boolean;
+            /** Partial */
+            partial: string[];
+            /** Penalty Applied */
+            penalty_applied: boolean;
+            /** Penalty Factor */
+            penalty_factor: number;
+            /** Raw Score */
+            raw_score: number;
+            /** Score */
+            score: number;
         };
         /** Task */
         Task: {
@@ -2747,6 +3032,13 @@ export interface components {
             /** Total Views */
             total_views: number;
         };
+        /** UnscoredField */
+        UnscoredField: {
+            /** Field */
+            field: string;
+            /** Reason */
+            reason: string;
+        };
         /** UserResponse */
         UserResponse: {
             /**
@@ -2772,6 +3064,21 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WeightTier */
+        WeightTier: {
+            /** Condition */
+            condition: string;
+            /** Label */
+            label: string;
+            /** Multiplier */
+            multiplier: number;
+            /** Name */
+            name: string;
+            /** Weights */
+            weights: {
+                [key: string]: number;
+            };
         };
         /**
          * MessageResponse
@@ -5626,6 +5933,93 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    match_trace_api_transparency_match_trace_get: {
+        parameters: {
+            query: {
+                job_id: number;
+                candidate_id?: string | null;
+                limit?: number;
+                threshold?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MatchTraceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    scoring_policy_api_transparency_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScoringPolicy"];
+                };
+            };
+        };
+    };
+    search_trace_api_transparency_search_trace_get: {
+        parameters: {
+            query: {
+                q: string;
+                location?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchTraceResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
