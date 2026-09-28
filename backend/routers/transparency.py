@@ -1,14 +1,23 @@
-"""Admin-only scoring transparency.
+"""Scoring transparency, open to every signed-in user, demo included.
 
-Three read endpoints behind `require_admin` that expose how the ranking and
-the semantic search actually work, built from the same constants and the
-same `score_pair` the ranking runs. The point is that nothing here is a
-description that could drift from the code: the policy endpoint reads the
-weight tables the ranker applies, and the trace endpoint returns the ranker's
-own intermediates.
+Three read endpoints that expose how the ranking and the semantic search
+actually work, built from the same constants and the same `score_pair` the
+ranking runs. The point is that nothing here is a description that could
+drift from the code: the policy endpoint reads the weight tables the ranker
+applies, and the trace endpoint returns the ranker's own intermediates.
 
-Admin-only because the traces carry every candidate's raw component scores
-in one response, which is more than the read-only demo should hand out.
+Started admin-only, opened to the demo role deliberately (2026-09-28): the
+demo dataset is fully synthetic (spec §6), and every candidate field a trace
+shows (name, title, skills) is already on the demo-visible candidate and
+matching screens. The traces deliberately carry *no* email, phone, or notes,
+so they expose strictly less about a person than /api/enhanced-matching
+already hands the demo role. Transparency that hides behind a login would
+undercut its own point.
+
+Still behind `get_current_user` rather than fully anonymous: every visitor
+via the site holds a demo token automatically, and requiring one keeps bare
+unauthenticated scraping of the trace endpoints off the table, consistent
+with the rest of the app's "the UI is courtesy, the API is the gate" stance.
 """
 from __future__ import annotations
 
@@ -34,7 +43,7 @@ from backend.services.vector_search_service import (
     _candidate_text,
     location_filter_patterns,
 )
-from backend.utils.auth import require_admin
+from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -42,7 +51,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/transparency",
     tags=["transparency"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(get_current_user)],
 )
 
 # The threshold the Matching screen and the assistant use when they ask for a

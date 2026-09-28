@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { AlertTriangle, Search } from "lucide-react";
 
@@ -13,7 +12,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { getMatchTrace, getScoringPolicy, getSearchTrace, listJobs } from "@/lib/data";
 import type { PairTrace, ScoringPolicy, SearchHit } from "@/lib/domain";
-import { getUser } from "@/lib/session";
 import { pct, scoreLadder, similarity } from "@/lib/transparency";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +25,10 @@ function first(value: string | string[] | undefined): string | undefined {
 }
 
 /**
- * Admin-only: how every ranking and search is computed, traced from the same
- * code that computes it.
+ * How every ranking and search is computed, traced from the same code that
+ * computes it. Open to every visitor, demo account included: the dataset is
+ * fully synthetic, the traces carry no contact details, and a transparency
+ * page behind a login would undercut its own point.
  *
  * Two audiences. A developer joining the project gets the whole scoring path
  * on one screen with live numbers instead of reading matching_enhancer.py. A
@@ -36,9 +36,6 @@ function first(value: string | string[] | undefined): string | undefined {
  * is enforced by a test, not a slide.
  */
 export default async function TransparencyPage({ searchParams }: PageProps<"/transparency">) {
-  const user = await getUser();
-  if (user?.role !== "admin") redirect("/login?next=/transparency");
-
   const params = await searchParams;
   const jobParam = first(params.job);
   const candidateParam = first(params.candidate);
@@ -73,7 +70,7 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
     <>
       <PageHeader
         title="Transparency"
-        description="How every ranking and search in RecruitIQ is computed, read from the same code that computes it. Administrator view."
+        description="How every ranking and search in RecruitIQ is computed, read from the same code that computes it. Every candidate here is synthetic, and this page shows less about them than their own profile does."
       />
 
       <div className="space-y-6">

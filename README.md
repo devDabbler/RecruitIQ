@@ -60,8 +60,12 @@ resumes describe experience in a format civilian parsers reliably mangle.
 independently, then applies cross-domain penalties. A pre-K teacher does not
 rank for a Data Engineer role just because both mention "leadership".
 
-**Scoring transparency** is an admin-only screen that shows how every ranking
-and search is computed, read from the same code that computes it. It lists the
+**Scoring transparency** is a screen every visitor can open
+([recruitiq.io/transparency](https://recruitiq.io/transparency)) that shows how
+every ranking and search is computed, read from the same code that computes it.
+The demo dataset is fully synthetic and the traces carry no contact details, so
+there was no reason to hide it behind a login - and a transparency page you
+have to ask permission to see would undercut its own point. It lists the
 two candidate fields the ranker reads (current title, skills) and the thirteen
 it never reads (name, email, location, notes, company, status...), and that
 second list is enforced by a test that rewrites every one of those fields and

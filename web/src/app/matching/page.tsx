@@ -8,7 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { listJobs, matchCandidatesForJob } from "@/lib/data";
-import { canWrite } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -17,9 +16,8 @@ export default async function MatchingPage({ searchParams }: PageProps<"/matchin
   const raw = Array.isArray(params.job) ? params.job[0] : params.job;
 
   let jobs;
-  let admin = false;
   try {
-    [jobs, admin] = await Promise.all([listJobs(), canWrite()]);
+    jobs = await listJobs();
   } catch (error) {
     return (
       <>
@@ -49,7 +47,7 @@ export default async function MatchingPage({ searchParams }: PageProps<"/matchin
         title="Matching"
         description="Semantic ranking over pgvector embeddings, with the sub-scores that produced each number. Scoring runs live and takes about ten seconds."
         actions={
-          admin && choices.length ? (
+          choices.length ? (
             <Link
               href={`/transparency?job=${selected.id}`}
               className="text-sm font-medium text-indigo-700 hover:underline"
