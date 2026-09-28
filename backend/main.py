@@ -24,7 +24,7 @@ from backend.utils.database import Base, engine, verify_postgres_connection
 # Import routers
 from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
-from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache
+from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache, transparency
 from backend.api.routes import job_routes
 from backend.utils.auth import enforce_read_only
 
@@ -102,6 +102,7 @@ app.include_router(agent.router, tags=["agent"]) # Agent router
 app.include_router(intelligence.router, prefix="/api", tags=["intelligence"])  # Mount under /api to match frontend
 app.include_router(performance.router, prefix="/api", tags=["performance"])
 app.include_router(cache.router, tags=["cache"]) # Cache management router
+app.include_router(transparency.router)  # Admin-only scoring transparency
 
 # You can add more routers here if needed
 

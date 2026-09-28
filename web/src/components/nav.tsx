@@ -6,6 +6,7 @@ import {
   Bot,
   Briefcase,
   LayoutDashboard,
+  Scale,
   Sparkles,
   Upload,
   Users,
@@ -28,6 +29,14 @@ const LINKS = [
 ] as const;
 
 /**
+ * Screens only an administrator can open. Not listed for the demo role: a
+ * link that lands on a sign-in wall is a dead tab, and the spec is explicit
+ * that nothing ships that way. The route itself redirects non-admins, so
+ * hiding the link is courtesy, not the access control.
+ */
+const ADMIN_LINKS = [{ href: "/transparency", label: "Transparency", icon: Scale }] as const;
+
+/**
  * A dot that appears only if the click did not resolve straight away.
  *
  * With a `loading.tsx` on every route, Next prefetches each destination and
@@ -43,12 +52,13 @@ function PendingDot() {
   return <span aria-hidden className={cn("nav-hint", pending && "is-pending")} />;
 }
 
-export function Nav() {
+export function Nav({ admin = false }: { admin?: boolean }) {
   const pathname = usePathname();
+  const links = admin ? [...LINKS, ...ADMIN_LINKS] : LINKS;
 
   return (
     <nav className="flex items-center gap-1">
-      {LINKS.map(({ href, label, icon: Icon }) => {
+      {links.map(({ href, label, icon: Icon }) => {
         // "/" would otherwise prefix-match every route and light up permanently.
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
         return (
