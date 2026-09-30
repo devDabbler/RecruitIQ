@@ -102,6 +102,31 @@ RESUME_FRAMING_NOTE = (
     "not part of this conversation."
 )
 
+
+def location_miss_note(location: str, query: str) -> str:
+    """A location search that found nobody there, with the closest people
+    from anywhere in candidates_elsewhere. Tuned in PR #15 as instructions to
+    the model ("tell the user ..."); now a statement, since the local model
+    repeats notes verbatim. What to say about candidates_elsewhere lives in
+    the system prompt."""
+    return (
+        f"Nobody in {location} was a strong match for {query}: either nobody in "
+        "the pipeline is there, or the people there are not relevant to this "
+        "search. The candidates in candidates_elsewhere come from the same search "
+        "with no location filter, and each one's location shows where they "
+        "actually are."
+    )
+
+
+def weak_match_note(query: str) -> str:
+    """Every hit cleared the relevance floor but none is a real match."""
+    return (
+        f"Every candidate here is only a weak match for {query}, so there is no "
+        "strong match for this search. Each one's relevance shows how loosely it "
+        "matched, and only what appears in their position, company, or headline "
+        "is evidence of a specific skill or experience."
+    )
+
 # ILIKE treats % and _ as wildcards. Before this, get_candidate("%") returned
 # the first candidate in the table and get_candidate("_") matched anyone with
 # a one-character name; a blank lookup matched everyone.
@@ -237,28 +262,14 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                     service.search_candidates_by_text(db, query, limit=limit, min_similarity=MIN_SEARCH_RELEVANCE)
                 )
                 out["candidates_elsewhere"] = elsewhere
-                out["note"] = (
-                    f"Nobody in {location!r} was a real match for {query!r} (either nobody "
-                    "is there, or the people there just are not relevant to what was asked). "
-                    "candidates_elsewhere is the same search with no location filter: tell "
-                    "the user nobody in that location was a strong match and where the "
-                    "closer matches actually are. Do not present candidates_elsewhere as "
-                    "being in the requested location, and do not claim the requested skill "
-                    "or experience for anyone the tool did not actually show evidence for."
-                )
+                out["note"] = location_miss_note(location, query)
         if results and all(r["relevance"] == "weak" for r in results):
             # Everything that cleared the relevance floor is still a weak
             # match (this is the common case for a narrow location filter:
             # the whole pool is 2-3 people and none of them is a real fit).
             # Without this, a model reads "count: 2" as "found 2 matches" and
             # presents them with the confidence of a real hit.
-            out["note"] = (
-                "Every candidate here is only a weak/loose semantic match for "
-                f"{query!r} (see each one's 'relevance'). Tell the user there is no "
-                "strong match, and only describe a candidate as having the specific "
-                "skill or experience asked for if it actually appears in their "
-                "position, company, or headline, not just because they were returned."
-            )
+            out["note"] = weak_match_note(query)
         if _search_degraded():
             # Checked last so it wins over the location and weak-match notes:
             # with a placeholder query vector those notes describe noise.
@@ -506,7 +517,12 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         ),
         Tool(
             name="get_candidate",
-            description="Fetch one candidate's full profile (skills, position, status) by id or name. Call this when the user asks about a specific person.",
+            description=(
+                "Fetch one candidate's full profile (skills, position, status) by id or name. "
+                "Call this when the user asks about a specific person. position_applied is the "
+                "free text the candidate typed and has no job page, so it is never a link; "
+                "applied_job, when present, is the real job with its id."
+            ),
             parameters={
                 "type": "object",
                 "properties": {

@@ -28,6 +28,17 @@
       "forbidden_tools": ["match_to_job"],
       "checks_by_outcome": {
         "default": {"require_link": true},
+        "elsewhere": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|no (strong |close |real )?match|not (on|in) the west coast|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)",
+            "elsewhere|other (place|location|part)|outside|not (on|in) the west coast|based in|located in|in [A-Z][a-z]+"
+          ]
+        },
+        "empty": {
+          "must_match": ["nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)"],
+          "must_not_match": ["\\[[^\\]]+\\]\\(/candidates/"]
+        },
         "search_degraded": {
           "must_match": ["unavailable|could not|couldn't|temporarily|try again"],
           "must_not_match": ["nobody|no one|no candidates|no match"]
@@ -37,7 +48,43 @@
         "calls": [{"tool": "search_candidates", "arguments": {"query": "Python engineers", "location": "west coast", "limit": 5}}],
         "reply": {
           "default": "Closest matches for Python engineers on the west coast, by relevance: {{links:candidates}}.",
+          "elsewhere": "Nobody on the west coast came up as a strong match for Python engineers. The closest matches elsewhere, with where they are based: {{links:candidates}}.",
           "empty": "Nobody on the west coast came up as a strong match for Python engineers, and the same search without a location filter found no strong matches either.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-location-miss",
+      "question": "Any Python engineers in Anchorage?",
+      "expected_tools": ["search_candidates"],
+      "forbidden_tools": ["match_to_job"],
+      "checks": {"must_not_match": ["tell the user|do not|never"]},
+      "checks_by_outcome": {
+        "default": {"require_link": true},
+        "elsewhere": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|no (strong |close |real )?match|not in Anchorage|none in Anchorage|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)",
+            "elsewhere|other (place|location|part)|outside|not in Anchorage|based in|located in|in [A-Z][a-z]+"
+          ],
+          "must_not_match": ["in Anchorage[^.?!]*(is|are|has|have|would) (a |an |strong |good |the )?(fit|match|candidate)"]
+        },
+        "empty": {
+          "must_match": ["nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)"],
+          "must_not_match": ["\\[[^\\]]+\\]\\(/candidates/"]
+        },
+        "search_degraded": {
+          "must_match": ["unavailable|could not|couldn't|temporarily|try again"],
+          "must_not_match": ["nobody|no one|no candidates|no match"]
+        }
+      },
+      "replay": {
+        "calls": [{"tool": "search_candidates", "arguments": {"query": "Python engineers", "location": "Anchorage", "limit": 5}}],
+        "reply": {
+          "default": "Python engineers in Anchorage, by relevance: {{links:candidates}}.",
+          "elsewhere": "Nobody in Anchorage came up as a strong match for Python engineers. The closest matches are based elsewhere: {{links:candidates}}.",
+          "empty": "Nobody in Anchorage came up as a strong match for Python engineers, and the same search without a location filter found no strong matches either.",
           "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
         }
       }

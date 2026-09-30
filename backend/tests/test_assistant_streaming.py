@@ -191,6 +191,30 @@ class TestStreamEndpoint:
         assert events[2][1]["response"] == "Twelve people match."
         assert events[2][1]["conversation_context"]["last_provider"] == "ollama"
 
+    def test_returned_names_are_linked_in_the_answer(self, demo_client, monkeypatch):
+        """The local model writes a single subject in bold, not as a link; the
+        endpoint links it from the tool results, on both /chat and the stream."""
+        results = [{"id": 7, "title": "Senior Data Scientist", "status": "open"}]
+
+        async def fake_loop(settings, *, system, message, history, tools, on_event=None):
+            return ToolLoopResult(
+                text="**Senior Data Scientist** requires Python – SQL.",
+                provider="ollama",
+                model="qwen3:8b",
+                tool_trace=[{"tool": "get_job", "arguments": {"job": "x"}, "ok": True}],
+                tool_results=results,
+            )
+
+        monkeypatch.setattr(assistant_router, "run_tool_loop", fake_loop)
+        expected = "[Senior Data Scientist](/jobs/7) requires Python - SQL."
+
+        response = demo_client.post("/api/assistant/chat", json={"message": "job details"})
+        assert response.json()["response"] == expected
+
+        response = demo_client.post("/api/assistant/chat/stream", json={"message": "job details"})
+        events = _parse_sse(response.text)
+        assert events[-1][1]["response"] == expected
+
     def test_provider_failure_becomes_an_error_event(self, demo_client, monkeypatch):
         async def fake_loop(settings, **kwargs):
             raise ToolLoopError("all providers down")

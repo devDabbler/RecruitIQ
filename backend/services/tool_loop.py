@@ -47,6 +47,10 @@ class ToolLoopResult:
     model: str
     latency_ms: int = 0
     tool_trace: List[dict] = field(default_factory=list)
+    # What the serving tier's tools returned, in call order. The answer
+    # finalizer links the names in here; the trace itself stays a list of
+    # {tool, arguments, ok} so the stream and its consumers are unchanged.
+    tool_results: List[Any] = field(default_factory=list)
 
 
 class ToolLoopError(Exception):
@@ -128,6 +132,7 @@ class ToolTrace(list):
     def __init__(self, on_event: Optional[EventSink] = None):
         super().__init__()
         self._on_event = on_event
+        self.results: List[Any] = []
 
     async def _emit(self, event: dict) -> None:
         if self._on_event is None:
@@ -156,6 +161,7 @@ class ToolTrace(list):
     async def tool_finished(self, tool: str, arguments: dict, result: Any) -> None:
         ok = not (isinstance(result, dict) and "error" in result)
         self.append({"tool": tool, "arguments": arguments, "ok": ok})
+        self.results.append(result)
         await self._emit(
             {"type": "tool_end", "tool": tool, "ok": ok, "summary": _summarize(result)}
         )
@@ -383,6 +389,7 @@ async def run_tool_loop(
                 model=model,
                 latency_ms=int((time.monotonic() - started) * 1000),
                 tool_trace=trace,
+                tool_results=trace.results,
             )
         except asyncio.TimeoutError as e:
             # On 3.11+ asyncio.TimeoutError is the builtin TimeoutError, which a
