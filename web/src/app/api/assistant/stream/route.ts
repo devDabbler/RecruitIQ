@@ -51,16 +51,27 @@ export async function POST(request: NextRequest) {
     if (upstream.status === 401 && token) {
       upstream = await send(null);
     }
-  } catch {
+  } catch (error) {
+    // The URL is for the operator's log, not the visitor's chat bubble.
+    console.error(`assistant stream: cannot reach the API at ${API_BASE_URL}`, error);
     return NextResponse.json(
-      { detail: `Cannot reach the API at ${API_BASE_URL}. Is uvicorn running?` },
+      { detail: "The assistant service is not reachable right now. Please try again shortly." },
       { status: 503 },
     );
   }
 
   if (!upstream.ok || !upstream.body) {
+    // Forward only a plain, short detail string; the chat maps anything else
+    // (a pydantic validation list, an HTML error page) to generic copy.
+    const body = await upstream.text().catch(() => "");
+    let detail: unknown = null;
+    try {
+      detail = (JSON.parse(body) as { detail?: unknown }).detail;
+    } catch {
+      detail = null;
+    }
     return NextResponse.json(
-      { detail: await upstream.text().catch(() => "Assistant request failed") },
+      { detail: typeof detail === "string" ? detail : "Assistant request failed" },
       { status: upstream.status || 502 },
     );
   }

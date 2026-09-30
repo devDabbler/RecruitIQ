@@ -34,7 +34,37 @@ const STORAGE_KEY = "recruitiq.assistant.conversations.v1";
 /** Newest-first cap; the oldest conversation falls off, like any chat app. */
 export const MAX_CONVERSATIONS = 20;
 
+/**
+ * Turns replayed to the backend per request. The backend trims to the same
+ * number, so sending more is pure payload; a long chat used to ship every
+ * turn it had.
+ */
+export const MAX_HISTORY_TURNS = 20;
+
 const TITLE_MAX_CHARS = 64;
+
+/**
+ * The conversation history to send with the next question.
+ *
+ * A failed exchange (an assistant turn marked `failed`, plus the question that
+ * produced it) never happened as far as the model is concerned: replaying
+ * "Too many requests, try again" as an assistant answer only teaches a small
+ * model to say it again. Then the most recent MAX_HISTORY_TURNS are kept.
+ */
+export function historyForRequest(turns: StoredTurn[]): { role: StoredTurn["role"]; content: string }[] {
+  const kept: StoredTurn[] = [];
+  for (const turn of turns) {
+    if (turn.role === "assistant" && turn.failed) {
+      if (kept.length > 0 && kept[kept.length - 1].role === "user") kept.pop();
+      continue;
+    }
+    kept.push(turn);
+  }
+  return kept
+    .filter((turn) => turn.content.trim().length > 0)
+    .slice(-MAX_HISTORY_TURNS)
+    .map((turn) => ({ role: turn.role, content: turn.content }));
+}
 
 function storage(): Storage | null {
   try {

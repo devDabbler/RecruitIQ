@@ -6,12 +6,18 @@ import { ArrowUp, Bot, Check, History, Loader2, Plus, Trash2, User, Wrench, X } 
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  UNAVAILABLE_MESSAGE,
+  messageForFailedResponse,
+  messageForThrownError,
+} from "@/lib/chat-errors";
 import { parseChatMarkdown } from "@/lib/chat-markdown";
 import {
   type StoredConversation,
   type StoredTurn as Turn,
   conversationTitle,
   deleteConversation,
+  historyForRequest,
   loadConversations,
   newConversationId,
   saveConversation,
@@ -36,6 +42,11 @@ const SUGGESTION_POOL = [
 ];
 
 const SUGGESTION_COUNT = 4;
+
+// The backend stops a turn at its own budget (90s by default) and nginx cuts
+// the connection at 300s. Before this the browser waited forever: a hung turn
+// left the spinner running until the tab was closed.
+const REQUEST_TIMEOUT_MS = 150_000;
 
 function sampleSuggestions(): string[] {
   const pool = [...SUGGESTION_POOL];
@@ -120,8 +131,9 @@ export function AssistantChat() {
     if (!text || busy) return;
 
     // The history sent upstream is the state *before* this turn — appending
-    // first and then reading state would include the question twice.
-    const history = turns.map((turn) => ({ role: turn.role, content: turn.content }));
+    // first and then reading state would include the question twice. Failed
+    // exchanges are left out and only the most recent turns go.
+    const history = historyForRequest(turns);
 
     setDraft("");
     setBusy(true);
@@ -136,6 +148,9 @@ export function AssistantChat() {
       setTurns((prev) => prev.map((t, i) => (i === prev.length - 1 ? update(t) : t)));
     }
 
+    const abort = new AbortController();
+    const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
+
     try {
       const response = await fetch("/api/assistant/stream", {
         method: "POST",
@@ -145,17 +160,33 @@ export function AssistantChat() {
           conversation_history: history,
           conversation_context: context,
         }),
+        signal: abort.signal,
       });
 
       if (!response.ok || !response.body) {
-        const detail = await response.text().catch(() => "");
-        throw new Error(detail || `Assistant request failed (${response.status})`);
+        const body = await response.text().catch(() => "");
+        patch((turn) => ({
+          ...turn,
+          content: messageForFailedResponse(response.status, body),
+          failed: true,
+        }));
+        return;
       }
+
+      // A stream that ends without a message or error event (proxy cut the
+      // connection, tab suspended) would otherwise leave an empty bubble that
+      // looks like an answer.
+      let settled = false;
 
       for await (const event of readSse(response.body)) {
         const data = event.data as Record<string, unknown>;
 
-        if (event.name === "tool_start") {
+        if (event.name === "tier_retry") {
+          // The next provider tier re-runs the conversation from the top, so
+          // the calls narrated so far are about to happen again. Reset rather
+          // than list each one twice.
+          patch((turn) => ({ ...turn, tools: [] }));
+        } else if (event.name === "tool_start") {
           patch((turn) => ({
             ...turn,
             tools: [...(turn.tools ?? []), { tool: String(data.tool), state: "running" }],
@@ -176,21 +207,28 @@ export function AssistantChat() {
             ),
           }));
         } else if (event.name === "message") {
+          settled = true;
           patch((turn) => ({ ...turn, content: String(data.response ?? "") }));
           if (data.conversation_context && typeof data.conversation_context === "object") {
             setContext(data.conversation_context as Record<string, unknown>);
           }
         } else if (event.name === "error") {
+          settled = true;
           patch((turn) => ({
             ...turn,
-            content: String(data.detail ?? "The assistant failed."),
+            content: String(data.detail ?? UNAVAILABLE_MESSAGE),
             failed: true,
           }));
         }
       }
+
+      if (!settled) {
+        patch((turn) => ({ ...turn, content: UNAVAILABLE_MESSAGE, failed: true }));
+      }
     } catch (error) {
-      patch((turn) => ({ ...turn, content: (error as Error).message, failed: true }));
+      patch((turn) => ({ ...turn, content: messageForThrownError(error), failed: true }));
     } finally {
+      clearTimeout(timer);
       setBusy(false);
     }
   }

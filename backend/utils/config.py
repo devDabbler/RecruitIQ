@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     ollama_chat_enabled: bool = Field(default=os.getenv("OLLAMA_CHAT_ENABLED", "true").lower() == "true")
     ollama_chat_model: str = Field(default=os.getenv("OLLAMA_CHAT_MODEL", "qwen3:8b"))
     ollama_chat_timeout: float = Field(default=float(os.getenv("OLLAMA_CHAT_TIMEOUT", "20.0")))
+    # Wall-clock budget for one assistant turn across every tier and tool
+    # (services/tool_loop.py). Keep it under nginx's 300s proxy_read_timeout.
+    assistant_turn_budget_s: float = Field(default=float(os.getenv("ASSISTANT_TURN_BUDGET_S", "90")))
 
     # Provider chain order (comma-separated; unknown/unconfigured names are skipped)
     llm_provider_order: str = Field(default=os.getenv("LLM_PROVIDER_ORDER", "ollama,openrouter,anthropic"))

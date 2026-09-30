@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..services.agent_framework.task_orchestrator import TaskOrchestrator, get_agent_orchestrator
 from ..services.assistant_tools import build_assistant_tools
-from ..services.tool_loop import ToolLoopError, run_tool_loop
+from ..services.tool_loop import ToolLoopError, ToolLoopTimeout, run_tool_loop
 from ..utils.config import get_settings
 from ..utils.database import get_db
 
@@ -98,6 +98,24 @@ DB_DOWN_REPLY = (
 PROVIDERS_DOWN_REPLY = (
     "I'm having trouble reaching my AI service right now. Please try again in a moment."
 )
+TIMEOUT_REPLY = (
+    "That took longer than I allow for one answer, so I stopped. Please try again, "
+    "or ask a narrower question."
+)
+# Whatever blew up, the visitor gets this sentence and the log gets the trace.
+# The stream used to send str(e), which put SQL and tracebacks in the chat.
+UNEXPECTED_ERROR_REPLY = (
+    "Something went wrong on my side while answering. Please try again in a moment."
+)
+
+
+def _failure_reply(error: Exception) -> str:
+    """One visitor-safe sentence for any way a turn can fail."""
+    if isinstance(error, ToolLoopTimeout):
+        return TIMEOUT_REPLY
+    if isinstance(error, ToolLoopError):
+        return PROVIDERS_DOWN_REPLY
+    return UNEXPECTED_ERROR_REPLY
 
 
 class ChatResponse(BaseModel):
@@ -248,7 +266,15 @@ async def chat_with_assistant(
     except ToolLoopError as e:
         logger.error(f"Assistant tool loop failed: {e}")
         return {
-            "response": PROVIDERS_DOWN_REPLY,
+            "response": _failure_reply(e),
+            "conversation_context": conversation_context,
+        }
+    except Exception as e:  # noqa: BLE001
+        # Until now an unexpected exception here was a bare 500 and the chat
+        # bubble showed "Internal Server Error".
+        logger.exception("Unexpected failure in the assistant")
+        return {
+            "response": _failure_reply(e),
             "conversation_context": conversation_context,
         }
 
@@ -347,10 +373,10 @@ async def chat_with_assistant_streaming(
                 )
             except ToolLoopError as e:
                 logger.error(f"Assistant tool loop failed: {e}")
-                await queue.put({"type": "error", "detail": PROVIDERS_DOWN_REPLY})
+                await queue.put({"type": "error", "detail": _failure_reply(e)})
             except Exception as e:  # noqa: BLE001
                 logger.exception("Unexpected failure in the streaming assistant")
-                await queue.put({"type": "error", "detail": str(e)})
+                await queue.put({"type": "error", "detail": _failure_reply(e)})
             finally:
                 await queue.put(done)
 

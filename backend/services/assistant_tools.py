@@ -90,6 +90,23 @@ SALARY_UNAVAILABLE_NOTE = (
 )
 
 
+# The model chooses `limit`; the tool decides what is reasonable. A limit of
+# 100000 once returned every row above the floor in one 11 KB tool result.
+MAX_TOOL_LIMIT = 25
+
+
+def clamp_limit(value: Any, default: int) -> int:
+    """`limit` as the model sent it, forced into 1..MAX_TOOL_LIMIT.
+
+    Anything that is not a number (None, "", "lots") means the default.
+    """
+    try:
+        limit = int(value)
+    except (TypeError, ValueError):
+        limit = default
+    return max(1, min(limit, MAX_TOOL_LIMIT))
+
+
 def relevance_band(similarity: float) -> str:
     if similarity >= RELEVANCE_BANDS["strong"]:
         return "strong"
@@ -152,6 +169,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
     async def search_candidates(query: str, limit: int = 8, location: Optional[str] = None) -> dict:
         from backend.services.vector_search_service import MIN_SEARCH_RELEVANCE, location_filter_patterns
 
+        limit = clamp_limit(limit, default=8)
         if location and not location_filter_patterns(location):
             # "Anywhere" / "any location" / "US" is not a filter. Dropping it
             # here (not just in SQL) keeps location_filter and the elsewhere
@@ -165,7 +183,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         # of 3 unrelated profiles" read to a recruiter as a confirmed match.
         results = _label_relevance(
             service.search_candidates_by_text(
-                db, query, limit=int(limit), location=location, min_similarity=MIN_SEARCH_RELEVANCE
+                db, query, limit=limit, location=location, min_similarity=MIN_SEARCH_RELEVANCE
             )
         )
         if not results and location and "," in location:
@@ -174,7 +192,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             city = location.split(",")[0].strip()
             results = _label_relevance(
                 service.search_candidates_by_text(
-                    db, query, limit=int(limit), location=city, min_similarity=MIN_SEARCH_RELEVANCE
+                    db, query, limit=limit, location=city, min_similarity=MIN_SEARCH_RELEVANCE
                 )
             )
         out = {"query": query, "candidates": results, "count": len(results)}
@@ -185,7 +203,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 # to: small models announce "let me search again" as their
                 # final answer and never make the second call.
                 elsewhere = _label_relevance(
-                    service.search_candidates_by_text(db, query, limit=int(limit), min_similarity=MIN_SEARCH_RELEVANCE)
+                    service.search_candidates_by_text(db, query, limit=limit, min_similarity=MIN_SEARCH_RELEVANCE)
                 )
                 out["candidates_elsewhere"] = elsewhere
                 out["note"] = (
@@ -265,6 +283,11 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         return data
 
     async def match_to_job(job: str, limit: int = 10) -> dict:
+        return await _rank_for_job(job, clamp_limit(limit, default=10))
+
+    async def _rank_for_job(job: str, limit: int) -> dict:
+        """match_to_job without the clamp: explain_match needs one person's
+        score even when they rank below the visible cut-off."""
         job_info = await get_job(job)
         if "error" in job_info:
             return job_info
@@ -272,7 +295,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
 
         agent = AgentFactory.create_agent("matching", matching_integrator=registry.matching_integrator)
         result = await agent.execute(
-            {"job_id": job_info["id"], "strategy": "enhanced", "db": db, "min_score": 40.0, "limit": int(limit)}
+            {"job_id": job_info["id"], "strategy": "enhanced", "db": db, "min_score": 40.0, "limit": limit}
         )
         if result.get("status") != "completed":
             return {"error": f"Matching failed: {result.get('message')}"}
@@ -309,7 +332,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         cand_skills = {s.lower() for s in cand_info.get("skills", [])}
         overlap = sorted(job_skills & cand_skills)
         missing = sorted(job_skills - cand_skills)
-        match_result = await match_to_job(str(job_info["id"]), limit=50)
+        match_result = await _rank_for_job(str(job_info["id"]), limit=50)
         score = next(
             (m["match_score"] for m in match_result.get("matches", []) if m["id"] == cand_info["id"]),
             None,

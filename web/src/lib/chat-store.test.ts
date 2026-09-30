@@ -2,9 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   MAX_CONVERSATIONS,
+  MAX_HISTORY_TURNS,
   type StoredConversation,
   conversationTitle,
   deleteConversation,
+  historyForRequest,
   loadConversations,
   newConversationId,
   saveConversation,
@@ -145,5 +147,42 @@ describe("conversationTitle", () => {
 describe("newConversationId", () => {
   it("produces unique ids", () => {
     expect(newConversationId()).not.toBe(newConversationId());
+  });
+});
+
+describe("historyForRequest", () => {
+  it("drops a failed exchange, question included", () => {
+    const history = historyForRequest([
+      { role: "user", content: "first" },
+      { role: "assistant", content: "answer one" },
+      { role: "user", content: "second" },
+      { role: "assistant", content: "Too many requests right now.", failed: true },
+      { role: "user", content: "third" },
+      { role: "assistant", content: "answer three" },
+    ]);
+    expect(history).toEqual([
+      { role: "user", content: "first" },
+      { role: "assistant", content: "answer one" },
+      { role: "user", content: "third" },
+      { role: "assistant", content: "answer three" },
+    ]);
+  });
+
+  it("keeps only the most recent turns", () => {
+    const turns = Array.from({ length: 60 }, (_, i) => ({
+      role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+      content: `turn ${i}`,
+    }));
+    const history = historyForRequest(turns);
+    expect(history).toHaveLength(MAX_HISTORY_TURNS);
+    expect(history[history.length - 1].content).toBe("turn 59");
+  });
+
+  it("strips tool events and empty turns from what is sent", () => {
+    const history = historyForRequest([
+      { role: "user", content: "q", tools: [{ tool: "search_candidates", state: "ok" }] },
+      { role: "assistant", content: "", tools: [] },
+    ]);
+    expect(history).toEqual([{ role: "user", content: "q" }]);
   });
 });
