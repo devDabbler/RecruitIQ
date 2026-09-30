@@ -43,11 +43,6 @@ def _candidate_summary(c) -> dict:
         "status": c.status,
         "skills": [s.skill_name for s in (c.skills or [])],
     }
-    if getattr(c, "job_id", None) and c.position_applied:
-        # With only a title to go on, the live model wrote
-        # [Senior Software Engineer](/jobs) and the chat rendered a dead
-        # link. An id next to the title is what it needs to link properly.
-        data["applied_job"] = {"id": c.job_id, "title": c.position_applied}
     return data
 
 
@@ -182,21 +177,22 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         return bool(getattr(registry.llm_service.get_embedding_model(), "is_degraded", False))
 
     def _open_job_titles() -> List[dict]:
+        # Open jobs only. This used to fall back to every job when none was
+        # open, which put closed roles in a list labelled open, right next
+        # to open_jobs: 0.
         rows = db.query(Job).filter(Job.status == "open").order_by(Job.id).limit(20).all()
-        if not rows:
-            rows = db.query(Job).order_by(Job.id).limit(20).all()
         return [{"id": j.id, "title": j.title} for j in rows]
 
     def _no_such_job(job: str, degraded: bool = False) -> dict:
-        out = {
-            "error": f"No job found matching {job!r}",
-            "open_jobs": _open_job_titles(),
-            "note": (
-                f"There is no job titled {job!r} in the ATS. Tell the user that, and offer "
-                "the titles in open_jobs instead. Do not answer about a different job as if "
-                "it were the one asked for."
-            ),
-        }
+        open_jobs = _open_job_titles()
+        # Written for a visitor like the module-level notes, since the local
+        # model repeats notes verbatim. What to do about a missing job lives
+        # in the tool descriptions.
+        if open_jobs:
+            note = f"There is no job titled {job!r} in this ATS. The jobs open right now are in open_jobs."
+        else:
+            note = f"There is no job titled {job!r} in this ATS, and no jobs are open right now."
+        out = {"error": f"No job found matching {job!r}", "open_jobs": open_jobs, "note": note}
         if degraded:
             out["search_degraded"] = True
         return out
@@ -291,6 +287,14 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         if row is None:
             return {"error": f"No candidate found matching {candidate!r}"}
         data = _candidate_summary(row)
+        applied = db.query(Job).filter(Job.id == row.job_id).first() if row.job_id else None
+        if applied is not None:
+            # With only a title to go on, the live model wrote
+            # [Senior Software Engineer](/jobs) and the chat rendered a dead
+            # link, so the job's id goes next to it. The title and status come
+            # from the job itself: position_applied is free text and can name
+            # a role that was renamed or has since closed.
+            data["applied_job"] = {"id": applied.id, "title": applied.title, "status": applied.status}
         data["has_resume"] = db.query(Resume).filter(Resume.candidate_id == row.id).count() > 0
         return data
 
@@ -302,11 +306,25 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         if job.isdigit():
             row = db.query(Job).filter(Job.id == int(job)).first()
         if row is None:
-            row = (
+            # "Data Scientist" is inside both Senior and Junior Data Scientist,
+            # and a bare .first() handed back whichever row Postgres produced.
+            # An exact title wins; a single partial hit is that job; several
+            # partial hits are the visitor's choice, not ours.
+            hits = (
                 db.query(Job)
                 .filter(Job.title.ilike(like_pattern(job), escape=_LIKE_ESCAPE))
-                .first()
+                .order_by((func.lower(Job.title) == job.lower()).desc(), (Job.status == "open").desc().nulls_last(), Job.id)
+                .limit(MAX_TOOL_LIMIT)
+                .all()
             )
+            if len(hits) == 1 or (hits and hits[0].title.lower() == job.lower()):
+                row = hits[0]
+            elif hits:
+                return {
+                    "error": f"More than one job matches {job!r}",
+                    "matching_jobs": [{"id": j.id, "title": j.title, "status": j.status} for j in hits],
+                    "note": f"More than one job in this ATS matches {job!r}; they are listed in matching_jobs.",
+                }
         if row is not None:
             return _job_summary(row, include_details=True)
         # Semantic fallback: "the ML role" should still find Machine Learning
@@ -324,10 +342,7 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         data = _job_summary(row, include_details=True)
         data["matched_by"] = "semantic"
         data["requested_title"] = str(job)
-        data["note"] = (
-            f"No job is titled {job!r}; this is the closest open job by meaning. Tell "
-            f"the user you are answering about {row.title!r}, not {job!r}."
-        )
+        data["note"] = f"No job is titled {job!r}. The closest job by meaning is {row.title!r}, and this is that job."
         return data
 
     async def match_to_job(job: str, limit: int = 10) -> dict:
@@ -506,7 +521,9 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             description=(
                 "Fetch one job's details by numeric id or (partial/semantic) title. Call this when "
                 "the user references a specific role or req. If the result is an error with "
-                "open_jobs, the ATS has no such job: say so and offer those titles. If the result "
+                "open_jobs, the ATS has no such job: say so and offer those titles, and never answer "
+                "about a different job as if it were the one asked for. If the result is an error "
+                "with matching_jobs, the title fits several jobs: ask which one. If the result "
                 "has matched_by 'semantic', it is the closest job by meaning, not the title asked "
                 "for: name the job you are actually answering about."
             ),
@@ -521,7 +538,12 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         ),
         Tool(
             name="match_to_job",
-            description="Rank the best-matching candidates for a job using the full matching pipeline (role fit, skill overlap, experience). Call this for 'who should I consider for X' questions.",
+            description=(
+                "Rank the best-matching candidates for a job using the full matching pipeline (role "
+                "fit, skill overlap, experience). Call this for 'who should I consider for X' "
+                "questions. An error result means the job was not found (or the title fits several "
+                "jobs): say so and offer the titles it lists, never a ranking for a different job."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -590,7 +612,8 @@ def build_assistant_tools(db: Session) -> List[Tool]:
     ]
 
 
-_DASHES = str.maketrans({"—": "-", "–": "-"})
+# U+2015 (horizontal bar) is what some resume exports use for a dash.
+_DASHES = str.maketrans({"—": "-", "–": "-", "―": "-"})
 
 
 def plain_dashes(value: Any) -> Any:

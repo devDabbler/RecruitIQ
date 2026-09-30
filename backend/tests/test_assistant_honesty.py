@@ -83,13 +83,17 @@ class _Registry:
 
 
 class _FakeJobQuery:
-    """db.query(Job) that answers filter().first() with None and the listing
-    with a fixed set of open jobs, so get_job reaches the semantic branch."""
+    """db.query(Job) that answers filter().first() and the title search with
+    nothing and the listing with a fixed set of open jobs, so get_job reaches
+    the semantic branch."""
 
-    def __init__(self, jobs):
+    def __init__(self, jobs, first=None):
         self._jobs = jobs
+        self._first = first
 
     def filter(self, *args, **kwargs):
+        if any("LIKE" in str(a) for a in args):
+            return _FakeJobQuery([])
         return self
 
     def order_by(self, *args, **kwargs):
@@ -99,13 +103,13 @@ class _FakeJobQuery:
         return self
 
     def first(self):
-        return None
+        return self._first
 
     def all(self):
         return self._jobs
 
 
-def _tools(monkeypatch, embedding_model, hits, market=None, jobs=None):
+def _tools(monkeypatch, embedding_model, hits, market=None, jobs=None, first=None):
     from backend.services import assistant_tools, vector_search_service
     from backend.services import service_registry
 
@@ -121,12 +125,20 @@ def _tools(monkeypatch, embedding_model, hits, market=None, jobs=None):
         "search_candidates_by_text",
         lambda self, db, query, limit=10, location=None, min_similarity=0.0: [],
     )
-    jobs = jobs or [
-        SimpleNamespace(id=1, title="Data Engineer", status="open"),
-        SimpleNamespace(id=2, title="Product Manager", status="open"),
-    ]
-    db = SimpleNamespace(query=lambda model: _FakeJobQuery(jobs))
+    if jobs is None:
+        jobs = [
+            SimpleNamespace(id=1, title="Data Engineer", status="open"),
+            SimpleNamespace(id=2, title="Product Manager", status="open"),
+        ]
+    db = SimpleNamespace(query=lambda model: _FakeJobQuery(jobs, first=first))
     return {t.name: t for t in assistant_tools.build_assistant_tools(db)}
+
+
+def assert_visitor_sentence(note):
+    """The local model repeats notes word for word, so a note must read as a
+    sentence to the visitor: no instructions to the model, no dashes."""
+    assert not re.search(r"\b(tell the user|do not|never|you must)\b", note, re.I), note
+    assert not re.search("[—–]", note), note
 
 
 HEALTHY = SimpleNamespace(is_degraded=False)
@@ -141,6 +153,7 @@ class TestUnknownJob:
         assert "error" in result and "id" not in result
         assert [j["title"] for j in result["open_jobs"]] == ["Data Engineer", "Product Manager"]
         assert "Chief Happiness Officer" in result["note"]
+        assert_visitor_sentence(result["note"])
 
     def test_match_to_job_refuses_unknown_job(self, monkeypatch):
         nearest = {"id": 19, "title": "Senior Data Scientist", "similarity": 0.1}
@@ -157,6 +170,26 @@ class TestUnknownJob:
         result = run(tools["get_job"].run(job="the ML role"))
         assert "error" in result
         assert result["search_degraded"] is True
+
+    def test_no_open_jobs_means_an_empty_list_not_closed_ones(self, monkeypatch):
+        nearest = {"id": 19, "title": "Senior Data Scientist", "similarity": 0.1}
+        tools = _tools(monkeypatch, HEALTHY, hits=[nearest], jobs=[])
+        result = run(tools["get_job"].run(job="Chief Happiness Officer"))
+        assert result["open_jobs"] == []
+        assert "no jobs are open" in result["note"]
+        assert_visitor_sentence(result["note"])
+
+    def test_semantic_substitution_names_both_titles(self, monkeypatch):
+        job = SimpleNamespace(
+            id=1, title="Data Engineer", department="Data", location="Remote", status="open",
+            skills="Python,SQL", job_overview="", required_qualifications="",
+        )
+        nearest = {"id": 1, "title": "Data Engineer", "similarity": MIN_JOB_LOOKUP_RELEVANCE + 0.05}
+        tools = _tools(monkeypatch, HEALTHY, hits=[nearest], first=job)
+        result = run(tools["get_job"].run(job="data pipelines person"))
+        assert result["matched_by"] == "semantic"
+        assert "'data pipelines person'" in result["note"] and "'Data Engineer'" in result["note"]
+        assert_visitor_sentence(result["note"])
 
     def test_floor_is_in_the_measured_gap(self):
         # Paraphrases of real titles scored 0.60+, titles the ATS lacks 0.54

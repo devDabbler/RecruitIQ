@@ -54,6 +54,8 @@ class TestExecuteTool:
         # out of resume text; the rule is enforced where the text enters.
         result = run(execute_tool(TOOLS, "echo", {"text": "2015–2017 — lead", "n": 3}))
         assert result == {"echo": {"text": "2015-2017 - lead", "n": 3}}
+        result = run(execute_tool(TOOLS, "echo", {"text": "2019―2021", "n": 1}))
+        assert result["echo"]["text"] == "2019-2021"
 
 
 class _Settings:
