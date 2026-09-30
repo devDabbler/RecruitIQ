@@ -31,6 +31,7 @@ from backend.services.assistant_tools import (
     SEARCH_DEGRADED_NOTE,
     build_assistant_tools,
     location_miss_note,
+    context_match_note,
     no_match_note,
     partial_match_note,
 )
@@ -175,6 +176,7 @@ class TestPromptHygiene:
         location_miss_note("Seattle", "Python engineers"),
         no_match_note("Python engineers"),
         partial_match_note("Python engineers"),
+        context_match_note("Python engineers"),
     )
 
     def test_notes_read_as_sentences_to_a_visitor(self):
@@ -289,6 +291,14 @@ class TestChecksCatchWhatTheyExistFor:
         assert render_reply(template, [{"search_degraded": True, "candidates": []}]) == "down"
         assert render_reply(template, [{"count": 2}]) == "found"
         assert outcome_of([{"status": "unavailable"}]) == "unavailable"
+
+    def test_context_only_search_is_its_own_outcome(self):
+        ctx = {"count": 1, "candidates": [{"id": "c-1", "name": "Elena", "match_kind": "context", "similarity": 0.6}]}
+        assert outcome_of([ctx]) == "context"
+        mixed = {"count": 2, "candidates": [dict(ctx["candidates"][0]), {"id": "c-2", "name": "Ada", "match_kind": "role"}]}
+        assert outcome_of([mixed]) == "default"
+        template = {"default": "x", "context": "No. Related only: {{links:candidates}}"}
+        assert render_reply(template, [ctx]) == "No. Related only: [Elena](/candidates/c-1)"
 
     def test_location_miss_with_people_elsewhere_is_its_own_outcome(self):
         # The "empty" reply claimed the unfiltered search found nobody too,

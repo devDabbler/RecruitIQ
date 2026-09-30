@@ -3387,6 +3387,22 @@
             ],
             "title": "Location"
           },
+          "match_kind": {
+            "default": "semantic",
+            "title": "Match Kind",
+            "type": "string"
+          },
+          "matched_in": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "default": {},
+            "title": "Matched In",
+            "type": "object"
+          },
           "matched_on": {
             "default": [],
             "items": {

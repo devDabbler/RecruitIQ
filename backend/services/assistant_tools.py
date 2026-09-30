@@ -137,6 +137,20 @@ def no_match_note(query: str) -> str:
     )
 
 
+def context_match_note(query: str) -> str:
+    """No hit has a query word in its job title: everyone here matched in
+    their headline, company or skills. "Do we have any real estate agents?"
+    once got "one partial match for the role" about a data scientist at a
+    real estate marketplace; this note is what stops that."""
+    return (
+        f"No one in the pipeline holds a role like {query}, and no one has any of "
+        "those words in their job title. The candidates here are related to the "
+        "search only through their headline, company, or skills, as their "
+        "matched_in shows, so each works in a related area or lists a related "
+        "skill rather than holding the role."
+    )
+
+
 def partial_match_note(query: str) -> str:
     """Every hit is moderate: a real overlap on the words in matched_on, and
     nothing more."""
@@ -266,7 +280,15 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 out["note"] = location_miss_note(location, query) if elsewhere else no_match_note(query)
         elif not results:
             out["note"] = no_match_note(query)
-        if results and all(r["relevance"] == "moderate" for r in results):
+        if results:
+            out["role_matches"] = sum(1 for r in results if r["match_kind"] == "role")
+            out["context_matches"] = sum(1 for r in results if r["match_kind"] == "context")
+        if results and not any(r["relevance"] == "strong" or r["match_kind"] == "role" for r in results):
+            # Nobody is close by meaning and nobody has a search word in
+            # their title: these people are related by industry or skill
+            # only. The model must not call them partial holders of a role.
+            out["note"] = context_match_note(query)
+        elif results and all(r["relevance"] == "moderate" for r in results):
             # Without this, a model reads "count: 3" as "found 3 matches" and
             # presents people who share one word with the search as fits.
             out["note"] = partial_match_note(query)
@@ -498,13 +520,19 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "experience'). Matches by meaning, not keywords. "
                 "For place-based asks like 'python developers in Seattle', put the skills/role in "
                 "query and the place in location; do not put the place in query. "
-                "Each result carries a 'relevance' band and 'matched_on', the words from the query "
-                "found in that person's position, company, headline, or skills. 'strong' means the "
-                "profile is about what was asked; 'moderate' means it overlaps only on the matched_on "
-                "words and is a partial match on exactly those points, nothing more. People who "
-                "match on nothing are never returned: count 0 with a note means nobody in the "
-                "pipeline matches, and that is the answer. If the result has search_degraded true, "
-                "search is temporarily unavailable: say that, never that nobody matches."
+                "Each result carries a 'relevance' band, 'matched_on' (the words from the query "
+                "found in that person's profile), 'matched_in' (which fields those words are in) and "
+                "'match_kind'. 'strong' means the profile is about what was asked; 'moderate' means "
+                "it overlaps only on the matched_on words and is a partial match on exactly those "
+                "points, nothing more. match_kind 'role' means a query word is in their job title; "
+                "'context' means the words are only in their headline, company, or skills, so a "
+                "moderate result of that kind works in a related area or lists a related skill and "
+                "does not hold the role asked about; 'semantic' means no word matched and the "
+                "embedding alone ranked them. A strong result is a match whatever its kind. "
+                "People who match on nothing are never returned: count 0 with a note means nobody "
+                "in the pipeline matches, and that is the answer. If the result has "
+                "search_degraded true, search is temporarily unavailable: say that, never that "
+                "nobody matches."
             ),
             parameters={
                 "type": "object",
