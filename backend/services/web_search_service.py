@@ -7,7 +7,6 @@ from typing import List, Dict, Any, Optional
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
 from bs4 import BeautifulSoup
-import traceback
 
 # Configure logging with a specific format
 logging.basicConfig(
@@ -42,19 +41,25 @@ class WebSearchService:
         # Get API keys from environment variables
         try:
             self.search_api_key = os.getenv("SERPAPI_KEY")
+            # ScraperAPI's structured Google endpoint. Google closed the
+            # Custom Search JSON API to new customers (it shuts down on
+            # 2027-01-01), so this is the backend a fresh install can get.
+            self.scraperapi_key = os.getenv("SCRAPERAPI_KEY")
             self.google_search_engine_id = os.getenv("GOOGLE_CSE_ID")
             self.google_api_key = os.getenv("GOOGLE_API_KEY")
             self.bing_api_key = os.getenv("BING_API_KEY")
-            
+
             # Log which API keys are available
             logger.info(f"Google CSE ID available: {bool(self.google_search_engine_id)}")
             logger.info(f"Google API key available: {bool(self.google_api_key)}")
             logger.info(f"SerpAPI key available: {bool(self.search_api_key)}")
+            logger.info(f"ScraperAPI key available: {bool(self.scraperapi_key)}")
             logger.info(f"Bing API key available: {bool(self.bing_api_key)}")
-            
+
         except Exception as e:
             logger.error(f"Error loading API keys: {e}")
             self.search_api_key = None
+            self.scraperapi_key = None
             self.google_search_engine_id = None
             self.google_api_key = None
             self.bing_api_key = None
@@ -69,7 +74,11 @@ class WebSearchService:
         Without a backend every search() returns [] instantly; callers that
         would otherwise "analyze" empty results must check this first.
         """
-        return bool((self.google_api_key and self.google_search_engine_id) or self.search_api_key)
+        return bool(
+            (self.google_api_key and self.google_search_engine_id)
+            or self.search_api_key
+            or self.scraperapi_key
+        )
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
     async def search_google(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
@@ -99,7 +108,9 @@ class WebSearchService:
                 "num": min(num_results, 10)  # API limit is 10
             }
             
-            logger.debug(f"Making Google CSE request to: {url} with params: {params}")
+            # Not the params: they carry the API key, and this line used to
+            # put it in the journal on every call.
+            logger.debug(f"Making Google CSE request to: {url} for: {query!r}")
             response = await self.http_client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
@@ -120,8 +131,10 @@ class WebSearchService:
             return results
             
         except Exception as e:
-            logger.error(f"Error performing Google search: {str(e)}")
-            logger.error(traceback.format_exc())
+            # Type and status only: httpx's message carries the request URL,
+            # key included, and the journal had it on every failed call.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            logger.error(f"Error performing Google search: {type(e).__name__} {status or ''}".rstrip())
             return []
     
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
@@ -165,9 +178,45 @@ class WebSearchService:
             return results
             
         except Exception as e:
-            logger.error(f"Error performing SerpAPI search: {str(e)}")
+            logger.error(f"Error performing SerpAPI search: {type(e).__name__}")
             return []
-    
+
+    async def search_scraperapi(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
+        """Google results through ScraperAPI's structured SERP endpoint.
+
+        Same result shape as the other backends (title, link, snippet). One
+        call costs 25 ScraperAPI credits, so a salary benchmark (four levels)
+        is 100 credits; the free plan is small, the point is that it exists.
+        """
+        if not self.scraperapi_key:
+            logger.warning("ScraperAPI key not configured")
+            return []
+
+        try:
+            url = "https://api.scraperapi.com/structured/google/search"
+            params = {"api_key": self.scraperapi_key, "query": query, "num": num_results}
+            logger.debug(f"Making ScraperAPI request for: {query!r}")
+            response = await self.http_client.get(url, params=params, timeout=70.0)
+            response.raise_for_status()
+            data = response.json()
+
+            results = []
+            for item in data.get("organic_results") or []:
+                results.append(
+                    {
+                        "title": item.get("title", ""),
+                        "link": item.get("link", ""),
+                        "snippet": item.get("snippet", ""),
+                    }
+                )
+            logger.info(f"ScraperAPI search returned {len(results)} results")
+            return results[:num_results]
+
+        except Exception as e:
+            # httpx puts the full URL, key included, in its error text.
+            logger.error(f"Error performing ScraperAPI search: {type(e).__name__}")
+            return []
+
     async def fetch_webpage_content(self, url: str) -> Optional[str]:
         """
         Fetch and parse content from a webpage.
@@ -220,23 +269,28 @@ class WebSearchService:
         # Check if we have any API keys configured
         has_google_keys = bool(self.google_api_key and self.google_search_engine_id)
         has_serpapi_key = bool(self.search_api_key)
-        
-        if not has_google_keys and not has_serpapi_key:
+        has_scraperapi_key = bool(self.scraperapi_key)
+
+        if not has_google_keys and not has_serpapi_key and not has_scraperapi_key:
             logger.warning("No search API keys configured - LinkedIn enrichment will not work")
             # Mock LinkedIn result for testing if query specifically mentions LinkedIn
             if 'LinkedIn' in query and 'profile' in query:
                 return self._get_mock_linkedin_results(query)
             return []
-        
+
         # Try Google search first
         results = []
         if has_google_keys:
             results = await self.search_google(query, num_results=max_results)
-        
+
         # Fallback to SerpAPI if Google search returned no results
         if not results and has_serpapi_key:
             results = await self.search_serpapi(query, num_results=max_results)
-            
+
+        # Then ScraperAPI, the backend a new install can still sign up for
+        if not results and has_scraperapi_key:
+            results = await self.search_scraperapi(query, num_results=max_results)
+
         # Log the results for debugging
         result_count = len(results)
         has_linkedin = any('linkedin.com' in r.get('link', '') for r in results)
