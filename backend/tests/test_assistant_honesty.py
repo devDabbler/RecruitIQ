@@ -202,6 +202,27 @@ class TestSalaryTool:
         assert result["status"] == "success" and "note" not in result
 
 
+class TestNameLookupEscaping:
+    """F8: a name goes into an ILIKE pattern, so its wildcards must be escaped."""
+
+    def test_like_pattern_escapes_wildcards(self):
+        from backend.services.assistant_tools import like_pattern
+
+        assert like_pattern("Ada") == "%Ada%"
+        assert like_pattern("%") == "%\\%%"
+        assert like_pattern("a_b") == "%a\\_b%"
+        assert like_pattern("\\") == "%\\\\%"
+        assert like_pattern("O'Brien") == "%O'Brien%"
+
+    def test_blank_lookups_are_refused_without_a_query(self, monkeypatch):
+        tools = _tools(monkeypatch, HEALTHY, hits=[])
+        for blank in ("", "   ", None):
+            result = run(tools["get_candidate"].run(candidate=blank))
+            assert "error" in result, blank
+            result = run(tools["get_job"].run(job=blank))
+            assert "error" in result and "open_jobs" in result, blank
+
+
 class TestPlaceholderVectorsAreNeverStored:
     def test_store_refuses_degraded_embedding(self):
         from backend.services.vector_search_service import VectorSearchService

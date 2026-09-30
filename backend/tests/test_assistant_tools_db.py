@@ -93,6 +93,33 @@ class TestLookupTools:
         result = run(tools["get_candidate"].run(candidate="zzz-nobody-zzz"))
         assert "error" in result
 
+    @pytest.mark.parametrize("lookup", ["%", "_", "%%", "", "  ", "\\"])
+    def test_wildcards_are_not_a_candidate_lookup(self, db, tools, lookup):
+        # get_candidate("%") used to return the first row in the table: the
+        # name goes into an ILIKE pattern, and % and _ are its wildcards.
+        result = run(tools["get_candidate"].run(candidate=lookup))
+        assert "error" in result and "id" not in result, result
+
+    @pytest.mark.parametrize("lookup", ["%", "_", "%%", "", "  "])
+    def test_wildcards_are_not_a_job_lookup(self, db, tools, lookup):
+        result = run(tools["get_job"].run(job=lookup))
+        # Either no job at all, or the semantic fallback's honest form; never
+        # a direct hit that ILIKE handed over because the pattern was "%%%".
+        assert "error" in result or result.get("matched_by") == "semantic", result
+
+    def test_resume_tool_frames_the_document(self, db, tools):
+        from backend.models.models import Resume
+        from backend.services.assistant_tools import RESUME_FRAMING_NOTE
+
+        resume = db.query(Resume).filter(Resume.parsed_content.isnot(None)).first()
+        if resume is None:
+            pytest.skip("no parsed resumes")
+        result = run(tools["get_candidate_resume"].run(candidate=resume.candidate_id))
+        assert "error" not in result, result
+        assert result["note"] == RESUME_FRAMING_NOTE
+        assert result["candidate_id"] == resume.candidate_id
+        assert result["parsed_content"]
+
 
 class TestSearchCandidatesLocationFallback:
     def test_unmatched_location_returns_candidates_elsewhere(self, db, tools):

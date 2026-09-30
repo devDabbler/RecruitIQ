@@ -1,0 +1,133 @@
+{
+  "_comment": "Golden assistant questions. See evals/assistant_golden.py for the format. Cast placeholders: {{cast:candidate}} is a candidate with a parsed resume, {{cast:job}} an open job title. Answers replayed in CI are templates filled from real tool results.",
+  "cases": [
+    {
+      "id": "greeting",
+      "question": "Hi there!",
+      "forbidden_tools": ["*"],
+      "checks": {"must_not_match": ["\\[[^\\]]+\\]\\(/"]},
+      "replay": {
+        "calls": [],
+        "reply": "Hello! Ask me about candidates, open jobs, who fits a role, or how the pipeline looks."
+      }
+    },
+    {
+      "id": "pipeline-summary",
+      "question": "How many candidates do we have in the pipeline right now, and what stages are they in?",
+      "expected_tools": ["list_pipeline"],
+      "checks": {"numbers_from_results": true},
+      "replay": {
+        "calls": [{"tool": "list_pipeline", "arguments": {}}],
+        "reply": "There are {{value:total_candidates}} candidates in the pipeline and {{value:open_jobs}} open jobs. By stage: {{dict:candidates_by_status}}."
+      }
+    },
+    {
+      "id": "search-west-coast",
+      "question": "Find me Python engineers on the west coast and rank them.",
+      "expected_tools": ["search_candidates"],
+      "forbidden_tools": ["match_to_job"],
+      "checks_by_outcome": {
+        "default": {"require_link": true},
+        "search_degraded": {
+          "must_match": ["unavailable|could not|couldn't|temporarily|try again"],
+          "must_not_match": ["nobody|no one|no candidates|no match"]
+        }
+      },
+      "replay": {
+        "calls": [{"tool": "search_candidates", "arguments": {"query": "Python engineers", "location": "west coast", "limit": 5}}],
+        "reply": {
+          "default": "Closest matches for Python engineers on the west coast, by relevance: {{links:candidates}}.",
+          "empty": "Nobody on the west coast came up as a strong match for Python engineers, and the same search without a location filter found no strong matches either.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "strongest-for-job",
+      "question": "Who is our strongest candidate for the {{cast:job}} role, and why?",
+      "expected_tools": ["match_to_job"],
+      "checks": {"must_mention": ["{{cast:job}}"]},
+      "checks_by_outcome": {"default": {"require_link": true}},
+      "replay": {
+        "calls": [{"tool": "match_to_job", "arguments": {"job": "{{cast:job}}", "limit": 5}}],
+        "reply": {
+          "default": "Top matches for {{link:job:{{cast:job}}}} from the matching pipeline: {{links:candidates}}. The first name is the strongest fit on role, skills, and experience.",
+          "empty": "Nobody in the pipeline scored above the floor for {{link:job:{{cast:job}}}} yet, so there is no strong candidate to name."
+        }
+      }
+    },
+    {
+      "id": "job-details",
+      "question": "What does the {{cast:job}} role require?",
+      "expected_tools": ["get_job"],
+      "forbidden_tools": ["match_to_job"],
+      "checks": {"require_link": true, "must_mention": ["{{cast:job}}"]},
+      "replay": {
+        "calls": [{"tool": "get_job", "arguments": {"job": "{{cast:job}}"}}],
+        "reply": "{{link:job:{{cast:job}}}} ({{value:department}}, {{value:location}}) asks for: {{value:required_qualifications}}. Skills listed: {{list:skills}}."
+      }
+    },
+    {
+      "id": "unknown-job",
+      "question": "Who should I consider for the Chief Happiness Officer role?",
+      "expected_any": ["match_to_job", "get_job"],
+      "checks": {
+        "must_mention": ["Chief Happiness Officer"],
+        "must_match": ["there('s| is| are) no|no (such |open |posted )?(job|role|position|req)|not (a|an|in|listed|one of|posted)|does ?n.t exist|is ?n.t (a|an|in|one|posted|listed)|do ?n.t have|not (currently )?(have|open)"],
+        "must_not_match": ["match(es|ed)? for the Chief Happiness Officer", "candidates? for (the )?Chief Happiness Officer"]
+      },
+      "replay": {
+        "calls": [{"tool": "match_to_job", "arguments": {"job": "Chief Happiness Officer"}}],
+        "reply": "There is no Chief Happiness Officer job in the ATS, so I can't rank anyone for it. The open roles are {{links:jobs}}. Ask about any of those and I'll pull the matches."
+      }
+    },
+    {
+      "id": "candidate-profile",
+      "question": "Tell me about {{cast:candidate}}.",
+      "expected_tools": ["get_candidate"],
+      "checks": {"require_link": true, "must_mention": ["{{cast:candidate}}"]},
+      "replay": {
+        "calls": [{"tool": "get_candidate", "arguments": {"candidate": "{{cast:candidate}}"}}],
+        "reply": "{{link:candidate:{{cast:candidate}}}} is a {{value:current_position}} at {{value:current_company}}, based in {{value:location}}, status {{value:status}}. Skills on file: {{list:skills}}."
+      }
+    },
+    {
+      "id": "resume-on-file",
+      "question": "What is on {{cast:candidate}}'s resume?",
+      "expected_tools": ["get_candidate_resume"],
+      "checks": {"require_link": true, "must_mention": ["{{cast:candidate}}"]},
+      "replay": {
+        "calls": [{"tool": "get_candidate_resume", "arguments": {"candidate": "{{cast:candidate}}"}}],
+        "reply": "Here is what the resume on file for {{link:candidate:{{cast:candidate}}}} says: {{value:parsed_content}}"
+      }
+    },
+    {
+      "id": "explain-fit",
+      "question": "Why is {{cast:candidate}} a good fit for the {{cast:job}} role?",
+      "expected_tools": ["explain_match"],
+      "checks": {"require_link": true, "must_mention": ["{{cast:candidate}}", "{{cast:job}}"]},
+      "replay": {
+        "calls": [{"tool": "explain_match", "arguments": {"job": "{{cast:job}}", "candidate": "{{cast:candidate}}"}}],
+        "reply": "{{link:candidate:{{cast:candidate}}}} lines up with {{link:job:{{cast:job}}}} on: {{list:matching_skills}}. Still missing: {{list:missing_skills}}. Current role: {{value:candidate_position}}."
+      }
+    },
+    {
+      "id": "salary-unavailable",
+      "question": "What is the market salary for a Data Engineer in Austin?",
+      "expected_tools": ["get_market_data"],
+      "checks_by_outcome": {
+        "unavailable": {
+          "must_match": ["(not|isn't|is not|aren't|are not) (connected|available|configured|hooked up|set up)|unavailable|no live|don't have|do not have|can't (provide|give|source|pull|quote)|cannot (provide|give|source|pull|quote)"],
+          "must_not_match": ["\\$\\s?\\d", "\\d{2,3},\\d{3}", "\\b\\d{2,3}k\\b", "\\d+\\s?(percent|%)"]
+        }
+      },
+      "replay": {
+        "calls": [{"tool": "get_market_data", "arguments": {"role": "Data Engineer", "location": "Austin, TX"}}],
+        "reply": {
+          "default": "Salary benchmark for a Data Engineer in Austin, from live market data: {{dict:salary_benchmarks}}.",
+          "unavailable": "Live salary data is not connected in this demo, so I can't give figures for a Data Engineer in Austin. Candidates, jobs, matching, and pipeline questions still work."
+        }
+      }
+    }
+  ]
+}
