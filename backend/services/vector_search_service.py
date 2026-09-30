@@ -202,6 +202,8 @@ class VectorSearchService:
                 f"""
                 SELECT c.id, c.first_name, c.last_name, c.email, c.current_position,
                        c.current_company, c.headline, c.location,
+                       (SELECT string_agg(cs.skill_name, ', ' ORDER BY cs.skill_name)
+                          FROM candidate_skills cs WHERE cs.candidate_id = c.id) AS skills,
                        1 - (c.embedding <=> CAST(:qvec AS vector)) AS similarity
                 FROM candidates c
                 WHERE c.embedding IS NOT NULL
@@ -222,6 +224,9 @@ class VectorSearchService:
                 "company": r.current_company,
                 "headline": r.headline,
                 "location": r.location,
+                # The skill names, so relevance banding can look for the
+                # query's words in the same fields the embedding saw.
+                "skills": r.skills,
                 "similarity": max(0.0, min(1.0, float(r.similarity))),
             }
             for r in rows

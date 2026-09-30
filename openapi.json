@@ -3387,6 +3387,14 @@
             ],
             "title": "Location"
           },
+          "matched_on": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Matched On",
+            "type": "array"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -3445,13 +3453,6 @@
       },
       "SearchTraceResponse": {
         "properties": {
-          "dropped_by_floor": {
-            "items": {
-              "$ref": "#/components/schemas/SearchHit"
-            },
-            "title": "Dropped By Floor",
-            "type": "array"
-          },
           "embedded_fields": {
             "items": {
               "type": "string"
@@ -3463,11 +3464,25 @@
             "title": "Embedding Degraded",
             "type": "boolean"
           },
+          "evidence_fields": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Evidence Fields",
+            "type": "array"
+          },
           "hits": {
             "items": {
               "$ref": "#/components/schemas/SearchHit"
             },
             "title": "Hits",
+            "type": "array"
+          },
+          "kept_out": {
+            "items": {
+              "$ref": "#/components/schemas/SearchHit"
+            },
+            "title": "Kept Out",
             "type": "array"
           },
           "location_filter": {
@@ -3515,9 +3530,10 @@
           "relevance_floor",
           "relevance_bands",
           "embedded_fields",
+          "evidence_fields",
           "embedding_degraded",
           "hits",
-          "dropped_by_floor"
+          "kept_out"
         ],
         "title": "SearchTraceResponse",
         "type": "object"
@@ -8736,7 +8752,7 @@
     },
     "/api/transparency/search-trace": {
       "get": {
-        "description": "The assistant's candidate search, with what the embedding saw and what\nthe relevance floor removed.\n\nRuns the same query twice: once as the assistant runs it (with the floor)\nand once without, so the second list is exactly the set of \"closest\navailable people\" the floor keeps the model from presenting as matches.",
+        "description": "The assistant's candidate search, with what the embedding saw, what\neach hit matched on, and who was kept out.\n\nRuns the search the way the assistant runs it: a pool of the closest\npeople by cosine similarity (without the floor, so the trace can show\nwhat the floor removes), banded and re-ranked by search_relevance.\n`hits` is what the assistant is given; `kept_out` is everyone else in\nthe pool, each labelled with the band and the words they matched on,\nso a visitor can see why a plumber search returns nobody instead of\nthe closest data engineer.",
         "operationId": "search_trace_api_transparency_search_trace_get",
         "parameters": [
           {
