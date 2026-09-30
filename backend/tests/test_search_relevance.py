@@ -17,6 +17,7 @@ from backend.services.assistant_tools import no_match_note, partial_match_note
 from backend.services.search_relevance import (
     RELEVANCE_BANDS,
     band_hits,
+    evidence_holds,
     evidence_in,
     query_terms,
     rank_hits,
@@ -84,6 +85,36 @@ class TestEvidence:
     def test_generic_words_in_the_profile_are_not_evidence_for_anything(self):
         # "manager" is in the profile, but it was stripped from the query.
         assert evidence_in("Technical Product Manager", query_terms("retail store managers")) == []
+
+
+class TestAmbiguousWords:
+    """"real estate agent" surfaced an engineer who builds LLM agents as a
+    partial match on "agent" (live, 2026-09-30). A word that means something
+    else in a tech profile needs a second matched word behind it."""
+
+    def test_ambiguous_word_alone_is_not_evidence_in_a_longer_query(self):
+        terms = query_terms("real estate agent")
+        assert not evidence_holds(terms, ["agent"])
+        assert not evidence_holds(query_terms("truck drivers"), ["drivers"])
+        assert not evidence_holds(query_terms("retail store managers"), ["store"])
+
+    def test_two_matched_words_or_the_only_word_hold(self):
+        assert evidence_holds(query_terms("real estate agent"), ["real", "estate"])
+        assert evidence_holds(query_terms("LLM agents"), ["llm", "agents"])
+        assert evidence_holds(query_terms("agents engineers"), ["agents"])
+        assert evidence_holds(query_terms("commercial airline pilots"), ["airline"])
+
+    def test_llm_agents_engineer_is_not_a_real_estate_agent(self):
+        pool = [
+            hit("Rin", 0.54, position="Senior Software Engineer", headline="Agents and retrieval, shipped two LLM products"),
+            hit("Stef", 0.61, position="Staff Data Scientist", headline="causal inference for a real estate marketplace"),
+        ]
+        shown, kept_out = rank_hits(pool, "real estate agent", 8)
+        assert [h["name"] for h in shown] == ["Stef"]
+        assert kept_out[0]["name"] == "Rin" and kept_out[0]["matched_on"] == ["agent"]
+        assert kept_out[0]["relevance"] == "weak"
+        shown, _ = rank_hits([dict(pool[0])], "LLM agents", 8)
+        assert shown and shown[0]["relevance"] == "moderate"
 
 
 class TestBands:

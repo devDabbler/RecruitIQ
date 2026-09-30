@@ -41,9 +41,30 @@ def db():
     engine = create_engine(POSTGRES_CONN)
     Session = sessionmaker(bind=engine)
     session = Session()
+    session.info["touched"] = []
     yield session
     session.rollback()
+    # store_*_embedding commits, so the stub vectors these tests write into
+    # real rows survive the rollback. Until 2026-09-30 every full run on the
+    # dev database left three candidates and three jobs carrying stub vectors
+    # (cosine 0.03 against anything), invisible to the assistant's search
+    # and to get_job's semantic fallback. Put the originals back.
+    for model, ident, vector in session.info["touched"]:
+        session.query(model).filter(model.id == ident).update(
+            {model.embedding: vector}, synchronize_session=False
+        )
+    session.commit()
     session.close()
+
+
+def _rows(db, model, n):
+    """The first `n` rows of `model`, with their embeddings remembered so the
+    fixture can restore them after the test overwrites them."""
+    rows = db.query(model).limit(n).all()
+    for row in rows:
+        vector = row.embedding
+        db.info["touched"].append((model, row.id, None if vector is None else list(vector)))
+    return rows
 
 
 def test_store_and_search_similar_jobs(db):
@@ -52,7 +73,7 @@ def test_store_and_search_similar_jobs(db):
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
 
-    jobs = db.query(Job).limit(3).all()
+    jobs = _rows(db, Job, 3)
     if len(jobs) < 2:
         pytest.skip("needs at least 2 seeded jobs")
 
@@ -70,9 +91,10 @@ def test_store_candidate_embedding(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    candidate = db.query(Candidate).first()
-    if candidate is None:
+    candidates = _rows(db, Candidate, 1)
+    if not candidates:
         pytest.skip("needs seeded candidates")
+    candidate = candidates[0]
     assert svc.store_candidate_embedding(db, candidate.id) is True
 
     row = db.execute(
@@ -87,7 +109,7 @@ def test_search_jobs_by_text(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    jobs = db.query(Job).limit(3).all()
+    jobs = _rows(db, Job, 3)
     if not jobs:
         pytest.skip("needs seeded jobs")
     for j in jobs:
@@ -104,7 +126,7 @@ def test_search_candidates_by_text(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    candidates = db.query(Candidate).limit(3).all()
+    candidates = _rows(db, Candidate, 3)
     if not candidates:
         pytest.skip("needs seeded candidates")
     for c in candidates:
@@ -126,7 +148,7 @@ def test_search_candidates_by_text_location_filter(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    candidates = db.query(Candidate).limit(2).all()
+    candidates = _rows(db, Candidate, 2)
     if len(candidates) < 2:
         pytest.skip("needs at least 2 seeded candidates")
 
@@ -157,7 +179,7 @@ def test_search_candidates_by_text_anywhere_is_no_filter(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    candidates = db.query(Candidate).limit(2).all()
+    candidates = _rows(db, Candidate, 2)
     if len(candidates) < 2:
         pytest.skip("needs at least 2 seeded candidates")
     for c in candidates:
@@ -175,7 +197,7 @@ def test_search_candidates_by_text_region_filter(db):
     from backend.services.vector_search_service import VectorSearchService
 
     svc = VectorSearchService(embedding_model=StubEmbedder())
-    candidates = db.query(Candidate).limit(3).all()
+    candidates = _rows(db, Candidate, 3)
     if len(candidates) < 3:
         pytest.skip("needs at least 3 seeded candidates")
 
