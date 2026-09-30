@@ -49,6 +49,12 @@ class TestExecuteTool:
         result = run(execute_tool(TOOLS, "boom", {}))
         assert "error" in result and "db exploded" in result["error"]
 
+    def test_dashes_in_tool_results_become_hyphens(self):
+        # The live eval caught the cloud model quoting an em dash straight
+        # out of resume text; the rule is enforced where the text enters.
+        result = run(execute_tool(TOOLS, "echo", {"text": "2015–2017 — lead", "n": 3}))
+        assert result == {"echo": {"text": "2015-2017 - lead", "n": 3}}
+
 
 class _Settings:
     ollama_chat_enabled = True
