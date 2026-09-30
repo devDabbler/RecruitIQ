@@ -20,7 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..services.agent_framework.task_orchestrator import TaskOrchestrator, get_agent_orchestrator
-from ..services.assistant_tools import build_assistant_tools
+from ..services.assistant_tools import build_assistant_tools, plain_dashes
 from ..services.tool_loop import ToolLoopError, ToolLoopTimeout, run_tool_loop
 from ..utils.config import get_settings
 from ..utils.database import get_db
@@ -107,6 +107,17 @@ TIMEOUT_REPLY = (
 UNEXPECTED_ERROR_REPLY = (
     "Something went wrong on my side while answering. Please try again in a moment."
 )
+
+
+def _answer_text(text: str) -> str:
+    """The model's answer as the visitor sees it.
+
+    No dashes is a hard rule, the prompt says so, and the tool results are
+    already clean, yet the local model still writes salary ranges as
+    "$80,000–$110,000". Enforcing it here is deterministic and covers both
+    endpoints; arguing with an 8B model is neither.
+    """
+    return plain_dashes(text or "")
 
 
 def _failure_reply(error: Exception) -> str:
@@ -288,7 +299,7 @@ async def chat_with_assistant(
     conversation_context["last_provider"] = result.provider
     conversation_context["last_tools_used"] = [t["tool"] for t in result.tool_trace]
     return {
-        "response": result.text,
+        "response": _answer_text(result.text),
         "conversation_context": conversation_context,
     }
 
@@ -369,7 +380,11 @@ async def chat_with_assistant_streaming(
                     [t["tool"] for t in result.tool_trace],
                 )
                 await queue.put(
-                    {"type": "message", "response": result.text, "conversation_context": context}
+                    {
+                        "type": "message",
+                        "response": _answer_text(result.text),
+                        "conversation_context": context,
+                    }
                 )
             except ToolLoopError as e:
                 logger.error(f"Assistant tool loop failed: {e}")
