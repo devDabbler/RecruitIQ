@@ -252,3 +252,31 @@ class TestChatContractUnchanged:
         assert set(body) == {"response", "conversation_context"}
         assert body["response"] == "synchronous answer"
         assert body["conversation_context"]["last_tools_used"] == ["get_pipeline_stats"]
+
+
+class TestAnswersCarryNoDashes:
+    """Seen on prod: the local model wrote "$80,000–$110,000" in a salary
+    answer despite the prompt rule. Tool results are already normalised;
+    the answer text is the last place a dash can get in."""
+
+    DASHED = "Entry: $80,000–$110,000. Senior — $140,000+."
+    CLEAN = "Entry: $80,000-$110,000. Senior - $140,000+."
+
+    def test_chat_answer_is_normalised(self, demo_client, monkeypatch):
+        async def fake_loop(settings, **kwargs):
+            return ToolLoopResult(text=self.DASHED, provider="ollama", model="qwen3:8b")
+
+        monkeypatch.setattr(assistant_router, "run_tool_loop", fake_loop)
+        body = demo_client.post("/api/assistant/chat", json={"message": "salary?"}).json()
+        assert body["response"] == self.CLEAN
+
+    def test_stream_answer_is_normalised(self, demo_client, monkeypatch):
+        async def fake_loop(settings, **kwargs):
+            return ToolLoopResult(text=self.DASHED, provider="ollama", model="qwen3:8b")
+
+        monkeypatch.setattr(assistant_router, "run_tool_loop", fake_loop)
+        events = _parse_sse(
+            demo_client.post("/api/assistant/chat/stream", json={"message": "salary?"}).text
+        )
+        assert events[-1][0] == "message"
+        assert events[-1][1]["response"] == self.CLEAN
