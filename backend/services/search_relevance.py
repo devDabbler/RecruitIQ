@@ -144,6 +144,20 @@ ALIASES: Dict[str, Tuple[str, ...]] = {
     "e-commerce": ("e-commerce", "ecommerce"),
 }
 
+# Words that mean something else inside a tech profile: "agent" is an LLM
+# agent, "driver" a device driver, "pilot" a pilot programme, "real" is
+# real-time, "model" a machine learning model. Found on its own, such a word
+# is not evidence for a query about real estate agents or truck drivers. It
+# counts only when another word from the query also matches, or when it is
+# the only specific word in the query (a search for "agents" means agents).
+AMBIGUOUS_TERMS = frozenset(
+    """
+    agent agents driver drivers pilot pilots real model models store stores
+    operations operation service services support security office field
+    market markets network networks stream streams system systems
+    """.split()
+)
+
 # Two-letter tokens are noise ("go" matches "google") unless they are one of
 # these established short forms, which are matched as whole words.
 SHORT_TERMS = frozenset(
@@ -214,12 +228,35 @@ def evidence_in(text: str, terms: Iterable[str]) -> List[str]:
     return matched
 
 
-def relevance_band(similarity: float, matched_on: Iterable[str] = ()) -> str:
+def evidence_holds(terms: Iterable[str], matched_on: Iterable[str]) -> bool:
+    """Whether the matched words are enough to call a hit a partial match.
+
+    One unambiguous word is enough ("airline"). An ambiguous word on its own
+    is not, unless it is the only specific word the query had: "real estate
+    agent" matching only "agent" is an LLM-agents engineer, but "agents"
+    matching "agent" is what was asked for. Two matched words of any kind
+    hold, since the second one supplies the context.
+    """
+    terms = list(terms)
+    matched = [m for m in matched_on if m]
+    if not matched:
+        return False
+    if len(matched) >= 2 or len(terms) <= 1:
+        return True
+    return any(m not in AMBIGUOUS_TERMS for m in matched)
+
+
+def relevance_band(similarity: float, matched_on: Iterable[str] = (), terms: Iterable[str] = None) -> str:
     """strong, moderate or weak for one hit. Without evidence the only way
-    to be a match is the strong floor; see the module docstring for why."""
+    to be a match is the strong floor; see the module docstring for why.
+    `terms` is the query's own term list, needed to judge an ambiguous
+    match; when omitted, the matched words are taken as the whole query."""
+    matched = list(matched_on)
     if similarity >= RELEVANCE_BANDS["strong"]:
         return "strong"
-    if similarity >= RELEVANCE_BANDS["moderate"] and any(matched_on):
+    if similarity >= RELEVANCE_BANDS["moderate"] and evidence_holds(
+        matched if terms is None else terms, matched
+    ):
         return "moderate"
     return "weak"
 
@@ -247,7 +284,9 @@ def band_hits(hits: List[Dict[str, Any]], query: str, min_similarity: float = 0.
         matched = evidence_in(profile_text(hit), terms)
         hit["matched_on"] = matched
         similarity = float(hit.get("similarity", 0.0))
-        hit["relevance"] = "weak" if similarity < min_similarity else relevance_band(similarity, matched)
+        hit["relevance"] = (
+            "weak" if similarity < min_similarity else relevance_band(similarity, matched, terms)
+        )
     return hits
 
 
