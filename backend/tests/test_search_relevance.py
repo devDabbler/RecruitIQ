@@ -13,12 +13,14 @@ import asyncio
 from types import SimpleNamespace
 
 from backend.services import assistant_tools
-from backend.services.assistant_tools import no_match_note, partial_match_note
+from backend.services.assistant_tools import context_match_note, no_match_note, partial_match_note
 from backend.services.search_relevance import (
     RELEVANCE_BANDS,
     band_hits,
+    evidence_by_field,
     evidence_holds,
     evidence_in,
+    match_kind,
     query_terms,
     rank_hits,
     relevance_band,
@@ -115,6 +117,43 @@ class TestAmbiguousWords:
         assert kept_out[0]["relevance"] == "weak"
         shown, _ = rank_hits([dict(pool[0])], "LLM agents", 8)
         assert shown and shown[0]["relevance"] == "moderate"
+
+
+class TestMatchKind:
+    """A word in the job title means the person holds something like the
+    role; a word only in headline, company or skills means they work in a
+    related area. "Any real estate agents?" was answered with "one partial
+    match for the role" about a data scientist at Zillow (2026-09-30)."""
+
+    ELENA = hit(
+        "Elena", 0.61, position="Staff Data Scientist", company="Zillow",
+        headline="Applied scientist, causal inference for a real estate marketplace", skills="Python, R, SQL",
+    )
+
+    def test_words_are_located_per_field(self):
+        assert evidence_by_field(self.ELENA, query_terms("real estate agents")) == {
+            "real": ["headline"], "estate": ["headline"],
+        }
+        both = hit("X", 0.7, position="Python Engineer", skills="Python, Go")
+        assert evidence_by_field(both, ["python"]) == {"python": ["position", "skills"]}
+
+    def test_kinds(self):
+        assert match_kind({"real": ["headline"]}) == "context"
+        assert match_kind({"python": ["skills"], "data": ["position"]}) == "role"
+        assert match_kind({}) == "semantic"
+
+    def test_industry_overlap_is_context_not_role(self):
+        shown, _ = rank_hits([dict(self.ELENA)], "real estate agents", 8)
+        assert shown[0]["relevance"] == "moderate" and shown[0]["match_kind"] == "context"
+        assert shown[0]["matched_in"] == {"real": ["headline"], "estate": ["headline"]}
+
+    def test_title_word_is_role(self):
+        shown, _ = rank_hits([hit("Ada", 0.6, position="Data Engineer", skills="Kafka")], "data engineers who know kafka", 8)
+        assert shown[0]["match_kind"] == "role"
+
+    def test_strong_hit_without_words_is_semantic(self):
+        shown, _ = rank_hits([hit("Sam", 0.7, position="AI Engineer")], "machine learning engineers", 8)
+        assert shown[0]["relevance"] == "strong" and shown[0]["match_kind"] == "semantic"
 
 
 class TestBands:
@@ -245,6 +284,40 @@ class TestSearchTool:
         assert [c["name"] for c in result["candidates"]] == ["Leilani"]
         assert result["candidates"][0]["relevance"] == "moderate"
         assert result["candidates"][0]["matched_on"] == ["airline"]
+        # Both people work at airlines; neither has "airline" in their title, so
+        # this is a context match and the note says nobody holds the role.
+        assert result["note"] == context_match_note("commercial airline pilots")
+
+    def test_context_only_matches_say_nobody_holds_the_role(self, monkeypatch):
+        elena = hit(
+            "Elena", 0.61, position="Staff Data Scientist", company="Zillow",
+            headline="causal inference for a real estate marketplace",
+        )
+        tool, _ = _search_tool(monkeypatch, {None: [elena]})
+        result = run(tool.run(query="real estate agents"))
+        assert result["count"] == 1 and result["role_matches"] == 0 and result["context_matches"] == 1
+        assert result["candidates"][0]["match_kind"] == "context"
+        assert result["note"] == context_match_note("real estate agents")
+        assert "holds a role" in result["note"]
+
+    def test_skill_question_is_context_but_the_note_still_reads_true(self, monkeypatch):
+        # "Who knows Kubernetes?" legitimately matches in skills. The note
+        # must be a true sentence for that question too: nobody has
+        # "kubernetes" in their title, and these people list it as a skill.
+        pool = [hit("Sam", 0.57, position="Site Reliability Manager", skills="Kubernetes, Terraform")]
+        tool, _ = _search_tool(monkeypatch, {None: pool})
+        result = run(tool.run(query="people with kubernetes experience"))
+        assert result["candidates"][0]["match_kind"] == "context"
+        assert result["note"] == context_match_note("people with kubernetes experience")
+
+    def test_a_role_match_among_moderates_gets_the_partial_note_instead(self, monkeypatch):
+        pool = [
+            hit("Leilani", 0.62, position="Airline Operations Analyst"),
+            hit("Derek", 0.60, position="Analytics Engineer", company="United Airlines"),
+        ]
+        tool, _ = _search_tool(monkeypatch, {None: pool})
+        result = run(tool.run(query="commercial airline pilots"))
+        assert result["role_matches"] == 1 and result["context_matches"] == 1
         assert result["note"] == partial_match_note("commercial airline pilots")
 
     def test_strong_matches_get_no_note(self, monkeypatch):
@@ -273,6 +346,6 @@ class TestSearchTool:
     def test_notes_read_as_sentences_to_a_visitor(self):
         import re
 
-        for note in (no_match_note("plumber"), partial_match_note("plumber")):
+        for note in (no_match_note("plumber"), partial_match_note("plumber"), context_match_note("plumber")):
             assert not re.search(r"\b(tell the user|do not|never|you must)\b", note, re.I), note
             assert not re.search("[—–]", note), note

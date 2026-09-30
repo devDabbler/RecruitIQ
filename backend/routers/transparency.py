@@ -188,6 +188,8 @@ class SearchHit(BaseModel):
     similarity: float
     relevance: str
     matched_on: List[str] = []
+    matched_in: Dict[str, List[str]] = {}
+    match_kind: str = "semantic"
     embedded_text: Optional[str] = None
 
 
@@ -441,5 +443,7 @@ def _search_hit(hit: Dict[str, Any], texts: Dict[str, str]) -> SearchHit:
         similarity=hit["similarity"],
         relevance=hit["relevance"],
         matched_on=list(hit.get("matched_on", [])),
+        matched_in={k: list(v) for k, v in hit.get("matched_in", {}).items()},
+        match_kind=hit.get("match_kind", "semantic"),
         embedded_text=texts.get(hit["id"]),
     )

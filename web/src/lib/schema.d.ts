@@ -2815,6 +2815,18 @@ export interface components {
             /** Location */
             location?: string | null;
             /**
+             * Match Kind
+             * @default semantic
+             */
+            match_kind: string;
+            /**
+             * Matched In
+             * @default {}
+             */
+            matched_in: {
+                [key: string]: string[];
+            };
+            /**
              * Matched On
              * @default []
              */

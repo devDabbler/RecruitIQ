@@ -24,28 +24,51 @@
     {
       "id": "search-west-coast",
       "question": "Find me Python engineers on the west coast and rank them.",
-      "expected_tools": ["search_candidates"],
-      "forbidden_tools": ["match_to_job"],
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
       "checks_by_outcome": {
-        "default": {"require_link": true},
+        "default": {
+          "require_link": true
+        },
         "elsewhere": {
           "require_link": true,
           "must_match": [
-            "nobody|no one|no (strong |close |real )?match|not (on|in) the west coast|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)",
+            "nobody|no one|no (strong |close |real )?match|not (on|in) the west coast|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)|\\bno [A-Za-z ]+(on|in) the west coast",
             "elsewhere|other (place|location|part)|outside|not (on|in) the west coast|based in|located in|in [A-Z][a-z]+"
           ]
         },
         "empty": {
-          "must_match": ["nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)"],
-          "must_not_match": ["\\[[^\\]]+\\]\\(/candidates/"]
+          "must_match": [
+            "nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)|\\bno [A-Za-z ]+(on|in) the west coast"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
         },
         "search_degraded": {
-          "must_match": ["unavailable|could not|couldn't|temporarily|try again"],
-          "must_not_match": ["nobody|no one|no candidates|no match"]
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
         }
       },
       "replay": {
-        "calls": [{"tool": "search_candidates", "arguments": {"query": "Python engineers", "location": "west coast", "limit": 5}}],
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "Python engineers",
+              "location": "west coast",
+              "limit": 5
+            }
+          }
+        ],
         "reply": {
           "default": "Closest matches for Python engineers on the west coast, by relevance: {{links:candidates}}.",
           "elsewhere": "Nobody on the west coast came up as a strong match for Python engineers. The closest matches elsewhere, with where they are based: {{links:candidates}}.",
@@ -57,30 +80,59 @@
     {
       "id": "search-location-miss",
       "question": "Any Python engineers in Anchorage?",
-      "expected_tools": ["search_candidates"],
-      "forbidden_tools": ["match_to_job"],
-      "checks": {"must_not_match": ["tell the user|do not|never"]},
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
       "checks_by_outcome": {
-        "default": {"require_link": true},
+        "default": {
+          "require_link": true
+        },
         "elsewhere": {
           "require_link": true,
           "must_match": [
-            "nobody|no one|no (strong |close |real )?match|not in Anchorage|none in Anchorage|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)",
+            "nobody|no one|no (strong |close |real )?match|not in Anchorage|none in Anchorage|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)|\\bno [A-Za-z ]+in Anchorage",
             "elsewhere|other (place|location|part)|outside|not in Anchorage|based in|located in|in [A-Z][a-z]+"
           ],
-          "must_not_match": ["in Anchorage[^.?!]*(is|are|has|have|would) (a |an |strong |good |the )?(fit|match|candidate)"]
+          "must_not_match": [
+            "in Anchorage[^.?!]*(is|are|has|have|would) (a |an |strong |good |the )?(fit|match|candidate)"
+          ]
         },
         "empty": {
-          "must_match": ["nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)"],
-          "must_not_match": ["\\[[^\\]]+\\]\\(/candidates/"]
+          "must_match": [
+            "nobody|no one|no (strong |close |real )?match|no [a-z ]+(were |was )?found|found no|not find|nothing (came up|matched)|\\bno [A-Za-z ]+in Anchorage"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
         },
         "search_degraded": {
-          "must_match": ["unavailable|could not|couldn't|temporarily|try again"],
-          "must_not_match": ["nobody|no one|no candidates|no match"]
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
         }
       },
       "replay": {
-        "calls": [{"tool": "search_candidates", "arguments": {"query": "Python engineers", "location": "Anchorage", "limit": 5}}],
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "Python engineers",
+              "location": "Anchorage",
+              "limit": 5
+            }
+          }
+        ],
         "reply": {
           "default": "Python engineers in Anchorage, by relevance: {{links:candidates}}.",
           "elsewhere": "Nobody in Anchorage came up as a strong match for Python engineers. The closest matches are based elsewhere: {{links:candidates}}.",
@@ -100,7 +152,7 @@
       ],
       "checks": {
         "must_not_match": [
-          "partial(ly)? match|closest|nearest|weak match|loosely"
+          "(is|are|was|were|as|only|here.s|here is|here are) (a |an |the |some |one |two |three |several |\\d+ )?(partial|weak|closest|nearest|loosely)"
         ]
       },
       "checks_by_outcome": {
@@ -109,7 +161,7 @@
         },
         "empty": {
           "must_match": [
-            "nobody|no one|no (strong |close |real |matching )?(match|candidates?|people|one)|not find|found no|don.t have|do not have|nothing (came up|matched)|none (in|of)"
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
           ],
           "must_not_match": [
             "\\[[^\\]]+\\]\\(/candidates/"
@@ -137,6 +189,452 @@
         "reply": {
           "default": "Underwater welders in the pipeline, by relevance: {{links:candidates}}.",
           "empty": "Nobody in the pipeline matches underwater welders, so there is no one to suggest for this. Candidate searches for engineering, data, and product roles will find people.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-industry-not-role",
+      "question": "Do we have any real estate agents in the database?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_not_match": [
+            "partial(ly)? match(es)? for (the )?(role|position)"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "match(es)? for (the )?(role|position|job)|partial(ly)? (match(es)?|matching) (for|to) (the )?(role|position)|is an? (partial )?real estate agent|are (partial )?real estate agents?"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "real estate agents",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches real estate agents, by relevance: {{links:candidates}}.",
+          "context": "No, nobody in the pipeline holds a role like real estate agents. These people are related through their headline, company, or skills only: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches real estate agents, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-skill",
+      "question": "Who knows Kubernetes?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_mention": [
+            "Kubernetes"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_mention": [
+            "Kubernetes"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "Kubernetes",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches Kubernetes, by relevance: {{links:candidates}}.",
+          "context": "Nobody has this in their job title, but these people list it in their headline, company, or skills: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches Kubernetes, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-industry-experience",
+      "question": "Who has insurance industry experience?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_mention": [
+            "insurance"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_mention": [
+            "insurance"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "insurance industry experience",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches insurance industry experience, by relevance: {{links:candidates}}.",
+          "context": "Nobody has this in their job title, but these people list it in their headline, company, or skills: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches insurance industry experience, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-ambiguous-word",
+      "question": "Any truck drivers in the pipeline?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_not_match": [
+            "device driver|driver for"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "match(es)? for (the )?(role|position|job)|partial(ly)? (match(es)?|matching) (for|to) (the )?(role|position)|is an? (partial )?truck driver|are (partial )?truck drivers?"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "truck drivers",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches truck drivers, by relevance: {{links:candidates}}.",
+          "context": "No, nobody in the pipeline holds a role like truck drivers. These people are related through their headline, company, or skills only: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches truck drivers, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-role-paraphrase",
+      "question": "Show me our machine learning engineers.",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_not_match": [
+            "(is|are|was|were|as|only|here.s|here is|here are) (a |an |the |some |one |two |three |several |\\d+ )?(partial|weak|closest|nearest|loosely)"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "match(es)? for (the )?(role|position|job)|partial(ly)? (match(es)?|matching) (for|to) (the )?(role|position)|is an? (partial )?machine learning engineer|are (partial )?machine learning engineers?"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "machine learning engineers",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches machine learning engineers, by relevance: {{links:candidates}}.",
+          "context": "No, nobody in the pipeline holds a role like machine learning engineers. These people are related through their headline, company, or skills only: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches machine learning engineers, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-yes-no-role",
+      "question": "Do we have any data scientists?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_not_match": [
+            "(is|are|was|were|as|only|here.s|here is|here are) (a |an |the |some |one |two |three |several |\\d+ )?(partial|weak|closest|nearest|loosely)"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "match(es)? for (the )?(role|position|job)|partial(ly)? (match(es)?|matching) (for|to) (the )?(role|position)|is an? (partial )?data scientist|are (partial )?data scientists?"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "data scientists",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches data scientists, by relevance: {{links:candidates}}.",
+          "context": "No, nobody in the pipeline holds a role like data scientists. These people are related through their headline, company, or skills only: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches data scientists, so there is no one to suggest for this.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
+      "id": "search-only-word-ambiguous",
+      "question": "Who works on LLM agents?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "tell the user|do not|never"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true,
+          "must_mention": [
+            "LLM"
+          ]
+        },
+        "context": {
+          "require_link": true,
+          "must_mention": [
+            "LLM"
+          ]
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|\\bno\\b|none|not (find|have)|found no|don.t have|do not have|nothing (came up|matched)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "LLM agents",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Here is who matches LLM agents, by relevance: {{links:candidates}}.",
+          "context": "Nobody has this in their job title, but these people list it in their headline, company, or skills: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches LLM agents, so there is no one to suggest for this.",
           "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
         }
       }

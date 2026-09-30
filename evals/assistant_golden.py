@@ -37,7 +37,9 @@ to real ids and quotes real numbers, which is what makes the checks bite:
     {{links:jobs}}            every returned job, linked (max 8)
 
 Outcomes (`outcome_of`): search_degraded, error, unavailable, elsewhere (a
-location search that missed but found people in other places), empty, default.
+location search that missed but found people in other places), empty, context
+(every person found matched only in headline, company or skills, never in
+their job title), default.
 """
 from __future__ import annotations
 
@@ -129,6 +131,12 @@ def outcome_of(results: List[Any]) -> str:
             return "elsewhere"
         if last.get("count") == 0 or last.get("matches") == []:
             return "empty"
+        candidates = last.get("candidates")
+        if candidates and all(c.get("match_kind") == "context" for c in candidates):
+            # Everyone found is related by industry or skill, not by role:
+            # "any real estate agents?" answered with a data scientist at a
+            # real estate marketplace. The honest reply leads with no.
+            return "context"
     return "default"
 
 

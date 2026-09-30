@@ -545,7 +545,18 @@ function HitTable({ title, hits, muted = false }: { title: string; hits: SearchH
                 <span className="block font-semibold tabular-nums">{similarity(hit.similarity)}</span>
                 <span className={cn("text-xs", bandClass(hit.relevance))}>{hit.relevance}</span>
                 <span className="block text-xs text-slate-500">
-                  {hit.matched_on.length ? `matched on ${hit.matched_on.join(", ")}` : "no word in common"}
+                  {hit.matched_on.length
+                    ? `matched on ${hit.matched_on
+                        .map((w) => `${w} (${(hit.matched_in[w] ?? []).join(", ")})`)
+                        .join(", ")}`
+                    : "no word in common"}
+                </span>
+                <span className="block text-xs text-slate-500">
+                  {hit.match_kind === "role"
+                    ? "a search word is in the job title"
+                    : hit.match_kind === "context"
+                      ? "related area or skill, not the role"
+                      : "by meaning only"}
                 </span>
               </span>
             </li>

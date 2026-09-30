@@ -273,16 +273,55 @@ def profile_text(hit: Dict[str, Any]) -> str:
     return " | ".join(parts)
 
 
+def evidence_by_field(hit: Dict[str, Any], terms: Iterable[str]) -> Dict[str, List[str]]:
+    """Which query words appear in which of the hit's EVIDENCE_FIELDS:
+    {"estate": ["headline"], "python": ["skills"]}. Order follows the query."""
+    terms = list(terms)
+    found: Dict[str, List[str]] = {}
+    for field in EVIDENCE_FIELDS:
+        value = hit.get(field)
+        if isinstance(value, (list, tuple)):
+            value = ", ".join(str(v) for v in value if v)
+        if not value:
+            continue
+        for term in evidence_in(str(value), terms):
+            found.setdefault(term, []).append(field)
+    return {term: found[term] for term in terms if term in found}
+
+
+def match_kind(matched_in: Dict[str, List[str]]) -> str:
+    """How a hit relates to the search.
+
+    role      a query word is in the person's job title: they hold (or held)
+              something like the role asked about.
+    context   the words are only in their headline, company or skills: they
+              work in a related area or list a related skill. A data
+              scientist at a real estate marketplace matches "real estate
+              agent" this way, and must never be called a partial agent.
+    semantic  no query word anywhere; the embedding alone put them here,
+              which only a strong hit is allowed to do.
+    """
+    if any("position" in fields for fields in matched_in.values()):
+        return "role"
+    if matched_in:
+        return "context"
+    return "semantic"
+
+
 _BAND_ORDER = {"strong": 0, "moderate": 1, "weak": 2}
 
 
 def band_hits(hits: List[Dict[str, Any]], query: str, min_similarity: float = 0.0) -> List[Dict[str, Any]]:
-    """Label every hit in place with `matched_on` and `relevance`. Hits under
-    `min_similarity` are weak whatever they match on."""
+    """Label every hit in place with `matched_on`, `matched_in`, `match_kind`
+    and `relevance`. Hits under `min_similarity` are weak whatever they
+    match on."""
     terms = query_terms(query)
     for hit in hits:
-        matched = evidence_in(profile_text(hit), terms)
+        matched_in = evidence_by_field(hit, terms)
+        matched = list(matched_in)
         hit["matched_on"] = matched
+        hit["matched_in"] = matched_in
+        hit["match_kind"] = match_kind(matched_in)
         similarity = float(hit.get("similarity", 0.0))
         hit["relevance"] = (
             "weak" if similarity < min_similarity else relevance_band(similarity, matched, terms)
