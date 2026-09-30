@@ -90,6 +90,58 @@
       }
     },
     {
+      "id": "search-unrelated",
+      "question": "Do we have any underwater welders in the pipeline?",
+      "expected_tools": [
+        "search_candidates"
+      ],
+      "forbidden_tools": [
+        "match_to_job"
+      ],
+      "checks": {
+        "must_not_match": [
+          "partial(ly)? match|closest|nearest|weak match|loosely"
+        ]
+      },
+      "checks_by_outcome": {
+        "default": {
+          "require_link": true
+        },
+        "empty": {
+          "must_match": [
+            "nobody|no one|no (strong |close |real |matching )?(match|candidates?|people|one)|not find|found no|don.t have|do not have|nothing (came up|matched)|none (in|of)"
+          ],
+          "must_not_match": [
+            "\\[[^\\]]+\\]\\(/candidates/"
+          ]
+        },
+        "search_degraded": {
+          "must_match": [
+            "unavailable|could not|couldn't|temporarily|try again"
+          ],
+          "must_not_match": [
+            "nobody|no one|no candidates|no match"
+          ]
+        }
+      },
+      "replay": {
+        "calls": [
+          {
+            "tool": "search_candidates",
+            "arguments": {
+              "query": "underwater welders",
+              "limit": 5
+            }
+          }
+        ],
+        "reply": {
+          "default": "Underwater welders in the pipeline, by relevance: {{links:candidates}}.",
+          "empty": "Nobody in the pipeline matches underwater welders, so there is no one to suggest for this. Candidate searches for engineering, data, and product roles will find people.",
+          "search_degraded": "Search is temporarily unavailable because the embedding service could not be reached, so I could not check anyone for this. Please try again in a few minutes."
+        }
+      }
+    },
+    {
       "id": "strongest-for-job",
       "question": "Who is our strongest candidate for the {{cast:job}} role, and why?",
       "expected_tools": ["match_to_job"],

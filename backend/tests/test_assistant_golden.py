@@ -31,7 +31,8 @@ from backend.services.assistant_tools import (
     SEARCH_DEGRADED_NOTE,
     build_assistant_tools,
     location_miss_note,
-    weak_match_note,
+    no_match_note,
+    partial_match_note,
 )
 from backend.services.market_research_service import MarketResearchService
 from backend.services.tool_loop import run_tool_loop
@@ -172,7 +173,8 @@ class TestPromptHygiene:
         SALARY_UNAVAILABLE_NOTE,
         SEARCH_DEGRADED_NOTE,
         location_miss_note("Seattle", "Python engineers"),
-        weak_match_note("Python engineers"),
+        no_match_note("Python engineers"),
+        partial_match_note("Python engineers"),
     )
 
     def test_notes_read_as_sentences_to_a_visitor(self):

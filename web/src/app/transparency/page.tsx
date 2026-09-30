@@ -110,8 +110,8 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
             <CardTitle>Trace a search</CardTitle>
             <p className="text-sm text-slate-500">
               The assistant&apos;s candidate search, run exactly as the assistant
-              runs it: what was embedded, how close each person came, and who
-              the relevance floor kept out.
+              runs it: what was embedded, how close each person came, which words
+              they matched on, and who was kept out and why.
             </p>
           </CardHeader>
           <CardContent>
@@ -306,11 +306,12 @@ function HowAScoreIsBuilt({ policy }: { policy: ScoringPolicy }) {
           <p className="mt-4 text-xs text-slate-500">
             Semantic search is separate from ranking: it embeds{" "}
             {policy.search_embedded_fields.join(", ")} and drops anything under a cosine
-            similarity of {policy.search_relevance_floor}. Hits at or above{" "}
-            {policy.search_relevance_bands.strong} are labelled strong,{" "}
-            {policy.search_relevance_bands.moderate} moderate, and the rest weak, so the
-            assistant can say &quot;no strong match&quot; instead of dressing up the closest
-            available person.
+            similarity of {policy.search_relevance_floor}. A hit at or above{" "}
+            {policy.search_relevance_bands.strong} is strong. Below that it is moderate
+            only when it is at or above {policy.search_relevance_bands.moderate} and a
+            specific word from the search appears in the same fields; everything else
+            is weak and never reaches the assistant, so an unrelated title cannot be
+            dressed up as a partial match.
           </p>
         </div>
       </CardContent>
@@ -500,8 +501,9 @@ async function SearchTraceResults({ q, location }: { q: string; location?: strin
         ) : (
           <>No place filter.</>
         )}{" "}
-        Floor {trace.relevance_floor}; strong at {trace.relevance_bands.strong}, moderate at{" "}
-        {trace.relevance_bands.moderate}.
+        Floor {trace.relevance_floor}; strong at {trace.relevance_bands.strong}; moderate at{" "}
+        {trace.relevance_bands.moderate} plus a word from the search found in{" "}
+        {trace.evidence_fields.join(", ")}; weak otherwise, and weak is kept out.
       </p>
 
       {trace.embedding_degraded ? (
@@ -513,12 +515,8 @@ async function SearchTraceResults({ q, location }: { q: string; location?: strin
       ) : null}
 
       <HitTable title={`Returned to the assistant (${trace.hits.length})`} hits={trace.hits} />
-      {trace.dropped_by_floor.length ? (
-        <HitTable
-          title={`Kept out by the relevance floor (${trace.dropped_by_floor.length})`}
-          hits={trace.dropped_by_floor}
-          muted
-        />
+      {trace.kept_out.length ? (
+        <HitTable title={`Kept out (${trace.kept_out.length})`} hits={trace.kept_out} muted />
       ) : null}
     </div>
   );
@@ -529,7 +527,7 @@ function HitTable({ title, hits, muted = false }: { title: string; hits: SearchH
     <div>
       <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">{title}</h3>
       {hits.length === 0 ? (
-        <p className="text-slate-500">Nobody cleared the floor.</p>
+        <p className="text-slate-500">Nobody matched.</p>
       ) : (
         <ul className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
           {hits.map((hit) => (
@@ -546,6 +544,9 @@ function HitTable({ title, hits, muted = false }: { title: string; hits: SearchH
               <span className="shrink-0 text-right">
                 <span className="block font-semibold tabular-nums">{similarity(hit.similarity)}</span>
                 <span className={cn("text-xs", bandClass(hit.relevance))}>{hit.relevance}</span>
+                <span className="block text-xs text-slate-500">
+                  {hit.matched_on.length ? `matched on ${hit.matched_on.join(", ")}` : "no word in common"}
+                </span>
               </span>
             </li>
           ))}
@@ -611,10 +612,11 @@ function Principles() {
             similarity between two job titles, and category rules cap what that similarity
             can do. Language models parse resumes and answer chat; they never order people.
           </Principle>
-          <Principle title="Weak matches are called weak.">
-            Search results below a similarity floor are dropped, and the rest are banded so
-            the assistant says &ldquo;no strong match&rdquo; instead of presenting the
-            closest available person as a fit.
+          <Principle title="Weak matches are never shown.">
+            A search result is a match only when the similarity is high or a word from the
+            search actually appears in the profile, and the assistant is told which words.
+            Everyone else is kept out, so the closest available person is never presented
+            as a partial match for something unrelated.
           </Principle>
           <Principle title="Say when the model is degraded.">
             If the embedding endpoint is unreachable the system keeps working on placeholder
@@ -673,9 +675,9 @@ function KnownLimits() {
             far it can move a score, not to make it fair.
           </li>
           <li>
-            <span className="font-medium">A weak signal is still a signal.</span> The floor and
-            the bands make the assistant honest about weak results; they do not make weak
-            results good.
+            <span className="font-medium">A shared word is not a fit.</span> A moderate match
+            overlaps with the search on the words shown and nothing more; the banding makes
+            the assistant honest about that, it does not make the overlap meaningful.
           </li>
         </ul>
       </CardContent>

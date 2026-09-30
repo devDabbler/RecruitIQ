@@ -78,7 +78,7 @@ def test_policy_publishes_the_tiers_the_ranker_uses(admin_client):
         assert field in never
     assert policy["fields_not_collected"]
     assert policy["search_relevance_floor"] == 0.35
-    assert policy["search_relevance_bands"] == {"strong": 0.55, "moderate": 0.45}
+    assert policy["search_relevance_bands"] == {"strong": 0.65, "moderate": 0.45}
 
 
 def test_policy_constants_match_the_enhancer():
@@ -314,8 +314,13 @@ def test_search_trace_shape_and_degradation_flag(admin_client):
     assert body["relevance_floor"] == 0.35
     assert body["location_ignored"] is True  # "anywhere" is not a filter
     assert body["location_patterns"] == []
+    assert body["evidence_fields"] == ["position", "company", "headline", "skills"]
     for hit in body["hits"]:
+        # What the assistant is given is never weak, and a moderate hit
+        # always says which words it matched on.
         assert hit["similarity"] >= body["relevance_floor"]
+        assert hit["relevance"] in ("strong", "moderate")
+        assert hit["relevance"] == "strong" or hit["matched_on"]
+    for hit in body["kept_out"]:
         assert hit["relevance"] in ("strong", "moderate", "weak")
-    for hit in body["dropped_by_floor"]:
-        assert hit["similarity"] < body["relevance_floor"]
+        assert isinstance(hit["matched_on"], list)

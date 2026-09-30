@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from backend.models.models import Candidate, Job
-from backend.services.assistant_tools import RELEVANCE_BANDS, relevance_band
+from backend.services.search_relevance import EVIDENCE_FIELDS, RELEVANCE_BANDS, SEARCH_POOL_SIZE, rank_hits
 from backend.services.matching_integrator import (
     CROSS_DOMAIN_FINAL_PENALTY,
     NOT_COLLECTED_FIELDS,
@@ -187,6 +187,7 @@ class SearchHit(BaseModel):
     location: Optional[str] = None
     similarity: float
     relevance: str
+    matched_on: List[str] = []
     embedded_text: Optional[str] = None
 
 
@@ -198,9 +199,10 @@ class SearchTraceResponse(BaseModel):
     relevance_floor: float
     relevance_bands: Dict[str, float]
     embedded_fields: List[str]
+    evidence_fields: List[str]
     embedding_degraded: bool
     hits: List[SearchHit]
-    dropped_by_floor: List[SearchHit]
+    kept_out: List[SearchHit]
 
 
 # --- endpoints --------------------------------------------------------------
@@ -300,12 +302,16 @@ def search_trace(
     limit: int = Query(8, ge=1, le=50),
     db: Session = Depends(get_db),
 ) -> SearchTraceResponse:
-    """The assistant's candidate search, with what the embedding saw and what
-    the relevance floor removed.
+    """The assistant's candidate search, with what the embedding saw, what
+    each hit matched on, and who was kept out.
 
-    Runs the same query twice: once as the assistant runs it (with the floor)
-    and once without, so the second list is exactly the set of "closest
-    available people" the floor keeps the model from presenting as matches.
+    Runs the search the way the assistant runs it: a pool of the closest
+    people by cosine similarity (without the floor, so the trace can show
+    what the floor removes), banded and re-ranked by search_relevance.
+    `hits` is what the assistant is given; `kept_out` is everyone else in
+    the pool, each labelled with the band and the words they matched on,
+    so a visitor can see why a plumber search returns nobody instead of
+    the closest data engineer.
     """
     from backend.services.service_registry import get_registry
     from backend.services.vector_search_service import VectorSearchService
@@ -317,12 +323,7 @@ def search_trace(
     try:
         embedding_model = registry.llm_service.get_embedding_model()
         service = VectorSearchService(embedding_model)
-        floored = service.search_candidates_by_text(
-            db, q, limit=limit, location=effective_location, min_similarity=MIN_SEARCH_RELEVANCE
-        )
-        unfloored = service.search_candidates_by_text(
-            db, q, limit=limit, location=effective_location
-        )
+        pool = service.search_candidates_by_text(db, q, limit=SEARCH_POOL_SIZE, location=effective_location)
     except Exception as exc:  # noqa: BLE001 - the tunnel being down is a 503, not a 500
         logger.warning("search-trace: embedding unavailable: %s", exc)
         raise HTTPException(
@@ -330,10 +331,10 @@ def search_trace(
             detail="The embedding model is not reachable, so the search cannot be traced right now.",
         )
 
-    shown = {hit["id"] for hit in floored}
-    dropped = [hit for hit in unfloored if hit["id"] not in shown]
+    hits, kept_out = rank_hits(pool, q, limit, MIN_SEARCH_RELEVANCE)
+    kept_out = kept_out[:limit]
 
-    texts = _embedded_texts(db, [hit["id"] for hit in floored + dropped])
+    texts = _embedded_texts(db, [hit["id"] for hit in hits + kept_out])
     return SearchTraceResponse(
         query=q,
         location_filter=location,
@@ -342,9 +343,10 @@ def search_trace(
         relevance_floor=MIN_SEARCH_RELEVANCE,
         relevance_bands=dict(RELEVANCE_BANDS),
         embedded_fields=["current_position", "current_company", "headline", "skills"],
+        evidence_fields=list(EVIDENCE_FIELDS),
         embedding_degraded=_degraded(embedding_model),
-        hits=[_search_hit(hit, texts) for hit in floored],
-        dropped_by_floor=[_search_hit(hit, texts) for hit in dropped],
+        hits=[_search_hit(hit, texts) for hit in hits],
+        kept_out=[_search_hit(hit, texts) for hit in kept_out],
     )
 
 
@@ -437,6 +439,7 @@ def _search_hit(hit: Dict[str, Any], texts: Dict[str, str]) -> SearchHit:
         headline=hit.get("headline"),
         location=hit.get("location"),
         similarity=hit["similarity"],
-        relevance=relevance_band(hit["similarity"]),
+        relevance=hit["relevance"],
+        matched_on=list(hit.get("matched_on", [])),
         embedded_text=texts.get(hit["id"]),
     )

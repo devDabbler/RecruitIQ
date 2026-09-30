@@ -1587,12 +1587,16 @@ export interface paths {
         };
         /**
          * Search Trace
-         * @description The assistant's candidate search, with what the embedding saw and what
-         *     the relevance floor removed.
+         * @description The assistant's candidate search, with what the embedding saw, what
+         *     each hit matched on, and who was kept out.
          *
-         *     Runs the same query twice: once as the assistant runs it (with the floor)
-         *     and once without, so the second list is exactly the set of "closest
-         *     available people" the floor keeps the model from presenting as matches.
+         *     Runs the search the way the assistant runs it: a pool of the closest
+         *     people by cosine similarity (without the floor, so the trace can show
+         *     what the floor removes), banded and re-ranked by search_relevance.
+         *     `hits` is what the assistant is given; `kept_out` is everyone else in
+         *     the pool, each labelled with the band and the words they matched on,
+         *     so a visitor can see why a plumber search returns nobody instead of
+         *     the closest data engineer.
          */
         get: operations["search_trace_api_transparency_search_trace_get"];
         put?: never;
@@ -2810,6 +2814,11 @@ export interface components {
             id: string;
             /** Location */
             location?: string | null;
+            /**
+             * Matched On
+             * @default []
+             */
+            matched_on: string[];
             /** Name */
             name: string;
             /** Position */
@@ -2836,14 +2845,16 @@ export interface components {
         };
         /** SearchTraceResponse */
         SearchTraceResponse: {
-            /** Dropped By Floor */
-            dropped_by_floor: components["schemas"]["SearchHit"][];
             /** Embedded Fields */
             embedded_fields: string[];
             /** Embedding Degraded */
             embedding_degraded: boolean;
+            /** Evidence Fields */
+            evidence_fields: string[];
             /** Hits */
             hits: components["schemas"]["SearchHit"][];
+            /** Kept Out */
+            kept_out: components["schemas"]["SearchHit"][];
             /** Location Filter */
             location_filter?: string | null;
             /** Location Ignored */

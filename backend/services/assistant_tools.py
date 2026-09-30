@@ -20,6 +20,16 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+# Relevance banding (strong/moderate/weak, with the lexical-evidence rule for
+# "moderate") lives in search_relevance; RELEVANCE_BANDS and relevance_band
+# are re-exported because the transparency endpoint imports them from here.
+from backend.services.search_relevance import (  # noqa: F401
+    RELEVANCE_BANDS,
+    SEARCH_POOL_SIZE,
+    rank_hits,
+    relevance_band,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,9 +71,6 @@ def _job_summary(j, include_details: bool = False) -> dict:
     return data
 
 
-# Cosine similarity floors for each relevance band. Published by the
-# transparency endpoint, so keep them here rather than inline.
-RELEVANCE_BANDS: Dict[str, float] = {"strong": 0.55, "moderate": 0.45}
 
 # Floor for get_job's semantic fallback. Measured on the seed jobs with real
 # nomic-embed vectors (2026-09-30): paraphrases of real titles score 0.60 and
@@ -118,13 +125,25 @@ def location_miss_note(location: str, query: str) -> str:
     )
 
 
-def weak_match_note(query: str) -> str:
-    """Every hit cleared the relevance floor but none is a real match."""
+def no_match_note(query: str) -> str:
+    """Nothing in the pool is a match: the closest people were unrelated
+    roles that only share general vocabulary with the search. Until
+    2026-09-30 those people were returned with a "weak match" note, and the
+    model presented a data engineer as a partial match for a plumber."""
     return (
-        f"Every candidate here is only a weak match for {query}, so there is no "
-        "strong match for this search. Each one's relevance shows how loosely it "
-        "matched, and only what appears in their position, company, or headline "
-        "is evidence of a specific skill or experience."
+        f"Nobody in the pipeline matches {query}. The search found only unrelated "
+        "roles that share general vocabulary with it, so there is no one to "
+        "suggest for it."
+    )
+
+
+def partial_match_note(query: str) -> str:
+    """Every hit is moderate: a real overlap on the words in matched_on, and
+    nothing more."""
+    return (
+        f"No one is a strong match for {query}. Each candidate here matched only "
+        "on the words listed in their matched_on, so each is a partial match on "
+        "exactly those points and nothing else."
     )
 
 # ILIKE treats % and _ as wildcards. Before this, get_candidate("%") returned
@@ -160,24 +179,6 @@ def clamp_limit(value: Any, default: int) -> int:
     except (TypeError, ValueError):
         limit = default
     return max(1, min(limit, MAX_TOOL_LIMIT))
-
-
-def relevance_band(similarity: float) -> str:
-    if similarity >= RELEVANCE_BANDS["strong"]:
-        return "strong"
-    if similarity >= RELEVANCE_BANDS["moderate"]:
-        return "moderate"
-    return "weak"
-
-
-def _label_relevance(results: List[dict]) -> List[dict]:
-    """Tag each search hit with a coarse relevance band derived from its raw
-    cosine similarity. Small tool-calling models are bad at reading a raw
-    0.41 and correctly concluding "weak"; a plain-English label they can
-    quote back is what actually changes the wording of the final answer."""
-    for r in results:
-        r["relevance"] = relevance_band(r["similarity"])
-    return results
 
 
 def build_assistant_tools(db: Session) -> List[Tool]:
@@ -233,24 +234,26 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             # that nobody matched the location "Anywhere".
             location = None
         service = _vector_service()
-        # min_similarity: with a narrow location filter the pool can be a
-        # handful of people, and ORDER BY/LIMIT still returns that many rows
-        # even if none of them actually relate to the query -- the "closest
-        # of 3 unrelated profiles" read to a recruiter as a confirmed match.
-        results = _label_relevance(
-            service.search_candidates_by_text(
-                db, query, limit=limit, location=location, min_similarity=MIN_SEARCH_RELEVANCE
+
+        def _matches(place: Optional[str]) -> List[dict]:
+            # Pull a pool well past `limit`, then band and re-rank it. The
+            # embedding orders by meaning; the banding keeps only hits that
+            # are strong by similarity or carry a word from the query in
+            # their profile (search_relevance). ORDER BY + LIMIT alone always
+            # returns the closest available rows, and with an unrelated
+            # query or a narrow location filter "closest" meant a data
+            # engineer presented as a partial match for a plumber.
+            pool = service.search_candidates_by_text(
+                db, query, limit=SEARCH_POOL_SIZE, location=place, min_similarity=MIN_SEARCH_RELEVANCE
             )
-        )
+            shown, _kept_out = rank_hits(pool, query, limit, MIN_SEARCH_RELEVANCE)
+            return shown
+
+        results = _matches(location)
         if not results and location and "," in location:
             # "Seattle, WA" misses rows stored as plain "Seattle"; the city
             # alone is the broadest substring that is still a location match.
-            city = location.split(",")[0].strip()
-            results = _label_relevance(
-                service.search_candidates_by_text(
-                    db, query, limit=limit, location=city, min_similarity=MIN_SEARCH_RELEVANCE
-                )
-            )
+            results = _matches(location.split(",")[0].strip())
         out = {"query": query, "candidates": results, "count": len(results)}
         if location:
             out["location_filter"] = location
@@ -258,21 +261,18 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 # Do the no-filter follow-up here instead of asking the model
                 # to: small models announce "let me search again" as their
                 # final answer and never make the second call.
-                elsewhere = _label_relevance(
-                    service.search_candidates_by_text(db, query, limit=limit, min_similarity=MIN_SEARCH_RELEVANCE)
-                )
+                elsewhere = _matches(None)
                 out["candidates_elsewhere"] = elsewhere
-                out["note"] = location_miss_note(location, query)
-        if results and all(r["relevance"] == "weak" for r in results):
-            # Everything that cleared the relevance floor is still a weak
-            # match (this is the common case for a narrow location filter:
-            # the whole pool is 2-3 people and none of them is a real fit).
-            # Without this, a model reads "count: 2" as "found 2 matches" and
-            # presents them with the confidence of a real hit.
-            out["note"] = weak_match_note(query)
+                out["note"] = location_miss_note(location, query) if elsewhere else no_match_note(query)
+        elif not results:
+            out["note"] = no_match_note(query)
+        if results and all(r["relevance"] == "moderate" for r in results):
+            # Without this, a model reads "count: 3" as "found 3 matches" and
+            # presents people who share one word with the search as fits.
+            out["note"] = partial_match_note(query)
         if _search_degraded():
-            # Checked last so it wins over the location and weak-match notes:
-            # with a placeholder query vector those notes describe noise.
+            # Checked last so it wins over the other notes: with a placeholder
+            # query vector those notes describe noise.
             out["candidates"] = []
             out["count"] = 0
             out.pop("candidates_elsewhere", None)
@@ -498,11 +498,13 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "experience'). Matches by meaning, not keywords. "
                 "For place-based asks like 'python developers in Seattle', put the skills/role in "
                 "query and the place in location; do not put the place in query. "
-                "Each result carries a 'relevance' band (strong/moderate/weak): a 'weak' result is "
-                "the closest available person, not a confirmed match, and must not be described as "
-                "having the requested skill or experience unless it actually shows up in their "
-                "position, company, or headline. If the result has search_degraded true, search "
-                "is temporarily unavailable: say that, never that nobody matches."
+                "Each result carries a 'relevance' band and 'matched_on', the words from the query "
+                "found in that person's position, company, headline, or skills. 'strong' means the "
+                "profile is about what was asked; 'moderate' means it overlaps only on the matched_on "
+                "words and is a partial match on exactly those points, nothing more. People who "
+                "match on nothing are never returned: count 0 with a note means nobody in the "
+                "pipeline matches, and that is the answer. If the result has search_degraded true, "
+                "search is temporarily unavailable: say that, never that nobody matches."
             ),
             parameters={
                 "type": "object",

@@ -99,6 +99,12 @@ async def run_case(settings, case, cast, verbose):
 
 
 async def main(argv=None):
+    # A model answer with an emoji in it killed the run on a cp1252 Windows
+    # console (2026-09-30), so print whatever the model said instead of
+    # crashing on the tenth case.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--tier", choices=sorted(TIERS), action="append", help="tier(s) to run; default all")
     parser.add_argument("--case", action="append", help="case id(s) to run; default all")
