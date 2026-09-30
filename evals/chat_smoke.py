@@ -23,17 +23,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from backend.routers.assistant import SYSTEM_PROMPT  # noqa: E402
+from backend.services.assistant_answer import finalize_answer  # noqa: E402
 from backend.services.assistant_tools import build_assistant_tools  # noqa: E402
 from backend.services.tool_loop import run_tool_loop  # noqa: E402
 from backend.utils.config import get_settings  # noqa: E402
 from backend.utils.database import SessionLocal  # noqa: E402
+from evals.assistant_checks import links_in  # noqa: E402
 from evals.assistant_golden import (  # noqa: E402
     cast_text,
     check_case,
     discover_cast,
     load_cases,
     outcome_of,
-    recording_tools,
 )
 
 
@@ -61,7 +62,6 @@ TIERS = {
 
 async def run_case(settings, case, cast, verbose):
     db = SessionLocal()
-    results = []
     started = time.monotonic()
     try:
         question = cast_text(case.question, cast)
@@ -70,22 +70,28 @@ async def run_case(settings, case, cast, verbose):
                 settings,
                 system=SYSTEM_PROMPT,
                 message=question,
-                tools=recording_tools(build_assistant_tools(db), results),
+                tools=build_assistant_tools(db),
             )
         except Exception as e:  # noqa: BLE001
             print(f"  FAIL {case.id:<20} {time.monotonic() - started:5.1f}s  {type(e).__name__}: {e}")
             return False
         tools_used = [t["tool"] for t in result.tool_trace]
-        failures = check_case(case, result.text, results, tools_used, cast)
+        results = result.tool_results
+        # Judge what the visitor sees: the endpoints normalise dashes and link
+        # returned names after the model answers, and so does this.
+        answer = finalize_answer(result.text, results)
+        added = len(links_in(answer)) - len(links_in(result.text))
+        failures = check_case(case, answer, results, tools_used, cast)
         status = "ok  " if not failures else "FAIL"
+        note = f" (server added {added} link(s))" if added else ""
         print(
             f"  {status} {case.id:<20} {result.latency_ms / 1000:5.1f}s  "
-            f"tools={tools_used} outcome={outcome_of(results)} model={result.model}"
+            f"tools={tools_used} outcome={outcome_of(results)} model={result.model}{note}"
         )
         for failure in failures:
             print(f"       - {failure}")
         if verbose or failures:
-            text = result.text.strip().replace("\n", "\n       | ")
+            text = answer.strip().replace("\n", "\n       | ")
             print(f"       | {text[:1200]}")
         return not failures
     finally:

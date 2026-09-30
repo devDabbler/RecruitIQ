@@ -35,6 +35,9 @@ to real ids and quotes real numbers, which is what makes the checks bite:
     {{link:job:Title}}        [Title](/jobs/<id>) from the results
     {{links:candidates}}      every returned candidate, linked (max 5)
     {{links:jobs}}            every returned job, linked (max 8)
+
+Outcomes (`outcome_of`): search_degraded, error, unavailable, elsewhere (a
+location search that missed but found people in other places), empty, default.
 """
 from __future__ import annotations
 
@@ -119,6 +122,11 @@ def outcome_of(results: List[Any]) -> str:
         return "unavailable"
     if dicts:
         last = dicts[-1]
+        if last.get("count") == 0 and last.get("candidates_elsewhere"):
+            # A location search that missed but found people elsewhere: the
+            # honest answer names them and where they are, which is a
+            # different reply (and different checks) from a true miss.
+            return "elsewhere"
         if last.get("count") == 0 or last.get("matches") == []:
             return "empty"
     return "default"
@@ -204,41 +212,26 @@ def check_case(
     return failures
 
 
-def recording_tools(tools: list, results: List[Any]) -> list:
-    """Copies of the assistant tools that append every result to `results`.
-
-    The tool loop's trace records which tools ran, not what they returned,
-    and the checks need the returned ids and names.
-    """
-    from backend.services.assistant_tools import Tool
-
-    def wrap(tool):
-        async def run(**kwargs):
-            result = await tool.run(**kwargs)
-            results.append(result)
-            return result
-
-        return Tool(name=tool.name, description=tool.description, parameters=tool.parameters, run=run)
-
-    return [wrap(t) for t in tools]
-
-
-def replay_runner(case: Case, cast: Dict[str, str], results: List[Any]) -> Callable:
+def replay_runner(case: Case, cast: Dict[str, str]) -> Callable:
     """A tool-loop runner that plays the case's recorded tool calls.
 
     Drop-in for an entry of tool_loop._RUNNERS: it narrates each call through
     the trace exactly as a real tier would, executes it against the real
-    tools, and then answers from the rendered reply template.
+    tools, and then answers from the reply template rendered over what the
+    tools returned. The loop's result carries those returns as tool_results,
+    already dash-normalised by execute_tool, which is what the checks read.
     """
     from backend.services.assistant_tools import execute_tool
 
     async def runner(settings, system, messages, tools, trace):
+        results: List[Any] = []
         for call in case.replay_calls:
             name = call["tool"]
             args = cast_value(call.get("arguments", {}), cast)
             await trace.tool_started(name, args)
             result = await execute_tool(tools, name, args)
             await trace.tool_finished(name, args, result)
+            results.append(result)
         return render_reply(cast_value(case.replay_reply, cast), results)
 
     return runner

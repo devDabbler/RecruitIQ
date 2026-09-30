@@ -26,7 +26,13 @@ LINK_RE = re.compile(r"\[([^\]\n]+)\]\(([^)\s]+)\)")
 # Mirrors INTERNAL_HREF in web/src/lib/chat-markdown.ts: anything else renders
 # as plain text in the chat bubble, so it is a broken claim, not a link.
 INTERNAL_HREF_RE = re.compile(r"^/(candidates|jobs)/([A-Za-z0-9_-]+)$")
-INT_RE = re.compile(r"(?<![\w.$/-])(\d+)(?![\w.%-])")
+# A bare count in prose. Skips decimals ("3.5"), money ("$80,000"), percentages
+# ("81%"), ids in paths ("/jobs/7") and word-attached digits ("qwen3:8b" is
+# "3:8b", "1st"). A sentence-final "57." used to be skipped too, because the
+# trailing-period lookahead meant to catch decimals also caught full stops.
+INT_RE = re.compile(r"(?<![\w.$/,-])(\d{1,3}(?:,\d{3})+|\d+)(?![\w%-])(?!\.\d)")
+# Keys whose integer value is an identifier, not a count a visitor could quote.
+ID_KEYS = {"id", "job_id", "candidate_id"}
 
 
 @dataclass
@@ -73,7 +79,8 @@ def entities_in(results: Iterable[Any]) -> Entities:
 
 
 def numbers_in(results: Iterable[Any]) -> set:
-    """Every integer value anywhere in the results (floats rounded)."""
+    """Every integer value anywhere in the results (floats rounded), except
+    ids: a job with id 7 must not license "7 open jobs"."""
     numbers = set()
 
     def visit(value: Any):
@@ -84,8 +91,9 @@ def numbers_in(results: Iterable[Any]) -> set:
         elif isinstance(value, float):
             numbers.add(int(round(value)))
         elif isinstance(value, dict):
-            for v in value.values():
-                visit(v)
+            for k, v in value.items():
+                if k not in ID_KEYS:
+                    visit(v)
         elif isinstance(value, list):
             for v in value:
                 visit(v)
@@ -102,9 +110,46 @@ def strip_links(text: str) -> str:
     return LINK_RE.sub(lambda m: m.group(1), text)
 
 
+_WORD_RE = re.compile(r"[a-z0-9]+")
+
+
+def _words(text: str) -> List[str]:
+    # "Ada Lovelace's" and "the Ada Lovelace" both name Ada Lovelace.
+    words = _WORD_RE.findall(re.sub(r"'s", "", text.lower()))
+    while words and words[0] in ("the", "a", "an"):
+        words.pop(0)
+    return words
+
+
 def _names_agree(label: str, name: str) -> bool:
-    a, b = label.strip().lower(), name.strip().lower()
-    return bool(a) and (a in b or b in a)
+    """Does the link label name this entity?
+
+    The label may be the whole name, a contiguous run of its words ("Ada" or
+    "Lovelace" for Ada Lovelace) or the name followed by up to two words
+    ("Senior Data Engineer role"). It was a character substring test before,
+    which let "Senior Data Engineer" label a link to the Data Engineer job and
+    "Data Engineer" label a link to the Senior one: a wrong-entity claim in
+    both directions.
+    """
+    a, b = _words(label), _words(name)
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if len(a) < len(b):
+        return any(b[i : i + len(a)] == a for i in range(len(b) - len(a) + 1))
+    return a[: len(b)] == b and len(a) - len(b) <= 2
+
+
+def _names_another(label: str, ident: str, known: Dict[str, str]) -> Optional[str]:
+    """The name of a different returned entity this label is exactly, if any."""
+    words = _words(label)
+    if words == _words(known[ident]):
+        return None  # the label is this entity's full name, whoever else shares it
+    for other_id, other_name in known.items():
+        if other_id != ident and words == _words(other_name):
+            return other_name
+    return None
 
 
 def check_answer(
@@ -149,6 +194,10 @@ def check_answer(
             failures.append(f"link {href!r} points at an id no tool returned")
         elif not _names_agree(label, known[ident]):
             failures.append(f"link label {label!r} does not name {known[ident]!r} ({href})")
+        else:
+            other = _names_another(label, ident, known)
+            if other:
+                failures.append(f"link label {label!r} is {other!r}, but {href} is {known[ident]!r}")
 
     lowered = text.lower()
     for phrase in must_mention:
@@ -164,7 +213,7 @@ def check_answer(
     if numbers_from_results:
         allowed = numbers_in(results)
         for raw in INT_RE.findall(strip_links(text)):
-            if int(raw) not in allowed:
+            if int(raw.replace(",", "")) not in allowed:
                 failures.append(f"number {raw} appears in the answer but in no tool result")
 
     return failures
