@@ -130,9 +130,20 @@ class VectorSearchService:
         content = _job_text(job)
         if not content:
             return False
-        job.embedding = self.embedding_model.embed_query(content)
+        vector = self.embedding_model.embed_query(content)
+        if self._degraded():
+            # Never persist a placeholder: a stored random vector looks like a
+            # real embedding forever, and every later lookup silently ranks
+            # against noise (six of eight dev jobs were in that state).
+            logger.warning(f"store_job_embedding: embeddings degraded, leaving job {job_id} unembedded")
+            return False
+        job.embedding = vector
         db.commit()
         return True
+
+    def _degraded(self) -> bool:
+        """True when the adapter's most recent call fell back to placeholders."""
+        return bool(getattr(self.embedding_model, "is_degraded", False))
 
     def store_candidate_embedding(self, db, candidate_id: str) -> bool:
         from backend.models.models import Candidate
@@ -144,7 +155,13 @@ class VectorSearchService:
         content = _candidate_text(candidate)
         if not content:
             return False
-        candidate.embedding = self.embedding_model.embed_query(content)
+        vector = self.embedding_model.embed_query(content)
+        if self._degraded():
+            logger.warning(
+                f"store_candidate_embedding: embeddings degraded, leaving candidate {candidate_id} unembedded"
+            )
+            return False
+        candidate.embedding = vector
         db.commit()
         return True
 

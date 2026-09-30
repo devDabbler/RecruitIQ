@@ -21,14 +21,17 @@ import { cn } from "@/lib/utils";
 
 // One suggestion per capability the assistant demos well; a random handful is
 // shown per visit so repeat visitors see the breadth, not the same three chips.
+// Job titles here must exist in scripts/seed_demo.py: a chip naming a job the
+// ATS does not have makes the demo's first click an honest "no such job"
+// answer at best (backend/tests/test_assistant_honesty.py checks this).
 const SUGGESTION_POOL = [
-  "Who are the strongest candidates for the Senior Backend Engineer role?",
+  "Who are the strongest candidates for the Gen AI Engineer role?",
   "Find Python engineers in Seattle",
   "How many candidates are in the interviewing stage?",
   "Which skills show up most often across the pipeline?",
   "What is the market salary for a Data Engineer in Austin?",
   "Show me machine learning candidates and where they are located",
-  "Why is our top candidate a good fit for the NLP Engineer role?",
+  "Why is Elena Vasquez a good fit for the Senior Data Scientist role?",
   "Summarize the pipeline for me",
 ];
 

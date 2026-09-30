@@ -562,11 +562,26 @@ class MarketResearchService:
             Comprehensive salary benchmark data
         """
         try:
+            # No search backend means every search below returns nothing, and
+            # asking the LLM to "analyze" nothing produced confident invented
+            # salary tiers labelled high quality (assistant audit 2026-09-30,
+            # F1). Say so instead of guessing; the analysis LLM is never called
+            # without real search results behind it.
+            if not getattr(self.web_search_service, "has_backend", True):
+                return self._unavailable(
+                    job_title, location, "no web search backend is configured"
+                )
+
             # Generate experience-specific search queries
             search_queries = self._generate_search_queries(job_title, location)
 
             # Collect real-time market data
             market_data = await self._collect_market_data(search_queries)
+
+            if not any(market_data.values()):
+                return self._unavailable(
+                    job_title, location, "web search returned no salary results"
+                )
 
             # Analyze and structure the data
             benchmark_data = await self._analyze_salary_data(
@@ -585,6 +600,19 @@ class MarketResearchService:
                 "status": "error",
                 "message": f"Failed to generate salary benchmark: {str(e)}"
             }
+
+    @staticmethod
+    def _unavailable(job_title: str, location: str, reason: str) -> Dict[str, Any]:
+        """The honest answer when there is no market data to analyze."""
+        message = f"Live salary data is not available for {job_title} in {location}: {reason}."
+        return {
+            "status": "unavailable",
+            "reason": reason,
+            "message": message,
+            "timestamp": datetime.now().isoformat(),
+            "job_title": job_title,
+            "location": location,
+        }
 
     def _generate_search_queries(self, job_title: str, location: str) -> Dict[str, str]:
         """Generate experience-specific search queries."""
@@ -741,11 +769,12 @@ class MarketResearchService:
         # Add location-specific adjustments
         location_multiplier = self.location_multipliers.get(location, 1.0)
 
-        # Add metadata
+        # Add metadata. No freshness claim: the inputs are whatever the web
+        # search returned, and the LLM's own data_quality field already says
+        # how much it trusted them.
         analysis_data["metadata"] = {
             "location_multiplier": location_multiplier,
-            "analysis_method": "AI-powered market research",
-            "data_freshness": "real-time"
+            "analysis_method": "LLM summary of web search results",
         }
 
         return analysis_data

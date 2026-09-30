@@ -64,9 +64,19 @@ class TestLookupTools:
 
     def test_get_job_not_found(self, db, tools):
         result = run(tools["get_job"].run(job="zzz-not-a-job-zzz"))
-        # Semantic fallback may still return the closest job; accept either an
-        # error or a well-formed job dict, never an exception.
-        assert "error" in result or "id" in result
+        # Below the semantic floor (or with embeddings degraded) the tool must
+        # say so and list the real titles, never substitute the nearest job.
+        assert "error" in result and "id" not in result
+        assert isinstance(result["open_jobs"], list)
+
+    def test_get_job_nonsense_title_is_refused(self, db, tools):
+        from backend.models.models import Job
+
+        if db.query(Job).filter(Job.embedding.isnot(None)).count() == 0:
+            pytest.skip("needs jobs with embeddings")
+        result = run(tools["get_job"].run(job="Chief Happiness Officer"))
+        assert "error" in result, result
+        assert "Chief Happiness Officer" in result["note"]
 
     def test_get_candidate_by_name(self, db, tools):
         from backend.models.models import Candidate
@@ -101,6 +111,8 @@ class TestSearchCandidatesLocationFallback:
                 query="software engineer", location="zzz-nowhere-land"
             )
         )
+        if result.get("search_degraded"):
+            pytest.skip("embedding service unreachable; the tool now reports that instead of guessing")
         assert result["count"] == 0 and result["candidates"] == []
         assert result["location_filter"] == "zzz-nowhere-land"
         assert len(result["candidates_elsewhere"]) > 0
@@ -121,6 +133,8 @@ class TestSearchCandidatesLocationFallback:
         result = run(
             tools["search_candidates"].run(query="software engineer", location="Anywhere")
         )
+        if result.get("search_degraded"):
+            pytest.skip("embedding service unreachable; the tool now reports that instead of guessing")
         assert result["count"] > 0
         assert "location_filter" not in result
         assert "candidates_elsewhere" not in result
