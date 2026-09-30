@@ -62,6 +62,15 @@ class WebSearchService:
         self._initialized = True
         logger.info("WebSearchService initialization complete")
         
+    @property
+    def has_backend(self) -> bool:
+        """True when at least one real search API is configured.
+
+        Without a backend every search() returns [] instantly; callers that
+        would otherwise "analyze" empty results must check this first.
+        """
+        return bool((self.google_api_key and self.google_search_engine_id) or self.search_api_key)
+
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10))
     async def search_google(self, query: str, num_results: int = 5) -> List[Dict[str, Any]]:
         """

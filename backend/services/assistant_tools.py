@@ -64,6 +64,31 @@ def _job_summary(j, include_details: bool = False) -> dict:
 # transparency endpoint, so keep them here rather than inline.
 RELEVANCE_BANDS: Dict[str, float] = {"strong": 0.55, "moderate": 0.45}
 
+# Floor for get_job's semantic fallback. Measured on the seed jobs with real
+# nomic-embed vectors (2026-09-30): paraphrases of real titles score 0.60 and
+# up ("the ML role" 0.63, "junior DS" 0.60, "Gen AI" 0.69, "product" 0.63);
+# titles the ATS does not have top out around 0.54 ("Chief Happiness Officer"
+# 0.43, "Accountant" 0.48, "Forklift operator" 0.52, "sales director" 0.54).
+# Below the floor the tool says so and lists the real titles instead of
+# quietly answering about the nearest job.
+MIN_JOB_LOOKUP_RELEVANCE = 0.57
+
+# Notes are written as sentences a visitor could read, because the small
+# local model sometimes repeats a note word for word: "Tell the user that
+# plainly" showed up verbatim in a live answer. The "do not invent" rules
+# live in the tool descriptions and the system prompt instead.
+SEARCH_DEGRADED_NOTE = (
+    "Search is temporarily unavailable because the embedding service could not "
+    "be reached, so this search could not be run and no candidates could be "
+    "checked. It is worth trying again in a few minutes."
+)
+
+SALARY_UNAVAILABLE_NOTE = (
+    "Live salary data is not connected in this demo, so no salary figures are "
+    "available for this role and location. Questions about candidates, jobs, "
+    "matching, and the pipeline still work."
+)
+
 
 def relevance_band(similarity: float) -> str:
     if similarity >= RELEVANCE_BANDS["strong"]:
@@ -94,6 +119,35 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         from backend.services.vector_search_service import VectorSearchService
 
         return VectorSearchService(registry.llm_service.get_embedding_model())
+
+    def _search_degraded() -> bool:
+        """True when the most recent embedding call fell back to placeholders.
+
+        A placeholder query vector is noise: every real row lands below the
+        relevance floor and the honest reading is "search is down", not
+        "nobody matches". The adapter already knows; the tools now ask it.
+        """
+        return bool(getattr(registry.llm_service.get_embedding_model(), "is_degraded", False))
+
+    def _open_job_titles() -> List[dict]:
+        rows = db.query(Job).filter(Job.status == "open").order_by(Job.id).limit(20).all()
+        if not rows:
+            rows = db.query(Job).order_by(Job.id).limit(20).all()
+        return [{"id": j.id, "title": j.title} for j in rows]
+
+    def _no_such_job(job: str, degraded: bool = False) -> dict:
+        out = {
+            "error": f"No job found matching {job!r}",
+            "open_jobs": _open_job_titles(),
+            "note": (
+                f"There is no job titled {job!r} in the ATS. Tell the user that, and offer "
+                "the titles in open_jobs instead. Do not answer about a different job as if "
+                "it were the one asked for."
+            ),
+        }
+        if degraded:
+            out["search_degraded"] = True
+        return out
 
     async def search_candidates(query: str, limit: int = 8, location: Optional[str] = None) -> dict:
         from backend.services.vector_search_service import MIN_SEARCH_RELEVANCE, location_filter_patterns
@@ -156,6 +210,14 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "skill or experience asked for if it actually appears in their "
                 "position, company, or headline, not just because they were returned."
             )
+        if _search_degraded():
+            # Checked last so it wins over the location and weak-match notes:
+            # with a placeholder query vector those notes describe noise.
+            out["candidates"] = []
+            out["count"] = 0
+            out.pop("candidates_elsewhere", None)
+            out["search_degraded"] = True
+            out["note"] = SEARCH_DEGRADED_NOTE
         return out
 
     async def get_candidate(candidate: str) -> dict:
@@ -179,14 +241,28 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             row = db.query(Job).filter(Job.id == int(job)).first()
         if row is None:
             row = db.query(Job).filter(Job.title.ilike(f"%{job}%")).first()
+        if row is not None:
+            return _job_summary(row, include_details=True)
+        # Semantic fallback: "the ML role" should still find Machine Learning
+        # Engineer. Without a floor, any title at all resolved to the nearest
+        # job ("Chief Happiness Officer" -> Senior Data Scientist) and the
+        # assistant answered about it without a word of warning.
+        hits = _vector_service().search_jobs_by_text(db, str(job), limit=1)
+        if _search_degraded():
+            return _no_such_job(job, degraded=True)
+        if not hits or hits[0]["similarity"] < MIN_JOB_LOOKUP_RELEVANCE:
+            return _no_such_job(job)
+        row = db.query(Job).filter(Job.id == hits[0]["id"]).first()
         if row is None:
-            # Semantic fallback: "the ML role" should still find NLP Engineer
-            hits = _vector_service().search_jobs_by_text(db, str(job), limit=1)
-            if hits:
-                row = db.query(Job).filter(Job.id == hits[0]["id"]).first()
-        if row is None:
-            return {"error": f"No job found matching {job!r}"}
-        return _job_summary(row, include_details=True)
+            return _no_such_job(job)
+        data = _job_summary(row, include_details=True)
+        data["matched_by"] = "semantic"
+        data["requested_title"] = str(job)
+        data["note"] = (
+            f"No job is titled {job!r}; this is the closest open job by meaning. Tell "
+            f"the user you are answering about {row.title!r}, not {job!r}."
+        )
+        return data
 
     async def match_to_job(job: str, limit: int = 10) -> dict:
         job_info = await get_job(job)
@@ -203,18 +279,24 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         matches = result.get("results")
         if isinstance(matches, dict) and "matches" in matches:
             matches = matches["matches"]
-        return {
+        out = {
             "job_id": job_info["id"],
             "job_title": job_info["title"],
-            "matches": [
+        }
+        if job_info.get("matched_by") == "semantic":
+            # Carry the substitution warning through, so a ranking for "the
+            # closest job" is never presented under the title the user typed.
+            out["requested_title"] = job_info["requested_title"]
+            out["note"] = job_info["note"]
+        out["matches"] = [
                 {
                     "id": m.get("id"),
                     "name": m.get("name", ""),
                     "match_score": round(float(m.get("match_score", 0.0)), 1),
                 }
                 for m in (matches or [])
-            ],
-        }
+            ]
+        return out
 
     async def explain_match(job: str, candidate: str) -> dict:
         job_info = await get_job(job)
@@ -244,7 +326,21 @@ def build_assistant_tools(db: Session) -> List[Tool]:
     async def get_market_data(role: str, location: str, experience_level: Optional[str] = None) -> dict:
         service = registry.market_research_service
         data = await service.get_comprehensive_salary_benchmark(role, location, experience_level)
-        return data if isinstance(data, dict) else {"result": data}
+        if not isinstance(data, dict):
+            return {"result": data}
+        if data.get("status") != "success":
+            # "unavailable" (no search backend, or nothing found) and "error"
+            # both mean there are no figures. The note is what a small model
+            # actually repeats; without it, an empty result was "analyzed"
+            # into four salary tiers.
+            return {
+                "status": data.get("status", "error"),
+                "reason": data.get("reason") or data.get("message"),
+                "role": role,
+                "location": location,
+                "note": SALARY_UNAVAILABLE_NOTE,
+            }
+        return data
 
     async def list_pipeline() -> dict:
         by_status = dict(
@@ -299,7 +395,8 @@ def build_assistant_tools(db: Session) -> List[Tool]:
                 "Each result carries a 'relevance' band (strong/moderate/weak): a 'weak' result is "
                 "the closest available person, not a confirmed match, and must not be described as "
                 "having the requested skill or experience unless it actually shows up in their "
-                "position, company, or headline."
+                "position, company, or headline. If the result has search_degraded true, search "
+                "is temporarily unavailable: say that, never that nobody matches."
             ),
             parameters={
                 "type": "object",
@@ -326,7 +423,13 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         ),
         Tool(
             name="get_job",
-            description="Fetch one job's details by numeric id or (partial/semantic) title. Call this when the user references a specific role or req.",
+            description=(
+                "Fetch one job's details by numeric id or (partial/semantic) title. Call this when "
+                "the user references a specific role or req. If the result is an error with "
+                "open_jobs, the ATS has no such job: say so and offer those titles. If the result "
+                "has matched_by 'semantic', it is the closest job by meaning, not the title asked "
+                "for: name the job you are actually answering about."
+            ),
             parameters={
                 "type": "object",
                 "properties": {
@@ -364,7 +467,11 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         ),
         Tool(
             name="get_market_data",
-            description="Get salary benchmark data for a role in a location. Call this when the user asks about compensation, salary ranges, or market rates.",
+            description=(
+                "Get salary benchmark data for a role in a location. Call this when the user asks "
+                "about compensation, salary ranges, or market rates. If the result status is not "
+                "'success', live salary data is not connected: say so and give no figures."
+            ),
             parameters={
                 "type": "object",
                 "properties": {

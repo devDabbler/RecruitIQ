@@ -37,9 +37,12 @@ async def get_salary_benchmark(
 
         if result["status"] == "success":
             return result
-        else:
-            raise HTTPException(status_code=500, detail=result["message"])
+        if result["status"] == "unavailable":
+            raise HTTPException(status_code=503, detail=result["message"])
+        raise HTTPException(status_code=500, detail=result["message"])
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in salary benchmark endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -60,10 +63,13 @@ async def post_salary_benchmark(payload: SalaryBenchmarkRequest, db: Session = D
 
         if result.get("status") == "success":
             return {"status": "completed", "benchmark": result.get("data")}
-        else:
-            # Keep consistent error handling
-            raise HTTPException(status_code=500, detail=result.get("message", "Failed to fetch salary benchmark"))
+        if result.get("status") == "unavailable":
+            raise HTTPException(status_code=503, detail=result.get("message"))
+        # Keep consistent error handling
+        raise HTTPException(status_code=500, detail=result.get("message", "Failed to fetch salary benchmark"))
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error in POST salary benchmark endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
