@@ -6,10 +6,12 @@ the whole conversation is retried on the next tier — tool calls are cheap DB
 reads, so re-running them is safe.
 
 Guardrails follow spec §4.4: the local tier gets a hard timeout and no
-retries; the loop is capped at MAX_ITERATIONS to bound cost per message.
+retries; the loop is capped at MAX_ITERATIONS to bound cost per message, and
+the whole turn (every tier, every tool) shares one wall-clock budget.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -23,6 +25,17 @@ from backend.services.assistant_tools import Tool, execute_tool
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS = 5
+
+# One turn's wall-clock budget across all tiers and tools. Measured worst case
+# before this existed: 78.8s for one salary answer with the local tier timing
+# out five times and OpenRouter then re-running the whole conversation.
+# nginx cuts the connection at 300s; the browser gave up never.
+DEFAULT_TURN_BUDGET_S = 90.0
+
+# History is replayed into every model call, so an unbounded history is an
+# unbounded prompt. The most recent turns are the ones that matter.
+MAX_HISTORY_TURNS = 20
+MAX_HISTORY_CHARS = 8000
 
 EventSink = Callable[[dict], Awaitable[None]]
 
@@ -38,6 +51,50 @@ class ToolLoopResult:
 
 class ToolLoopError(Exception):
     pass
+
+
+class ToolLoopTimeout(ToolLoopError):
+    """The turn ran out of its wall-clock budget before any tier answered."""
+
+
+def _parse_tool_args(raw: Any) -> dict:
+    """Tool-call arguments as a dict, whatever the provider sent.
+
+    Ollama returns them as a dict, OpenRouter as a JSON string, and a small
+    model can emit a string that is not JSON at all. That used to raise out of
+    the Ollama runner and fail the whole tier; an empty argument set lets the
+    tool return a "bad arguments" error the model can recover from.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            logger.warning("Unparseable tool-call arguments: %.200r", raw)
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
+def trim_history(history: Optional[List[Dict[str, str]]]) -> List[dict]:
+    """Normalise and bound the replayed conversation.
+
+    Keeps only user/assistant turns with content, then the most recent
+    MAX_HISTORY_TURNS of them, then drops the oldest until the total is under
+    MAX_HISTORY_CHARS. The audit sent 100 turns of 1000 characters each and
+    the assistant dutifully replayed all of it into every model call.
+    """
+    turns = [
+        {"role": t.get("role"), "content": t.get("content", "")}
+        for t in history or []
+        if t.get("role") in ("user", "assistant") and t.get("content")
+    ]
+    turns = turns[-MAX_HISTORY_TURNS:]
+    total = sum(len(t["content"]) for t in turns)
+    while turns and total > MAX_HISTORY_CHARS:
+        total -= len(turns.pop(0)["content"])
+    return turns
 
 
 def _summarize(result: Any) -> str:
@@ -81,9 +138,20 @@ class ToolTrace(list):
             # A consumer that has gone away (browser tab closed) must not take
             # the tool loop down with it.
             logger.debug("Tool event sink raised; continuing", exc_info=True)
+        # Hand the event loop to whoever consumes the event before the tool
+        # runs. Putting onto an unbounded queue never suspends, and the tools
+        # do sync ORM work on the loop, so without this the stream's drain task
+        # first ran after the tool returned: tool_start and tool_end reached the
+        # browser in the same packet and the visitor never saw "running".
+        await asyncio.sleep(0)
 
     async def tool_started(self, tool: str, arguments: dict) -> None:
         await self._emit({"type": "tool_start", "tool": tool, "arguments": arguments})
+
+    async def tier_retry(self, failed: str, next_tier: str) -> None:
+        """The next provider tier re-runs the conversation from the top, so the
+        tool calls narrated so far are about to happen again."""
+        await self._emit({"type": "tier_retry", "failed": failed, "next": next_tier})
 
     async def tool_finished(self, tool: str, arguments: dict, result: Any) -> None:
         ok = not (isinstance(result, dict) and "error" in result)
@@ -153,9 +221,7 @@ async def _run_ollama(settings, system: str, messages: List[dict], tools: List[T
         for call in tool_calls:
             fn = call.get("function") or {}
             name = fn.get("name", "")
-            args = fn.get("arguments") or {}
-            if isinstance(args, str):
-                args = json.loads(args or "{}")
+            args = _parse_tool_args(fn.get("arguments"))
             await trace.tool_started(name, args)
             result = await execute_tool(tools, name, args)
             await trace.tool_finished(name, args, result)
@@ -190,10 +256,7 @@ async def _run_openrouter(settings, system: str, messages: List[dict], tools: Li
         for call in tool_calls:
             fn = call.get("function") or {}
             name = fn.get("name", "")
-            try:
-                args = json.loads(fn.get("arguments") or "{}")
-            except json.JSONDecodeError:
-                args = {}
+            args = _parse_tool_args(fn.get("arguments"))
             await trace.tool_started(name, args)
             result = await execute_tool(tools, name, args)
             await trace.tool_finished(name, args, result)
@@ -278,27 +341,37 @@ async def run_tool_loop(
     """Run one assistant turn with tool calling, falling through provider tiers.
 
     `on_event`, if given, is awaited with a `tool_start`/`tool_end` dict as each
-    tool runs. The loop's behaviour is otherwise identical, so /chat and its
-    Phase 2 tests are untouched.
+    tool runs, and with `tier_retry` when a tier fails and the next one is
+    about to re-run the conversation (its tool calls included).
+
+    The whole turn shares one wall-clock budget (`settings.assistant_turn_budget_s`,
+    default DEFAULT_TURN_BUDGET_S). A tier that outlives what is left is
+    cancelled, and the turn fails with ToolLoopTimeout rather than starting
+    another tier that cannot finish either.
     """
-    messages: List[dict] = []
-    for turn in history or []:
-        role = turn.get("role")
-        content = turn.get("content", "")
-        if role in ("user", "assistant") and content:
-            messages.append({"role": role, "content": content})
+    messages: List[dict] = trim_history(history)
     messages.append({"role": "user", "content": message})
 
     providers = _enabled_providers(settings)
     if not providers:
         raise ToolLoopError("No LLM providers configured")
 
+    budget = float(getattr(settings, "assistant_turn_budget_s", DEFAULT_TURN_BUDGET_S))
+    turn_started = time.monotonic()
+
     errors = []
-    for name in providers:
+    for index, name in enumerate(providers):
+        remaining = budget - (time.monotonic() - turn_started)
+        if remaining <= 0:
+            raise ToolLoopTimeout(
+                f"Turn budget of {budget:.0f}s exhausted before {name} could run; " + "; ".join(errors)
+            )
         trace = ToolTrace(on_event)
         started = time.monotonic()
         try:
-            text = await _RUNNERS[name](settings, system, messages, tools, trace)
+            text = await asyncio.wait_for(
+                _RUNNERS[name](settings, system, messages, tools, trace), timeout=remaining
+            )
             model = {
                 "ollama": getattr(settings, "ollama_chat_model", "qwen3:8b"),
                 "openrouter": getattr(settings, "openrouter_default_model", ""),
@@ -311,7 +384,21 @@ async def run_tool_loop(
                 latency_ms=int((time.monotonic() - started) * 1000),
                 tool_trace=trace,
             )
+        except asyncio.TimeoutError as e:
+            # On 3.11+ asyncio.TimeoutError is the builtin TimeoutError, which a
+            # runner could raise for its own reasons; only the budget counts.
+            if time.monotonic() - turn_started >= budget - 0.05:
+                logger.warning("Tool loop on %s hit the %.0fs turn budget", name, budget)
+                raise ToolLoopTimeout(
+                    f"Turn budget of {budget:.0f}s exhausted on {name}; " + "; ".join(errors)
+                ) from None
+            logger.warning("Tool loop on %s failed: %s", name, e)
+            errors.append(f"{name}: {e}")
+            if index + 1 < len(providers):
+                await trace.tier_retry(name, providers[index + 1])
         except Exception as e:  # noqa: BLE001 - fall through to next tier
             logger.warning("Tool loop on %s failed: %s", name, e)
             errors.append(f"{name}: {e}")
+            if index + 1 < len(providers):
+                await trace.tier_retry(name, providers[index + 1])
     raise ToolLoopError("All providers failed: " + "; ".join(errors))
