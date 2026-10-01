@@ -293,6 +293,21 @@ def demo_client(override_get_db, seed, db_session: Session):
     )
 
 
+@pytest.fixture(autouse=True)
+def _fresh_embedding_degraded_flag():
+    """Start every test as a fresh request would: embeddings not degraded.
+
+    The flag is per-request context. Requests through TestClient get their own
+    context, but tests that call services directly all share pytest's, so
+    without this a fallback in one test would read as degraded in the next.
+    """
+    from backend.services.ollama_embeddings import _degraded
+
+    token = _degraded.set(False)
+    yield
+    _degraded.reset(token)
+
+
 @pytest.fixture
 def unique_email() -> str:
     return f"test-{uuid.uuid4().hex[:8]}@{SEED_EMAIL_DOMAIN}"

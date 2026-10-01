@@ -407,7 +407,7 @@ class MatchingIntegrator:
                 "title": item["job"].title,
                 "department": item["job"].department if hasattr(item["job"], 'department') else None,
                 "location": item["job"].location if hasattr(item["job"], 'location') else None,
-                "skills": item["job"].skills,
+                "skills": _split_skills(item["job"].skills),
                 "similarity_score": item["score"],
                 "similarity_explanation": item["explanation"]
             }

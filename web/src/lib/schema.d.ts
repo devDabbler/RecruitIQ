@@ -3224,7 +3224,7 @@ export interface components {
              * Min Score
              * @default 20
              */
-            min_score: number | null;
+            min_score: number;
         };
         /** JobMatchRequest */
         backend__routers__enhanced_matching__JobMatchRequest: {
@@ -3234,7 +3234,7 @@ export interface components {
              * Min Score
              * @default 20
              */
-            min_score: number | null;
+            min_score: number;
         };
         /** MessageResponse */
         backend__routers__jobs__MessageResponse: {
@@ -3249,7 +3249,7 @@ export interface components {
              * Min Score
              * @default 30
              */
-            min_score: number | null;
+            min_score: number;
         };
         /** JobMatchRequest */
         backend__routers__matching__JobMatchRequest: {
@@ -3259,7 +3259,7 @@ export interface components {
              * Min Score
              * @default 30
              */
-            min_score: number | null;
+            min_score: number;
         };
     };
     responses: never;
