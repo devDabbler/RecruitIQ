@@ -50,6 +50,22 @@ class PreviewUrlResponse(BaseModel):
     expires_in_seconds: int = 3600
 
 
+class UploadPrivacyReport(BaseModel):
+    """What was removed from this parse before any further model call read it.
+
+    Produced by `resume_privacy.anonymize_parsed_resume` on every upload, so
+    the upload screen can show the de-identification happened to *this* file
+    rather than point at a policy page.
+    """
+    identifying_fields_removed: List[str] = []
+    name_mentions_scrubbed: int = 0
+    emails_scrubbed: int = 0
+    phones_scrubbed: int = 0
+    links_scrubbed: int = 0
+    model_calls_after_parse: int = 0
+    web_lookups: int = 0
+
+
 class ResumeResponse(BaseModel):
     """API response model for resume parsing"""
     candidate_id: Optional[str] = None
@@ -69,6 +85,8 @@ class ResumeResponse(BaseModel):
     market_alignment: Optional[Dict[str, Any]] = None
     quality_assessment: Optional[Dict[str, Any]] = None
     skill_suggestions: Optional[Dict[str, Any]] = None
+    # Absent on /parse-direct, which runs the parser alone and no later model call.
+    privacy: Optional[UploadPrivacyReport] = None
     success: bool = True
     message: str = "Resume parsed successfully"
 
@@ -309,10 +327,11 @@ async def parse_resume(
             market_alignment=result.get("market_alignment"),
             quality_assessment=result.get("quality_assessment"),
             skill_suggestions=result.get("skill_suggestions"),
+            privacy=result.get("privacy"),
             success=True,
             message="Resume parsed successfully"
         )
-        
+
         # Debug logging for experience section
         logger.debug(f"API Response - parsed_data keys: {list(result.get('parsed_data', {}).keys()) if isinstance(result.get('parsed_data'), dict) else 'None'}")
         logger.debug(f"API Response - experience present: {bool(response.experience)}, experience count: {len(response.experience) if response.experience else 0}")

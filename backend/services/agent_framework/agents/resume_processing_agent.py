@@ -21,9 +21,32 @@ from backend.services.storage_service import StorageService
 from backend.services.llm_service import LLMService
 from backend.services.web_search_service import WebSearchService
 from backend.services.job_service import JobService
+from backend.services.resume_privacy import anonymize_parsed_resume
 from backend.utils.resume_parsing.models.resume_schema import ResumeData
 
 logger = logging.getLogger(__name__)
+
+# What runs after the parse and what each step is given. Published by
+# /api/transparency/upload-policy and pinned by test_upload_privacy, which
+# drives _process_single_file with a resume full of contact details and
+# asserts that none of them reach any prompt.
+POST_PARSE_MODEL_CALLS: List[Dict[str, str]] = [
+    {
+        "name": "quality assessment",
+        "purpose": "clarity, impact and skills-relevance scores that feed the upload fit score",
+        "reads": "job titles, employers, the first 100 characters of each role description, up to 15 skills",
+    },
+    {
+        "name": "skill suggestions",
+        "purpose": "skills and certifications worth adding, shown to the recruiter as advice",
+        "reads": "role descriptions (first 1,000 characters), job titles, skills",
+    },
+    {
+        "name": "fit commentary",
+        "purpose": "two or three sentences on matching and missing skills for the chosen role",
+        "reads": "skills only, plus the job's own skills and qualifications",
+    },
+]
 
 # "ai" as a bare substring matches Retail, Maintenance, Trainer, Paid Media and
 # plenty of other titles that have nothing to do with machine learning, and any
@@ -130,10 +153,15 @@ class ResumeProcessingAgent(BaseAgent):
                 # Continue with agent enhancements
                 parsed_data = await self._validate_and_clean_data(parsed_data)
 
+                # Every model call from here on reads the de-identified copy.
+                # The parser needed the name and the contact details to fill
+                # the fields; the quality, suggestion and fit prompts do not,
+                # and they leave the machine (ADR 0002). See resume_privacy.
+                safe_data, privacy_report = anonymize_parsed_resume(parsed_data)
+
                 # Run independent analyses concurrently to reduce total latency
-                enrich_task = asyncio.create_task(self._enrich_with_linkedin_profile(parsed_data))
-                quality_task = asyncio.create_task(self._assess_resume_quality(parsed_data))
-                suggestions_task = asyncio.create_task(self._generate_skill_suggestions(parsed_data))
+                quality_task = asyncio.create_task(self._assess_resume_quality(safe_data))
+                suggestions_task = asyncio.create_task(self._generate_skill_suggestions(safe_data))
 
                 market_alignment_task = None
                 market_alignment = None
@@ -148,17 +176,15 @@ class ResumeProcessingAgent(BaseAgent):
                 if target_job_title:
                     market_alignment_task = asyncio.create_task(
                         self._analyze_market_alignment(
-                            parsed_data, target_job_title, job_skills, job_requirements
+                            safe_data, target_job_title, job_skills, job_requirements
                         )
                     )
 
                 # Await concurrent tasks
                 try:
-                    enriched_data, quality_assessment, skill_suggestions = await asyncio.gather(
-                        enrich_task, quality_task, suggestions_task
+                    quality_assessment, skill_suggestions = await asyncio.gather(
+                        quality_task, suggestions_task
                     )
-                    # Use enriched data going forward
-                    parsed_data = enriched_data if enriched_data else parsed_data
                 except Exception as e:
                     logger.error(f"Error in parallel analyses: {e}")
                     # Fallbacks if any task failed
@@ -273,6 +299,13 @@ class ResumeProcessingAgent(BaseAgent):
                     "quality_assessment": quality_assessment,
                     "market_alignment": market_alignment,
                     "skill_suggestions": skill_suggestions,
+                    # What the de-identification removed from this file before
+                    # the calls above ran; the upload screen shows it.
+                    "privacy": {
+                        **privacy_report,
+                        "model_calls_after_parse": 3 if target_job_title else 2,
+                        "web_lookups": 0,
+                    },
                     "data": parsed_data
                 }
             finally:
@@ -951,50 +984,12 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
         
         return parsed_data
 
-    async def _enrich_with_linkedin_profile(self, parsed_data: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Uses web search to find and add a LinkedIn profile URL.
-        """
-        logger.info("Attempting to enrich with LinkedIn profile...")
-        personal_info = parsed_data.get('personal_info', {})
-        name = personal_info.get('name')
-        if not name:
-            logger.warning("Cannot search for LinkedIn profile without a name.")
-            return parsed_data
-
-        # Construct a targeted search query
-        query = f'"{name}" LinkedIn profile'
-        if parsed_data.get('experience'):
-            latest_exp = parsed_data['experience'][0]
-            company = latest_exp.get('company')
-            title = latest_exp.get('title')
-            if company:
-                query += f' "{company}"'
-            if title:
-                query += f' "{title}"'
-        
-        logger.info(f"Performing web search with query: {query}")
-        try:
-            search_results = await self.web_search_service.search(query)
-            
-            # Find the first result that is a valid LinkedIn profile URL
-            for result in search_results:
-                url = result.get('link')
-                # Check if it looks like a LinkedIn URL
-                if url and ('linkedin.com/in/' in url or 'linkedin.com/pub/' in url):
-                    # Basic validation to avoid company pages or job postings
-                    if '/jobs/' not in url:
-                        logger.info(f"Found likely LinkedIn profile: {url}")
-                        # If we found a profile URL, ensure it's formatted properly and add to personal_info
-                        parsed_data['personal_info']['linkedin'] = url
-                        break # Stop after finding the first likely match
-            else:
-                logger.info("No definitive LinkedIn profile found in search results.")
-
-        except Exception as e:
-            logger.error(f"Failed to perform web search for LinkedIn profile: {e}")
-        
-        return parsed_data
+    # There used to be a `_enrich_with_linkedin_profile` step here that searched
+    # the public web for '"<name>" LinkedIn profile "<employer>" "<title>"'.
+    # Removed 2026-09-30: it sent the one thing the rest of this pipeline now
+    # withholds (who the person is) to a third-party search engine, on every
+    # upload, without the person knowing. A LinkedIn URL that is written on
+    # the resume is still picked up by the parser and the regex fallback.
 
     async def parse_with_recovery(self, file_path: str) -> ResumeData:
         """
@@ -1104,10 +1099,10 @@ Format as JSON with keys: technical_skills, soft_skills, certifications, recomme
             "overall_feedback": "Quality assessment could not be performed."
         }
 
+        # No name line, deliberately: this prompt receives the de-identified
+        # parse, and the scores it returns feed the fit score a recruiter sees.
         summary_parts = []
-        if parsed_data.get('personal_info', {}).get('name'):
-            summary_parts.append(f"Name: {parsed_data['personal_info']['name']}")
-        
+
         experience_summary = []
         for exp in parsed_data.get('experience', []):
             experience_summary.append(f"- {exp.get('title')} at {exp.get('company')}: {(exp.get('description') or '')[:100]}...")

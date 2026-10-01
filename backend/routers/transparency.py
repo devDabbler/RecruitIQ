@@ -207,7 +207,57 @@ class SearchTraceResponse(BaseModel):
     kept_out: List[SearchHit]
 
 
+class PostParseModelCall(BaseModel):
+    name: str
+    purpose: str
+    reads: str
+
+
+class UploadPrivacyPolicy(BaseModel):
+    """What happens to a resume between the upload and the screen.
+
+    Every list here is read from the constants the upload pipeline applies
+    (`resume_privacy` and the resume agent), and `test_upload_privacy` drives
+    the pipeline with a resume full of contact details to check that the
+    claims hold: no name, email, phone or link reaches a post-parse prompt,
+    and nothing is looked up on the web.
+    """
+    parser_reads: str
+    parser_providers: List[str]
+    identifying_fields_removed: List[str]
+    dropped_keys: List[str]
+    text_patterns_scrubbed: List[str]
+    model_calls_after_parse: List[PostParseModelCall]
+    web_lookups: int
+    parse_writes_nothing: bool
+    stored_only_when_saved: str
+
+
 # --- endpoints --------------------------------------------------------------
+
+
+@router.get("/upload-policy", response_model=UploadPrivacyPolicy)
+def upload_privacy_policy() -> UploadPrivacyPolicy:
+    """How an uploaded resume is de-identified before anything but the parser reads it."""
+    from backend.services.agent_framework.agents.resume_processing_agent import POST_PARSE_MODEL_CALLS
+    from backend.services.resume_privacy import DROPPED_KEYS, IDENTIFYING_FIELDS, TEXT_PATTERNS_SCRUBBED
+    from backend.utils.config import get_settings
+
+    order = get_settings().llm_provider_order_resume_parsing or ""
+    return UploadPrivacyPolicy(
+        parser_reads="the full resume text, once, to fill the contact, experience, education and skill fields",
+        parser_providers=[p.strip() for p in order.split(",") if p.strip()],
+        identifying_fields_removed=list(IDENTIFYING_FIELDS),
+        dropped_keys=list(DROPPED_KEYS),
+        text_patterns_scrubbed=list(TEXT_PATTERNS_SCRUBBED),
+        model_calls_after_parse=[PostParseModelCall(**call) for call in POST_PARSE_MODEL_CALLS],
+        web_lookups=0,
+        parse_writes_nothing=True,
+        stored_only_when_saved=(
+            "the full profile, contact details included, and only when an administrator "
+            "chooses Save as candidate; a recruiter has to be able to reach the person"
+        ),
+    )
 
 
 @router.get("/policy", response_model=ScoringPolicy)

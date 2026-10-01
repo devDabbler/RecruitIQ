@@ -1607,6 +1607,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/transparency/upload-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Upload Privacy Policy
+         * @description How an uploaded resume is de-identified before anything but the parser reads it.
+         */
+        get: operations["upload_privacy_policy_api_transparency_upload_policy_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/demo": {
         parameters: {
             query?: never;
@@ -2577,6 +2597,15 @@ export interface components {
             /** Resume Id */
             resume_id: number;
         };
+        /** PostParseModelCall */
+        PostParseModelCall: {
+            /** Name */
+            name: string;
+            /** Purpose */
+            purpose: string;
+            /** Reads */
+            reads: string;
+        };
         /**
          * PreviewUrlResponse
          * @description API response model for resume preview URL
@@ -2668,6 +2697,7 @@ export interface components {
             parsed_data?: Record<string, never> | null;
             /** Personal Info */
             personal_info?: Record<string, never> | null;
+            privacy?: components["schemas"]["UploadPrivacyReport"] | null;
             /** Quality Assessment */
             quality_assessment?: Record<string, never> | null;
             /** Resume Id */
@@ -3061,6 +3091,81 @@ export interface components {
             field: string;
             /** Reason */
             reason: string;
+        };
+        /**
+         * UploadPrivacyPolicy
+         * @description What happens to a resume between the upload and the screen.
+         *
+         *     Every list here is read from the constants the upload pipeline applies
+         *     (`resume_privacy` and the resume agent), and `test_upload_privacy` drives
+         *     the pipeline with a resume full of contact details to check that the
+         *     claims hold: no name, email, phone or link reaches a post-parse prompt,
+         *     and nothing is looked up on the web.
+         */
+        UploadPrivacyPolicy: {
+            /** Dropped Keys */
+            dropped_keys: string[];
+            /** Identifying Fields Removed */
+            identifying_fields_removed: string[];
+            /** Model Calls After Parse */
+            model_calls_after_parse: components["schemas"]["PostParseModelCall"][];
+            /** Parse Writes Nothing */
+            parse_writes_nothing: boolean;
+            /** Parser Providers */
+            parser_providers: string[];
+            /** Parser Reads */
+            parser_reads: string;
+            /** Stored Only When Saved */
+            stored_only_when_saved: string;
+            /** Text Patterns Scrubbed */
+            text_patterns_scrubbed: string[];
+            /** Web Lookups */
+            web_lookups: number;
+        };
+        /**
+         * UploadPrivacyReport
+         * @description What was removed from this parse before any further model call read it.
+         *
+         *     Produced by `resume_privacy.anonymize_parsed_resume` on every upload, so
+         *     the upload screen can show the de-identification happened to *this* file
+         *     rather than point at a policy page.
+         */
+        UploadPrivacyReport: {
+            /**
+             * Emails Scrubbed
+             * @default 0
+             */
+            emails_scrubbed: number;
+            /**
+             * Identifying Fields Removed
+             * @default []
+             */
+            identifying_fields_removed: string[];
+            /**
+             * Links Scrubbed
+             * @default 0
+             */
+            links_scrubbed: number;
+            /**
+             * Model Calls After Parse
+             * @default 0
+             */
+            model_calls_after_parse: number;
+            /**
+             * Name Mentions Scrubbed
+             * @default 0
+             */
+            name_mentions_scrubbed: number;
+            /**
+             * Phones Scrubbed
+             * @default 0
+             */
+            phones_scrubbed: number;
+            /**
+             * Web Lookups
+             * @default 0
+             */
+            web_lookups: number;
         };
         /** UserResponse */
         UserResponse: {
@@ -6051,6 +6156,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_privacy_policy_api_transparency_upload_policy_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadPrivacyPolicy"];
                 };
             };
         };

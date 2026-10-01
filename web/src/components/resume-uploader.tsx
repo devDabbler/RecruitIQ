@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FileText, Loader2, Target, Upload, UserPlus } from "lucide-react";
+import { FileText, Loader2, ShieldCheck, Target, Upload, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,7 +14,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { UploadPrivacyReport } from "@/lib/domain";
 import { humanize } from "@/lib/format";
+import { privacySentence } from "@/lib/upload-privacy";
 import { cn } from "@/lib/utils";
 
 const ACCEPT = ".pdf,.docx,.doc,.txt,.jpg,.jpeg,.png";
@@ -65,6 +68,9 @@ interface ParsedResume {
     certifications?: string[];
     recommendations?: string;
   } | null;
+  // What was removed from this parse before the fit, quality and suggestion
+  // calls read it. See /transparency for the policy behind it.
+  privacy?: UploadPrivacyReport | null;
 }
 
 /**
@@ -369,6 +375,7 @@ export function ResumeUploader({
 
       <div className="space-y-6">
         {result && !busy ? <FitCard result={result} /> : null}
+        {result && !busy ? <PrivacyNote report={result.privacy} /> : null}
 
         <Card>
           <CardHeader>
@@ -393,6 +400,27 @@ export function ResumeUploader({
         </Card>
       </div>
     </div>
+  );
+}
+
+/**
+ * What the models did not see, for this file. Rendered from the per-upload
+ * report rather than a fixed sentence, so a visitor can check it against the
+ * contact details in the Extracted card below.
+ */
+function PrivacyNote({ report }: { report: UploadPrivacyReport | null | undefined }) {
+  const sentence = privacySentence(report);
+  if (!sentence) return null;
+  return (
+    <p className="flex items-start gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+      <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+      <span>
+        {sentence}{" "}
+        <Link href="/transparency#upload" className="text-indigo-700 hover:underline">
+          How uploads are handled
+        </Link>
+      </span>
+    </p>
   );
 }
 

@@ -26,6 +26,7 @@ import type {
   ScoringPolicy,
   SearchTrace,
   SkillsBreakdown,
+  UploadPolicy,
 } from "./domain";
 import { getToken } from "./session";
 
@@ -165,6 +166,10 @@ export async function getCandidateSavedJobs(candidateId: string): Promise<SavedJ
 
 export async function getScoringPolicy(): Promise<ScoringPolicy> {
   return apiFetch<ScoringPolicy>("/api/transparency/policy", { token: await getToken() });
+}
+
+export async function getUploadPolicy(): Promise<UploadPolicy> {
+  return apiFetch<UploadPolicy>("/api/transparency/upload-policy", { token: await getToken() });
 }
 
 /**
