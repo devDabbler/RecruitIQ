@@ -2,8 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, Bot, Check, History, Loader2, Plus, Trash2, User, Wrench, X } from "lucide-react";
+import {
+  ArrowUp,
+  Bot,
+  Check,
+  CircleHelp,
+  History,
+  Loader2,
+  Plus,
+  Trash2,
+  User,
+  Wrench,
+  X,
+} from "lucide-react";
 
+import { AssistantGuide } from "@/components/assistant-guide";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -72,6 +85,9 @@ export function AssistantChat() {
   const [busy, setBusy] = useState(false);
   const [context, setContext] = useState<Record<string, unknown>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Below the lg breakpoint there is no room for the guide sidebar, so it
+  // folds into a toolbar toggle instead.
+  const [guideOpen, setGuideOpen] = useState(false);
   // Loaded after mount: localStorage does not exist during server render.
   const [saved, setSaved] = useState<StoredConversation[]>([]);
   // Sampled after mount: Math.random() during render would make the server and
@@ -109,6 +125,7 @@ export function AssistantChat() {
     setTurns([]);
     setContext({});
     setHistoryOpen(false);
+    setGuideOpen(false);
     setSuggestions(sampleSuggestions());
   }
 
@@ -118,6 +135,7 @@ export function AssistantChat() {
     setTurns(conversation.turns);
     setContext(conversation.context ?? {});
     setHistoryOpen(false);
+    setGuideOpen(false);
   }
 
   function removeConversation(id: string) {
@@ -234,132 +252,166 @@ export function AssistantChat() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-16rem)] min-h-[28rem] flex-col rounded-xl border border-slate-200 bg-white">
-      <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => setHistoryOpen((open) => !open)}
-          aria-expanded={historyOpen}
-          className="text-slate-600"
-        >
-          <History className="h-4 w-4" aria-hidden />
-          History{saved.length > 0 ? ` (${saved.length})` : ""}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={startNewChat}
-          disabled={busy}
-          className="text-slate-700"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          New chat
-        </Button>
-      </div>
-
-      {historyOpen ? (
-        <div className="max-h-56 overflow-y-auto border-b border-slate-200 bg-slate-50 p-2">
-          {saved.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-slate-500">
-              No saved conversations yet. Finished chats are kept in this browser.
-            </p>
-          ) : (
-            <ul className="space-y-1">
-              {saved.map((conversation) => (
-                <li key={conversation.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => openConversation(conversation)}
-                    className={cn(
-                      "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-100",
-                      conversation.id === conversationId
-                        ? "font-medium text-indigo-700"
-                        : "text-slate-700",
-                    )}
-                  >
-                    <span className="block truncate">{conversation.title}</span>
-                    <span className="block text-xs text-slate-400">
-                      {new Date(conversation.updatedAt).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </span>
-                  </button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => removeConversation(conversation.id)}
-                    aria-label={`Delete conversation: ${conversation.title}`}
-                    className="text-slate-400 hover:text-rose-600"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      ) : null}
-
-      <div className="flex-1 space-y-6 overflow-y-auto p-6">
-        {turns.length === 0 ? (
-          <div className="space-y-4">
-            <p className="text-sm text-slate-500">
-              Ask about the candidates and roles in the database. The assistant answers by calling
-              real API tools, and you will see each one as it runs.
-            </p>
-            <div className="flex flex-col items-start gap-2">
-              {suggestions.map((suggestion) => (
-                <button
-                  key={suggestion}
-                  type="button"
-                  onClick={() => send(suggestion)}
-                  className="rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {suggestion}
-                </button>
-              ))}
-            </div>
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:gap-6">
+      <div className="flex h-[calc(100vh-16rem)] min-h-[28rem] flex-col rounded-xl border border-slate-200 bg-white">
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-2">
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setHistoryOpen((open) => !open);
+                setGuideOpen(false);
+              }}
+              aria-expanded={historyOpen}
+              className="text-slate-600"
+            >
+              <History className="h-4 w-4" aria-hidden />
+              History{saved.length > 0 ? ` (${saved.length})` : ""}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setGuideOpen((open) => !open);
+                setHistoryOpen(false);
+              }}
+              aria-expanded={guideOpen}
+              className="text-slate-600 lg:hidden"
+            >
+              <CircleHelp className="h-4 w-4" aria-hidden />
+              What can I ask?
+            </Button>
           </div>
-        ) : (
-          turns.map((turn, index) => <Bubble key={index} turn={turn} busy={busy} />)
-        )}
-        <div ref={bottom} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={startNewChat}
+            disabled={busy}
+            className="text-slate-700"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            New chat
+          </Button>
+        </div>
+
+        {historyOpen ? (
+          <div className="max-h-56 overflow-y-auto border-b border-slate-200 bg-slate-50 p-2">
+            {saved.length === 0 ? (
+              <p className="px-2 py-3 text-sm text-slate-500">
+                No saved conversations yet. Finished chats are kept in this browser.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {saved.map((conversation) => (
+                  <li key={conversation.id} className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => openConversation(conversation)}
+                      className={cn(
+                        "min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm hover:bg-slate-100",
+                        conversation.id === conversationId
+                          ? "font-medium text-indigo-700"
+                          : "text-slate-700",
+                      )}
+                    >
+                      <span className="block truncate">{conversation.title}</span>
+                      <span className="block text-xs text-slate-400">
+                        {new Date(conversation.updatedAt).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => removeConversation(conversation.id)}
+                      aria-label={`Delete conversation: ${conversation.title}`}
+                      className="text-slate-400 hover:text-rose-600"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+
+        {guideOpen ? (
+          <div className="max-h-[55vh] overflow-y-auto border-b border-slate-200 bg-slate-50 p-4 lg:hidden">
+            <AssistantGuide />
+          </div>
+        ) : null}
+
+        <div className="flex-1 space-y-6 overflow-y-auto p-6">
+          {turns.length === 0 ? (
+            <div className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Ask about the candidates and roles in the database. The assistant answers by calling
+                real API tools, and you will see each one as it runs.
+              </p>
+              <div className="flex flex-col items-start gap-2">
+                {suggestions.map((suggestion) => (
+                  <button
+                    key={suggestion}
+                    type="button"
+                    onClick={() => send(suggestion)}
+                    className="rounded-lg border border-slate-200 px-3 py-2 text-left text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            turns.map((turn, index) => <Bubble key={index} turn={turn} busy={busy} />)
+          )}
+          <div ref={bottom} />
+        </div>
+
+        <form
+          className="flex items-end gap-2 border-t border-slate-200 p-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void send(draft);
+          }}
+        >
+          <Textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter sends, Shift+Enter breaks the line — the convention every
+              // chat UI has trained people to expect.
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                void send(draft);
+              }
+            }}
+            rows={1}
+            placeholder="Ask about candidates, roles, or the pipeline…"
+            aria-label="Message the assistant"
+            className="max-h-40 min-h-11 resize-none"
+          />
+          <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="Send">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+          </Button>
+        </form>
       </div>
 
-      <form
-        className="flex items-end gap-2 border-t border-slate-200 p-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void send(draft);
-        }}
+      <aside
+        aria-label="What the assistant can answer"
+        className="hidden h-[calc(100vh-16rem)] min-h-[28rem] overflow-y-auto rounded-xl border border-slate-200 bg-white p-5 lg:block"
       >
-        <Textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            // Enter sends, Shift+Enter breaks the line — the convention every
-            // chat UI has trained people to expect.
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              void send(draft);
-            }
-          }}
-          rows={1}
-          placeholder="Ask about candidates, roles, or the pipeline…"
-          aria-label="Message the assistant"
-          className="max-h-40 min-h-11 resize-none"
-        />
-        <Button type="submit" size="icon" disabled={busy || !draft.trim()} aria-label="Send">
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-        </Button>
-      </form>
+        <AssistantGuide className="grid gap-6 text-sm" />
+      </aside>
     </div>
   );
 }

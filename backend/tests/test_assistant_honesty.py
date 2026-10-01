@@ -302,3 +302,22 @@ class TestSuggestionChipsNameRealJobs:
         for person in people:
             first, last = person.split(" ", 1)
             assert f'("{first}", "{last}"' in seed, f"chip names {person!r}, whom the seed does not create"
+
+    def test_every_guide_example_names_seeded_data(self):
+        # The "What can I ask?" panel on the assistant page shows example
+        # questions; a visitor who copies one must get a real answer, not a
+        # "no such job" or "no such person" reply.
+        guide = (REPO / "web/src/lib/assistant-guide.ts").read_text(encoding="utf-8")
+        seed = (REPO / "scripts/seed_demo.py").read_text(encoding="utf-8")
+        seeded_titles = set(re.findall(r'"title":\s*"([^"]+)"', seed))
+        examples = re.findall(r'example:\s*"([^"]+)"', guide)
+        assert len(examples) >= 4, "guide examples not found"
+        roles = [m for ex in examples for m in re.findall(r"for the (.+?) role", ex)]
+        assert roles, "expected at least one guide example to name a job"
+        for title in roles:
+            assert title in seeded_titles, f"guide names {title!r}, which the seed does not create"
+        people = [m for ex in examples for m in re.findall(r"(?:Why is|on) ([A-Z]\w+ [A-Z]\w+?)(?:'s| a good fit)", ex)]
+        assert len(people) >= 2, "expected guide examples to name people"
+        for person in people:
+            first, last = person.split(" ", 1)
+            assert f'("{first}", "{last}"' in seed, f"guide names {person!r}, whom the seed does not create"
