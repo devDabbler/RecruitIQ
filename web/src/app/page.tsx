@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { Briefcase, TrendingUp, Users } from "lucide-react";
 
-import { ErrorState, PageHeader } from "@/components/page-header";
+import { DashboardIntro } from "@/components/dashboard-intro";
+import { ErrorState } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
   } catch (error) {
     return (
       <>
-        <PageHeader title="Dashboard" />
+        <DashboardIntro />
         <ErrorState
           title="Could not load the dashboard"
           detail={error instanceof ApiError ? error.detail : String(error)}
@@ -83,10 +84,15 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <PageHeader
-        title="Dashboard"
-        description="Live counts from the seeded database. Every number below is a query, not a fixture."
-      />
+      <DashboardIntro />
+
+      {/* An h2, not PageHeader: the intro above owns the page's h1. */}
+      <div className="mb-6">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Live counts from the seeded database. Every number below is a query, not a fixture.
+        </p>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat
