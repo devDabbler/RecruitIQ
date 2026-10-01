@@ -4400,16 +4400,9 @@
             "type": "array"
           },
           "min_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": 20.0,
-            "title": "Min Score"
+            "title": "Min Score",
+            "type": "number"
           }
         },
         "required": [
@@ -4425,16 +4418,9 @@
             "type": "string"
           },
           "min_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": 20.0,
-            "title": "Min Score"
+            "title": "Min Score",
+            "type": "number"
           }
         },
         "required": [
@@ -4466,16 +4452,9 @@
             "type": "array"
           },
           "min_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": 30.0,
-            "title": "Min Score"
+            "title": "Min Score",
+            "type": "number"
           }
         },
         "required": [
@@ -4491,16 +4470,9 @@
             "type": "string"
           },
           "min_score": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
             "default": 30.0,
-            "title": "Min Score"
+            "title": "Min Score",
+            "type": "number"
           }
         },
         "required": [

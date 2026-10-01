@@ -45,6 +45,11 @@ class MatchingEnhancer:
         for the life of the process. There is no database state in the key, so a
         cached vector cannot go stale. Bounded LRU so a long-running process
         cannot grow without limit.
+
+        The one exception is a placeholder vector from an Ollama outage: it is
+        not a function of the text's meaning, so caching it would keep scoring
+        that title against noise for the life of the process, long after the
+        tunnel came back. Those are used for this call and never stored.
         """
         cached = self._embedding_cache.get(text)
         if cached is not None:
@@ -52,6 +57,8 @@ class MatchingEnhancer:
             return cached
 
         vector = np.array(self.embedding_model.embed_query(text)).reshape(1, -1)
+        if getattr(self.embedding_model, "is_degraded", False):
+            return vector
         self._embedding_cache[text] = vector
         if len(self._embedding_cache) > _EMBEDDING_CACHE_MAX:
             self._embedding_cache.popitem(last=False)

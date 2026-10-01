@@ -7,6 +7,7 @@ stay stable when the tunnel is down.
 """
 import hashlib
 import logging
+from contextvars import ContextVar
 from typing import List, Union
 
 import httpx
@@ -15,6 +16,15 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 EMBEDDING_DIM = 768
+
+# Whether the most recent embedding call *in this request* used placeholders.
+# The adapter is a process-wide singleton, so an instance attribute here was
+# written by whichever concurrent request embedded last: one visitor's tunnel
+# timeout could label another visitor's real similarities as degraded, or the
+# reverse. Each request runs in its own context (a task for async endpoints,
+# a copied context in the threadpool for plain def ones), so a ContextVar
+# scopes the answer to the request that asked.
+_degraded: ContextVar[bool] = ContextVar("embedding_degraded", default=False)
 
 
 class OllamaEmbeddingAdapter:
@@ -25,16 +35,18 @@ class OllamaEmbeddingAdapter:
         self.base_url = base_url.rstrip("/")
         self.model = model
         self._client = httpx.Client(timeout=timeout)
+        # Log-once bookkeeping only; degradation state lives in _degraded.
         self._warned_offline = False
 
     @property
     def is_degraded(self) -> bool:
-        """True after the most recent call had to use the placeholder vectors.
+        """True after this request's most recent call had to use the
+        placeholder vectors.
 
         The transparency view reads this so a similarity computed on
         placeholders is labelled as such instead of shown as a real number.
         """
-        return self._warned_offline
+        return _degraded.get()
 
     def _fallback(self, text: str) -> List[float]:
         # Deterministic pseudo-embedding: stable across calls so Redis-cached
@@ -57,11 +69,13 @@ class OllamaEmbeddingAdapter:
                     f"{len(embeddings)}x{len(embeddings[0]) if embeddings else 0}"
                 )
             self._warned_offline = False
+            _degraded.set(False)
             return embeddings
         except Exception as e:
             if not self._warned_offline:
                 logger.warning(f"Ollama embeddings unavailable ({e}); using deterministic fallback")
                 self._warned_offline = True
+            _degraded.set(True)
             return [self._fallback(t) for t in texts]
 
     def embed_query(self, text: str) -> List[float]:

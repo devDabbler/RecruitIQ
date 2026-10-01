@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+import asyncio
 import logging
 
 from backend.utils.database import get_db
@@ -18,13 +19,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/enhanced-matching", tags=["enhanced-matching"])
 
 # Request Models
+# min_score is a plain float, not Optional: an explicit JSON null used to pass
+# validation, reach `match_score >= None` in the integrator, and come back as
+# an empty 200 that looked like "nobody matches".
 class CandidateMatchRequest(BaseModel):
     job_ids: List[int]
-    min_score: Optional[float] = 20.0
+    min_score: float = 20.0
 
 class JobMatchRequest(BaseModel):
     candidate_id: str
-    min_score: Optional[float] = 20.0
+    min_score: float = 20.0
 
 class SimilarJobsRequest(BaseModel):
     job_id: int
@@ -78,9 +82,35 @@ class SimilarJobsResponse(BaseModel):
     similar_jobs: List[SimilarJobResult]
 
 
+def _run_matching_agent(task: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Run a matching task and return its result list, or raise.
+
+    The endpoints below are plain `def` so FastAPI runs them in the
+    threadpool. Scoring is synchronous ORM plus one embedding call per title
+    (about 8s for /matching); as `async def` that all ran on the event loop
+    and stalled every other request on the worker until it finished. The
+    agent's methods are coroutines that never actually await, so a private
+    event loop in the worker thread drives them.
+
+    The agent reports failure as {"status": "error"} rather than raising.
+    Unwrapping that to an empty list returned a 200 that read as "no
+    matches", so it is surfaced as a 500 instead.
+    """
+    results = asyncio.run(AgentFactory.create_agent("matching").execute(task))
+    if not isinstance(results, dict):
+        logger.warning(f"Matching agent returned {type(results)}, expected dict: {results}")
+        return []
+    if results.get("status") == "error":
+        raise HTTPException(status_code=500, detail=f"Error processing match: {results.get('message')}")
+    items = results.get("results", [])
+    if not isinstance(items, list):
+        logger.warning(f"Agent returned unexpected format for results. Expected list, got {type(items)}. Full agent response: {results}")
+        return []
+    return items
+
 
 @router.post("/match-jobs", response_model=MatchJobsResponse)
-async def match_jobs_for_candidate(
+def match_jobs_for_candidate(
     request: JobMatchRequest,
     db: Session = Depends(get_db)
 ):
@@ -88,8 +118,7 @@ async def match_jobs_for_candidate(
     try:
         # Log the incoming request
         logger.info(f"Received enhanced match_jobs request: {request.dict()}")
-        
-        agent = AgentFactory.create_agent("matching")
+
         task = {
             "type": "jobs_for_candidate",
             "candidate_id": request.candidate_id,
@@ -97,16 +126,7 @@ async def match_jobs_for_candidate(
             "min_score": request.min_score,
             "limit": 10
         }
-        results = await agent.execute(task)
-
-        # The agent returns a dictionary, so extract the actual list of jobs from the 'results' key.
-        job_list = results.get("results", []) if isinstance(results, dict) else []
-        if not isinstance(job_list, list):
-            # Fallback if 'results' is not a list
-            logger.warning(f"Agent returned unexpected format for results. Expected list, got {type(job_list)}. Full agent response: {results}")
-            job_list = []
-            
-        return MatchJobsResponse(jobs=job_list)
+        return MatchJobsResponse(jobs=_run_matching_agent(task))
         
     except HTTPException as he:
         # Re-raise HTTP exceptions
@@ -116,7 +136,7 @@ async def match_jobs_for_candidate(
         raise HTTPException(status_code=500, detail=f"Error processing match: {str(e)}")
 
 @router.post("/match-candidates", response_model=MatchCandidatesResponse)
-async def match_candidates_for_jobs(
+def match_candidates_for_jobs(
     request: CandidateMatchRequest,
     db: Session = Depends(get_db)
 ):
@@ -141,7 +161,6 @@ async def match_candidates_for_jobs(
         if not job_id:
             raise HTTPException(status_code=400, detail="At least one job_id is required.")
 
-        agent = AgentFactory.create_agent("matching")
         task = {
             "type": "candidates_for_job",
             "job_id": job_id,
@@ -150,16 +169,7 @@ async def match_candidates_for_jobs(
             "min_score": request.min_score,
             "limit": 10
         }
-        results = await agent.execute(task)
-
-        # The agent returns a dictionary, so extract the actual list of candidates from the 'results' key.
-        candidate_list = results.get("results", []) if isinstance(results, dict) else []
-        if not isinstance(candidate_list, list):
-             # Fallback if 'results' is not a list
-            logger.warning(f"Agent returned unexpected format for results. Expected list, got {type(candidate_list)}. Full agent response: {results}")
-            candidate_list = []
-
-        return MatchCandidatesResponse(candidates=candidate_list)
+        return MatchCandidatesResponse(candidates=_run_matching_agent(task))
         
     except HTTPException as he:
         # Re-raise HTTP exceptions
@@ -169,7 +179,7 @@ async def match_candidates_for_jobs(
         raise HTTPException(status_code=500, detail=f"Error processing match: {str(e)}")
 
 @router.post("/similar-jobs", response_model=SimilarJobsResponse)
-async def find_similar_jobs(
+def find_similar_jobs(
     request: SimilarJobsRequest,
     db: Session = Depends(get_db)
 ):
@@ -177,16 +187,16 @@ async def find_similar_jobs(
     try:
         # Log the incoming request
         logger.info(f"Received similar_jobs request: {request.dict()}")
-        
-        agent = AgentFactory.create_agent("matching")
+
         task = {
             "type": "similar_jobs",
             "job_id": request.job_id,
             "db": db,
             "limit": request.limit
         }
-        results = await agent.execute(task)
-        return SimilarJobsResponse(similar_jobs=results)
+        # This passed the agent's whole envelope dict as the list, so every
+        # call failed response validation and returned a 500.
+        return SimilarJobsResponse(similar_jobs=_run_matching_agent(task))
         
     except HTTPException as he:
         # Re-raise HTTP exceptions

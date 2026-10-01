@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List, Optional, Union  # Removed Dict, Any
 from pydantic import BaseModel, ConfigDict, field_validator  # Removed Field
+import asyncio
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import desc  # Removed func
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/api/search", tags=["matching"])
 class CandidateMatchRequest(BaseModel):
     model_config = ConfigDict(strict=True)  # Use strict mode
     job_ids: List[int]
-    min_score: Optional[float] = 30.0
+    min_score: float = 30.0
     
     @field_validator('job_ids')
     @classmethod
@@ -39,7 +40,7 @@ class CandidateMatchRequest(BaseModel):
 
 class JobMatchRequest(BaseModel):
     candidate_id: str  # Changed from int to str
-    min_score: Optional[float] = 30.0
+    min_score: float = 30.0
 
 class MatchReportRequest(BaseModel):
     job_id: int
@@ -59,8 +60,10 @@ class JobMatchResult(BaseModel):
 class MatchJobsResponse(BaseModel):
     jobs: List[JobMatchResult]
 
+# Plain def with asyncio.run for the same reason as enhanced_matching.py: the
+# agent work is synchronous, and as async def it blocked the event loop.
 @router.post("/match_candidates", status_code=status.HTTP_200_OK)
-async def match_candidates_for_jobs(
+def match_candidates_for_jobs(
     request: CandidateMatchRequest,
     db: Session = Depends(get_db),
 ):
@@ -80,7 +83,7 @@ async def match_candidates_for_jobs(
             "min_score": request.min_score,
             "limit": 10
         }
-        results = await agent.execute(task)
+        results = asyncio.run(agent.execute(task))
         # Always return a list for frontend compatibility
         return [results] if isinstance(results, dict) else results
     except Exception as e:
@@ -89,7 +92,7 @@ async def match_candidates_for_jobs(
 
 
 @router.post("/match_jobs")
-async def match_jobs_for_candidate(
+def match_jobs_for_candidate(
     request: JobMatchRequest,
     db: Session = Depends(get_db),
 ):
@@ -105,7 +108,7 @@ async def match_jobs_for_candidate(
             "min_score": request.min_score if request.min_score > 0 else 20.0,  # Lower default for tighter matching
             "limit": 10
         }
-        results = await agent.execute(task)
+        results = asyncio.run(agent.execute(task))
         return results
     except Exception as e:
         logger.exception(f"Agentic Zero error in match_jobs_for_candidate: {str(e)}")
@@ -119,7 +122,7 @@ async def match_jobs_for_candidate(
 
 
 @router.post("/match_report")
-async def generate_match_report(
+def generate_match_report(
     request: MatchReportRequest,
     db: Session = Depends(get_db),
 ):
@@ -134,7 +137,7 @@ async def generate_match_report(
             "db": db,
             "action": "generate_match_report"
         }
-        results = await agent.execute(task)
+        results = asyncio.run(agent.execute(task))
         return results
     except Exception as e:
         logger.exception(f"Agentic Zero error in generate_match_report: {str(e)}")
