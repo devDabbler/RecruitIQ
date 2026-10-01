@@ -25,14 +25,21 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-full flex-col bg-slate-50 text-slate-900">
         <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-          <div className="mx-auto flex h-16 max-w-7xl items-center gap-6 px-4 sm:px-6">
-            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+          {/* Two rows below xl (logo and account on top, nav full width
+              underneath), one row from xl up. The labelled nav plus the badge
+              need about 1200px; squeezed into one row they pushed the page
+              into sideways scroll at every width under 1280. */}
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 px-4 sm:px-6 xl:h-16 xl:flex-nowrap xl:gap-x-4">
+            <Link
+              href="/"
+              className="flex h-14 items-center gap-2 font-semibold tracking-tight xl:h-auto"
+            >
               <span className="grid h-8 w-8 place-items-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
                 R
               </span>
-              <span className="hidden sm:inline">RecruitIQ</span>
+              <span>RecruitIQ</span>
             </Link>
-            <div className="flex-1">
+            <div className="order-last w-full pb-2 xl:order-none xl:w-auto xl:flex-1 xl:pb-0">
               <Nav />
             </div>
             {/* Suspended on purpose, and load-bearing for every `loading.tsx`
@@ -42,9 +49,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
                 navigation until the layout finishes. Behind a boundary, the
                 shell and the route's skeleton paint immediately and the badge
                 fills in. */}
-            <Suspense fallback={<SessionBadgeFallback />}>
-              <SessionBadge />
-            </Suspense>
+            <div className="ml-auto shrink-0">
+              <Suspense fallback={<SessionBadgeFallback />}>
+                <SessionBadge />
+              </Suspense>
+            </div>
           </div>
         </header>
 
