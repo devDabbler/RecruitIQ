@@ -30,7 +30,8 @@ test("the demo user can walk all eight screens and every one shows live data", a
   // ---- 1. Dashboard -------------------------------------------------------
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome to RecruitIQ", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", level: 2 })).toBeVisible();
   await expectNoErrorState(page);
 
   // The candidate count is a query, not a fixture, so a zero here means the
