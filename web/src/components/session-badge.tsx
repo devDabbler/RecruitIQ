@@ -13,7 +13,7 @@ import { getUser } from "@/lib/session";
  */
 export function SessionBadgeFallback() {
   return (
-    <span className="flex items-center gap-3" aria-hidden>
+    <span className="flex items-center gap-3 whitespace-nowrap" aria-hidden>
       <Skeleton className="h-6 w-32 rounded-full" />
       <Skeleton className="h-4 w-12" />
     </span>
@@ -31,7 +31,7 @@ export async function SessionBadge() {
 
   if (!user || user.role === "demo") {
     return (
-      <span className="flex items-center gap-3">
+      <span className="flex items-center gap-3 whitespace-nowrap">
         <span
           className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
           title="Read-only demo account. The API refuses writes for this role."
@@ -50,7 +50,7 @@ export async function SessionBadge() {
   }
 
   return (
-    <span className="flex items-center gap-3">
+    <span className="flex items-center gap-3 whitespace-nowrap">
       <span
         className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
         title={`Signed in as ${user.email}`}

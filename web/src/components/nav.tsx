@@ -52,7 +52,10 @@ export function Nav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-1">
+    // Icons only, spread across the row, until lg; labels from lg up. The
+    // label span is display:none when hidden, so aria-label is what names the
+    // link for screen readers on small screens, and title gives a tooltip.
+    <nav className="flex items-center justify-between gap-1 lg:justify-start">
       {LINKS.map(({ href, label, icon: Icon }) => {
         // "/" would otherwise prefix-match every route and light up permanently.
         const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -60,16 +63,18 @@ export function Nav() {
           <Link
             key={href}
             href={href}
+            aria-label={label}
+            title={label}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium transition-colors sm:gap-2 sm:px-3 xl:px-2.5",
               active
                 ? "bg-indigo-600 text-white"
                 : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700",
             )}
           >
             <Icon className="h-4 w-4" aria-hidden />
-            <span className="hidden md:inline">{label}</span>
+            <span className="hidden lg:inline">{label}</span>
             <PendingDot />
           </Link>
         );
