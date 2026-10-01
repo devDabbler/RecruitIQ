@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, Search, ShieldCheck } from "lucide-react";
 
 import { JobPicker } from "@/components/job-picker";
 import { MatchScore } from "@/components/match-score";
@@ -10,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
-import { getMatchTrace, getScoringPolicy, getSearchTrace, listJobs } from "@/lib/data";
-import type { PairTrace, ScoringPolicy, SearchHit } from "@/lib/domain";
+import { getMatchTrace, getScoringPolicy, getSearchTrace, getUploadPolicy, listJobs } from "@/lib/data";
+import type { PairTrace, ScoringPolicy, SearchHit, UploadPolicy } from "@/lib/domain";
 import { pct, scoreLadder, similarity } from "@/lib/transparency";
 import { cn } from "@/lib/utils";
 
@@ -43,9 +43,10 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
   const location = first(params.location);
 
   let policy: ScoringPolicy;
+  let uploadPolicy: UploadPolicy;
   let jobs;
   try {
-    [policy, jobs] = await Promise.all([getScoringPolicy(), listJobs()]);
+    [policy, jobs, uploadPolicy] = await Promise.all([getScoringPolicy(), listJobs(), getUploadPolicy()]);
   } catch (error) {
     return (
       <>
@@ -147,10 +148,86 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
           </CardContent>
         </Card>
 
+        <UploadPrivacy policy={uploadPolicy} />
         <Principles />
         <KnownLimits />
       </div>
     </>
+  );
+}
+
+// --- what happens to an uploaded resume --------------------------------------
+
+/**
+ * The upload pipeline's privacy policy, read from the constants it applies.
+ * A test drives the pipeline with a resume full of contact details and
+ * checks that none of them reach any prompt listed here, so this card is a
+ * checked claim rather than a promise.
+ */
+function UploadPrivacy({ policy }: { policy: UploadPolicy }) {
+  return (
+    <Card id="upload">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-600" aria-hidden />
+          What happens to an uploaded resume
+        </CardTitle>
+        <p className="text-sm text-slate-500">
+          The parser reads the whole file once, because extracting a name and an email is its
+          job. Every model call after that reads a de-identified copy. A test uploads a resume
+          full of contact details and fails if any of them reach a prompt or a web search.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-6 lg:grid-cols-2">
+        <ol className="space-y-3 text-sm text-slate-700">
+          <Step n={1} title="Parse">
+            Reads {policy.parser_reads}. Provider chain, in order:{" "}
+            <span className="font-mono text-xs">{policy.parser_providers.join(" then ")}</span>.
+            Nothing is written to the database.
+          </Step>
+          <Step n={2} title="De-identify">
+            From the parse, these fields are removed:{" "}
+            <span className="font-mono text-xs">{policy.identifying_fields_removed.join(", ")}</span>.
+            The raw text and the file name are dropped (
+            <span className="font-mono text-xs">{policy.dropped_keys.join(", ")}</span>). Inside
+            every remaining sentence the scrubber replaces {policy.text_patterns_scrubbed.join("; ")}.
+          </Step>
+          <Step n={3} title="Analyse">
+            {policy.model_calls_after_parse.length} model calls read the de-identified copy, listed
+            on the right. {policy.web_lookups === 0
+              ? "No web lookup of any kind runs on an upload; a LinkedIn URL is kept only if it is written on the resume."
+              : `${policy.web_lookups} web lookups run.`}
+          </Step>
+          <Step n={4} title="Store, only on request">
+            {policy.parse_writes_nothing
+              ? "Parsing stores nothing. "
+              : null}
+            What is stored is {policy.stored_only_when_saved}.
+          </Step>
+        </ol>
+
+        <div>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">
+            Model calls after the parse
+          </h3>
+          <dl className="space-y-3 text-sm">
+            {policy.model_calls_after_parse.map((call) => (
+              <div key={call.name}>
+                <dt className="font-medium text-slate-800">{call.name}</dt>
+                <dd className="text-slate-600">{call.purpose}</dd>
+                <dd className="text-xs text-slate-500">Reads: {call.reads}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-4 text-xs text-slate-500">
+            Why it matters: these prompts leave the machine, and a name plus an employer is
+            enough to identify someone to a provider that never needed to know. The quality
+            scores also feed the fit score shown on the upload screen, and a name carries
+            gender and ethnicity signal that must not move that number.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -622,6 +699,12 @@ function Principles() {
             Ranking is deterministic arithmetic over titles and skills plus one cosine
             similarity between two job titles, and category rules cap what that similarity
             can do. Language models parse resumes and answer chat; they never order people.
+          </Principle>
+          <Principle title="Models see a profile, not a person.">
+            After the parse, every model call on an upload reads a copy with the name, the
+            contact details and the links removed and the text scrubbed. Nothing about an
+            upload is looked up on the web. The upload screen reports what was removed from
+            each file, and a test fails if an identifier ever reaches a prompt.
           </Principle>
           <Principle title="Weak matches are never shown.">
             A search result is a match only when the similarity is high or a word from the

@@ -2631,6 +2631,29 @@
         "title": "ParsedResumeSaveResponse",
         "type": "object"
       },
+      "PostParseModelCall": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "purpose": {
+            "title": "Purpose",
+            "type": "string"
+          },
+          "reads": {
+            "title": "Reads",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "purpose",
+          "reads"
+        ],
+        "title": "PostParseModelCall",
+        "type": "object"
+      },
       "PreviewUrlResponse": {
         "description": "API response model for resume preview URL",
         "properties": {
@@ -2943,6 +2966,16 @@
               }
             ],
             "title": "Personal Info"
+          },
+          "privacy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UploadPrivacyReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "quality_assessment": {
             "anyOf": [
@@ -4125,6 +4158,120 @@
           "reason"
         ],
         "title": "UnscoredField",
+        "type": "object"
+      },
+      "UploadPrivacyPolicy": {
+        "description": "What happens to a resume between the upload and the screen.\n\nEvery list here is read from the constants the upload pipeline applies\n(`resume_privacy` and the resume agent), and `test_upload_privacy` drives\nthe pipeline with a resume full of contact details to check that the\nclaims hold: no name, email, phone or link reaches a post-parse prompt,\nand nothing is looked up on the web.",
+        "properties": {
+          "dropped_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dropped Keys",
+            "type": "array"
+          },
+          "identifying_fields_removed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Identifying Fields Removed",
+            "type": "array"
+          },
+          "model_calls_after_parse": {
+            "items": {
+              "$ref": "#/components/schemas/PostParseModelCall"
+            },
+            "title": "Model Calls After Parse",
+            "type": "array"
+          },
+          "parse_writes_nothing": {
+            "title": "Parse Writes Nothing",
+            "type": "boolean"
+          },
+          "parser_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Parser Providers",
+            "type": "array"
+          },
+          "parser_reads": {
+            "title": "Parser Reads",
+            "type": "string"
+          },
+          "stored_only_when_saved": {
+            "title": "Stored Only When Saved",
+            "type": "string"
+          },
+          "text_patterns_scrubbed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Text Patterns Scrubbed",
+            "type": "array"
+          },
+          "web_lookups": {
+            "title": "Web Lookups",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "parser_reads",
+          "parser_providers",
+          "identifying_fields_removed",
+          "dropped_keys",
+          "text_patterns_scrubbed",
+          "model_calls_after_parse",
+          "web_lookups",
+          "parse_writes_nothing",
+          "stored_only_when_saved"
+        ],
+        "title": "UploadPrivacyPolicy",
+        "type": "object"
+      },
+      "UploadPrivacyReport": {
+        "description": "What was removed from this parse before any further model call read it.\n\nProduced by `resume_privacy.anonymize_parsed_resume` on every upload, so\nthe upload screen can show the de-identification happened to *this* file\nrather than point at a policy page.",
+        "properties": {
+          "emails_scrubbed": {
+            "default": 0,
+            "title": "Emails Scrubbed",
+            "type": "integer"
+          },
+          "identifying_fields_removed": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Identifying Fields Removed",
+            "type": "array"
+          },
+          "links_scrubbed": {
+            "default": 0,
+            "title": "Links Scrubbed",
+            "type": "integer"
+          },
+          "model_calls_after_parse": {
+            "default": 0,
+            "title": "Model Calls After Parse",
+            "type": "integer"
+          },
+          "name_mentions_scrubbed": {
+            "default": 0,
+            "title": "Name Mentions Scrubbed",
+            "type": "integer"
+          },
+          "phones_scrubbed": {
+            "default": 0,
+            "title": "Phones Scrubbed",
+            "type": "integer"
+          },
+          "web_lookups": {
+            "default": 0,
+            "title": "Web Lookups",
+            "type": "integer"
+          }
+        },
+        "title": "UploadPrivacyReport",
         "type": "object"
       },
       "UserResponse": {
@@ -8833,6 +8980,28 @@
           }
         },
         "summary": "Search Trace",
+        "tags": [
+          "transparency"
+        ]
+      }
+    },
+    "/api/transparency/upload-policy": {
+      "get": {
+        "description": "How an uploaded resume is de-identified before anything but the parser reads it.",
+        "operationId": "upload_privacy_policy_api_transparency_upload_policy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UploadPrivacyPolicy"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Upload Privacy Policy",
         "tags": [
           "transparency"
         ]

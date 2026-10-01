@@ -27,6 +27,10 @@ export type MatchTrace = Schemas["MatchTraceResponse"];
 export type PairTrace = Schemas["PairTrace"];
 export type SearchTrace = Schemas["SearchTraceResponse"];
 export type SearchHit = Schemas["SearchHit"];
+/** What an uploaded resume goes through before anything but the parser reads it. */
+export type UploadPolicy = Schemas["UploadPrivacyPolicy"];
+/** The same de-identification, reported for one specific upload. */
+export type UploadPrivacyReport = Schemas["UploadPrivacyReport"];
 
 /** `GET /api/jobs/` is paginated the same way the candidate list is. */
 export interface JobList {
