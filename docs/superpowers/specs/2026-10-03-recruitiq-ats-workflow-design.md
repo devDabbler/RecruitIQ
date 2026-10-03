@@ -287,7 +287,7 @@ Acceptance:
 - Fresh database plus `alembic upgrade head` plus `seed_demo.py` yields a
   populated board on every job.
 
-### Phase B: Team and feedback
+### Phase B: Team and feedback (plan written: `2026-10-03-ats-phase-b-team-feedback.md`)
 
 Scope: four roles and `name` on users, invite flow (admin creates user with
 a temporary password; no email yet), permission matrix in
@@ -314,7 +314,7 @@ Acceptance: an interviewer account can see only the candidates they are
 assigned to, cannot see a score until their feedback exists, and the
 transparency page states that feedback never reaches the scorer.
 
-### Phase C: Intake, notes, tags
+### Phase C: Intake, notes, tags (plan written: `2026-10-03-ats-phase-c-intake-notes-tags.md`)
 
 Scope: upload page ends with "Add to [job] pipeline"; manual add candidate
 (name, email, job); bulk upload (sequential, progress list); `notes` table
@@ -326,7 +326,7 @@ Acceptance: a resume dropped on Upload becomes a candidate at stage 1 of
 the chosen job with no further clicks, and the save path is exercised live
 (unit tests have missed save-path bugs before).
 
-### Phase D: Reports and dashboard
+### Phase D: Reports and dashboard (plan written: `2026-10-03-ats-phase-d-reports-dashboard.md`)
 
 Scope: Reports page (funnel ever-reached vs here, median time in stage,
 no-movement list, source mix, hires and rejections this quarter, CSV
@@ -338,7 +338,7 @@ Acceptance: every number on Reports is a query over `application_stages`
 and the page says so, matching the dashboard's "every number is a query"
 line.
 
-### Phase E: Candidate-facing and templates
+### Phase E: Candidate-facing and templates (plan written: `2026-10-03-ats-phase-e-candidate-facing.md`)
 
 Scope: public status page on `job_applications.public_token`; email
 templates (interview invite, resume request, polite close, offer) with a
