@@ -34,7 +34,7 @@ export default async function EditJobPage({ params }: PageProps<"/jobs/[id]/edit
       />
 
       <div className="max-w-3xl">
-        <JobForm initial={jobToFormValues(job)} jobId={job.id} />
+        <JobForm initial={jobToFormValues(job)} jobId={job.id} canDraft />
       </div>
     </>
   );

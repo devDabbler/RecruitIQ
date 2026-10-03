@@ -433,7 +433,12 @@ class JobApplication(Base):
     # Additional tracking fields
     source = Column(String(100), default="direct", nullable=True)  # where they applied from
     notes = Column(Text, nullable=True)  # recruiter notes
-    
+
+    # ATS Phase E: the candidate status link. Null means no link is active;
+    # regenerating replaces it, which is how a leaked link is revoked.
+    public_token = Column(String(36), nullable=True, unique=True, index=True)
+    public_token_created_at = Column(DateTime, nullable=True)
+
     # Relationships
     job = relationship("Job", back_populates="job_applications")
     candidate = relationship("Candidate", back_populates="candidate_applications")
@@ -657,3 +662,39 @@ class CandidateTag(Base):
 
     def __repr__(self):
         return f"<CandidateTag(candidate_id={self.candidate_id}, tag='{self.tag}')>"
+
+
+# ====================================================================
+# Email (ATS Phase E, spec 2026-10-03 section 3.1)
+# ====================================================================
+
+
+class EmailTemplate(Base):
+    """One editable starting point for candidate email. Seeded by migration f7b1d4e5a6c7."""
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True)
+    key = Column(String(50), nullable=False, unique=True)
+    name = Column(String(100), nullable=False)
+    subject = Column(String(200), nullable=False)
+    body = Column(Text, nullable=False)
+    updated_at = Column(DateTime, nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+
+class EmailLog(Base):
+    """Every email sent, or copied to be sent by hand, from the app."""
+    __tablename__ = "email_log"
+
+    id = Column(Integer, primary_key=True)
+    application_id = Column(
+        Integer, ForeignKey("job_applications.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    template_key = Column(String(50), nullable=True)
+    to_address = Column(String(255), nullable=False)
+    subject = Column(String(200), nullable=False)
+    body = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False)  # sent, failed, copied
+    error = Column(Text, nullable=True)
+    sent_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)

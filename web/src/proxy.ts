@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { API_BASE_URL, COOKIE_SECURE, SESSION_COOKIE } from "./lib/config";
+import { isPublicPath } from "./lib/public-paths";
 
 interface DemoTokenResponse {
   access_token: string;
@@ -27,6 +28,13 @@ export const config = {
 };
 
 export async function proxy(request: NextRequest) {
+  // A candidate opening their status link must never be handed a session:
+  // the page reads nothing private, and a demo token minted for someone
+  // outside the company would be the wrong default (ATS Phase E).
+  if (isPublicPath(request.nextUrl.pathname)) {
+    return NextResponse.next();
+  }
+
   if (request.cookies.has(SESSION_COOKIE)) {
     return NextResponse.next();
   }

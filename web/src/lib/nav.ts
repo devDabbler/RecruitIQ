@@ -11,6 +11,7 @@ import {
   Briefcase,
   CalendarCheck,
   LayoutDashboard,
+  Mail,
   Scale,
   Settings,
   Sparkles,
@@ -58,6 +59,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/reports", label: "Reports", icon: BarChart3, hiddenFor: ["interviewer"] },
       { href: "/team", label: "Team", icon: UserCog, hiddenFor: ["interviewer"] },
+      { href: "/email-templates", label: "Email templates", icon: Mail, hiddenFor: ["interviewer"] },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },

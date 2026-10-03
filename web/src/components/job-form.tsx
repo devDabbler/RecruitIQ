@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, Save } from "lucide-react";
+import { ChevronDown, Loader2, Save, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -21,8 +21,13 @@ import {
   JOB_STATUSES,
   JOB_TYPES,
   LOCATION_TYPES,
+  applyDraft,
+  canRequestDraft,
+  draftRequestFrom,
+  hasWrittenDescription,
   toJobPayload,
   validateJob,
+  type DescriptionDraft,
   type FieldErrors,
   type JobFormValues,
 } from "@/lib/job-form";
@@ -39,9 +44,12 @@ import { cn } from "@/lib/utils";
 export function JobForm({
   initial,
   jobId,
+  canDraft = false,
 }: {
   initial?: JobFormValues;
   jobId?: number;
+  /** Show "Draft with AI" (ATS Phase E). Only for job writers. */
+  canDraft?: boolean;
 }) {
   const router = useRouter();
   const editing = jobId != null;
@@ -50,6 +58,47 @@ export function JobForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [showMore, setShowMore] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [pendingDraft, setPendingDraft] = useState<DescriptionDraft | null>(null);
+  const [drafted, setDrafted] = useState(false);
+
+  /** Ask for an AI draft; never overwrite typed text without asking first. */
+  async function requestDraft() {
+    if (!canRequestDraft(values)) {
+      setErrors((current) => ({ ...current, title: "Add a title first. The draft is written from it." }));
+      return;
+    }
+    setDrafting(true);
+    setDraftError(null);
+    try {
+      const response = await fetch("/api/job-drafts/description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(draftRequestFrom(values)),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | (DescriptionDraft & { detail?: unknown })
+        | null;
+      if (!response.ok || !payload) {
+        throw new Error(readDetail(payload) || `Could not draft a description (${response.status})`);
+      }
+      const draft = {
+        job_overview: payload.job_overview,
+        required_qualifications: payload.required_qualifications,
+      };
+      if (hasWrittenDescription(values)) {
+        setPendingDraft(draft);
+      } else {
+        setValues((current) => applyDraft(current, draft));
+        setDrafted(true);
+      }
+    } catch (err) {
+      setDraftError((err as Error).message);
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   function set<K extends keyof JobFormValues>(key: K, value: JobFormValues[K]) {
     setValues((current) => ({ ...current, [key]: value }));
@@ -134,6 +183,61 @@ export function JobForm({
               aria-invalid={!!errors.department}
             />
           </Field>
+
+          {canDraft ? (
+            <div className="space-y-2 rounded-md border border-indigo-100 bg-indigo-50/50 p-3 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-slate-600">
+                  Draft the overview and qualifications from the title, department, level, and
+                  skills above. Only those fields are sent. No candidate data is included.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={requestDraft}
+                  disabled={drafting}
+                >
+                  {drafting ? (
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <Sparkles className="mr-1 h-3.5 w-3.5" aria-hidden />
+                  )}
+                  Draft with AI
+                </Button>
+              </div>
+              {pendingDraft ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-slate-700">
+                    Replace the overview and qualifications you have written?
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      setValues((current) => applyDraft(current, pendingDraft));
+                      setPendingDraft(null);
+                      setDrafted(true);
+                    }}
+                  >
+                    Replace
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setPendingDraft(null)}
+                  >
+                    Keep mine
+                  </Button>
+                </div>
+              ) : null}
+              {drafted ? (
+                <p className="text-xs text-indigo-700">Drafted by AI. Review and edit before saving.</p>
+              ) : null}
+              {draftError ? <p className="text-xs font-medium text-rose-700">{draftError}</p> : null}
+            </div>
+          ) : null}
 
           <Field label="Overview" error={errors.job_overview} required>
             <Textarea

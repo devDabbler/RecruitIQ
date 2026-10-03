@@ -7,6 +7,7 @@ rolled-back fixture transaction the same way.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -46,6 +47,16 @@ APP_WITHDRAWN = "withdrawn"
 TERMINAL = frozenset({APP_HIRED, APP_REJECTED, APP_DECLINED, APP_WITHDRAWN})
 
 DECLINABLE_KEYS = frozenset({"offer", "offer_accepted"})
+
+# Phase E: which stages may move. Resume submitted is where every
+# application starts; Offer and Offer accepted carry the Decline rule; the
+# outcomes are not rounds. Everything else is an "interview stage".
+FIRST_ROUND = "resume_submitted"
+OFFER_ROUNDS = ("offer", "offer_accepted")
+CUSTOM_PREFIX = "custom_"
+MAX_CUSTOM_STAGES = 10
+LATE_STAGE_NOTE = "Added to the pipeline after this candidate had moved past this point."
+MOVED_STAGE_NOTE = "Moved earlier in the pipeline after this candidate had passed this point."
 
 # Stage key -> candidates.status (spec section 3.3).
 _STAGE_TO_CANDIDATE_STATUS = {
@@ -171,7 +182,9 @@ def sync_candidate_status(db: Session, application: JobApplication) -> None:
         return
     current = current_stage(application)
     if current is not None:
-        candidate.status = _STAGE_TO_CANDIDATE_STATUS.get(current.stage.key, "active")
+        # Unknown keys are custom stages, which always sit between Resume
+        # submitted and the offer, so they are interview rounds.
+        candidate.status = _STAGE_TO_CANDIDATE_STATUS.get(current.stage.key, "interviewing")
 
 
 def _ordered(application: JobApplication) -> list[ApplicationStage]:
@@ -188,17 +201,24 @@ def _require_active(application: JobApplication) -> ApplicationStage:
 
 
 def _next_enabled_round(rows: list[ApplicationStage], after: ApplicationStage) -> Optional[ApplicationStage]:
-    """The next enabled round after `after`. Disabled rounds passed over are marked skipped."""
+    """The next enabled, still-pending round after `after`.
+
+    Rounds that were already decided (passed, failed, or skipped) are passed
+    over, never re-opened: since Phase E a job can reorder its rounds, so a
+    round that happened can sit after the current one. Disabled pending rounds
+    passed over are marked skipped, as before.
+    """
     for row in rows:
         if row.stage.position <= after.stage.position:
             continue
         if row.stage.kind != ROUND:
             continue
+        if row.status != PENDING:
+            continue
         if row.stage.enabled:
             return row
-        if row.status == PENDING:
-            row.status = SKIPPED
-            row.completed_at = datetime.utcnow()
+        row.status = SKIPPED
+        row.completed_at = datetime.utcnow()
     return None
 
 
@@ -249,7 +269,10 @@ def skip(db: Session, application: JobApplication, actor_id: Optional[str] = Non
     rows = _ordered(application)
     # Look ahead before touching anything so a refused skip leaves no trace.
     if not any(
-        r.stage.position > current.stage.position and r.stage.kind == ROUND and r.stage.enabled
+        r.stage.position > current.stage.position
+        and r.stage.kind == ROUND
+        and r.stage.enabled
+        and r.status == PENDING
         for r in rows
     ):
         raise PipelineError("There is no later stage to skip to. Use Advance to mark the candidate hired.")
@@ -283,3 +306,170 @@ def decline(db: Session, application: JobApplication, actor_id: Optional[str] = 
 
 
 ACTIONS = {"advance": advance, "skip": skip, "reject": reject, "decline": decline}
+
+
+# --- custom stages and reordering (ATS Phase E) --------------------------------
+
+
+def is_custom(stage: PipelineStage) -> bool:
+    return stage.key.startswith(CUSTOM_PREFIX)
+
+
+def is_movable(stage: PipelineStage) -> bool:
+    return stage.kind == ROUND and stage.key != FIRST_ROUND and stage.key not in OFFER_ROUNDS
+
+
+def _custom_key(existing: set[str], name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_")[:40] or "stage"
+    key = f"{CUSTOM_PREFIX}{slug}"
+    n = 2
+    while key in existing:
+        key = f"{CUSTOM_PREFIX}{slug}_{n}"
+        n += 1
+    return key
+
+
+def _layout(stages: list[PipelineStage], middle_keys: list[str]) -> list[PipelineStage]:
+    """First round, interview stages in the given order, offer rounds, outcomes."""
+    by_key = {s.key: s for s in stages}
+    if FIRST_ROUND not in by_key or any(k not in by_key for k in OFFER_ROUNDS):
+        raise PipelineError("This job is missing a default stage, so its stages cannot be rearranged.")
+    outcomes = [s for s in sorted(stages, key=lambda s: s.position) if s.kind == OUTCOME]
+    return [by_key[FIRST_ROUND], *(by_key[k] for k in middle_keys), *(by_key[k] for k in OFFER_ROUNDS), *outcomes]
+
+
+def _renumber(stages_in_order: list[PipelineStage]) -> None:
+    for position, stage in enumerate(stages_in_order, start=1):
+        stage.position = position
+
+
+def _backfill_new_stage(db: Session, stage: PipelineStage) -> None:
+    """One row per existing application for a stage added mid-flight."""
+    now = datetime.utcnow()
+    applications = db.query(JobApplication).filter(JobApplication.job_id == stage.job_id).all()
+    for application in applications:
+        if not application.stages:
+            continue  # ensure_application_stages builds a full set on first read
+        current = current_stage(application)
+        behind = application.status in TERMINAL or (
+            current is not None and current.stage.position > stage.position
+        )
+        row = ApplicationStage(
+            application_id=application.id,
+            stage_id=stage.id,
+            status=SKIPPED if behind else PENDING,
+        )
+        if behind:
+            row.completed_at = now
+            row.note = LATE_STAGE_NOTE
+        db.add(row)
+    db.flush()
+    for application in applications:
+        db.expire(application, ["stages"])
+
+
+def add_custom_stage(
+    db: Session,
+    job_id: int,
+    name: str,
+    description: Optional[str] = None,
+    after_key: Optional[str] = None,
+) -> PipelineStage:
+    """A new interview stage, placed after `after_key` (default: just before the offer)."""
+    stages = ensure_job_stages(db, job_id)
+    name = (name or "").strip()
+    if not name:
+        raise PipelineError("A stage needs a name.")
+    if sum(1 for s in stages if is_custom(s)) >= MAX_CUSTOM_STAGES:
+        raise PipelineError(f"A job can have at most {MAX_CUSTOM_STAGES} added stages.")
+
+    middle = [s.key for s in stages if is_movable(s)]
+    if after_key is None:
+        index = len(middle)
+    elif after_key == FIRST_ROUND:
+        index = 0
+    elif after_key in middle:
+        index = middle.index(after_key) + 1
+    else:
+        raise PipelineError(
+            "New stages go after Resume submitted or after another interview stage, never after the offer."
+        )
+
+    stage = PipelineStage(
+        job_id=job_id,
+        key=_custom_key({s.key for s in stages}, name),
+        name=name,
+        description=(description or "").strip() or None,
+        kind=ROUND,
+        position=0,
+        enabled=True,
+    )
+    db.add(stage)
+    db.flush()
+    middle.insert(index, stage.key)
+    _renumber(_layout([*stages, stage], middle))
+    db.flush()
+    _backfill_new_stage(db, stage)
+    return stage
+
+
+def _close_rows_left_behind(db: Session, job_id: int) -> None:
+    now = datetime.utcnow()
+    applications = (
+        db.query(JobApplication)
+        .filter(JobApplication.job_id == job_id, JobApplication.status == APP_ACTIVE)
+        .all()
+    )
+    for application in applications:
+        current = current_stage(application)
+        if current is None:
+            continue
+        for row in application.stages:
+            if (
+                row.status == PENDING
+                and row.stage.kind == ROUND
+                and row.stage.position < current.stage.position
+            ):
+                row.status = SKIPPED
+                row.completed_at = now
+                row.note = MOVED_STAGE_NOTE
+
+
+def reorder_stages(db: Session, job_id: int, middle_order: list[str]) -> None:
+    """Put the interview stages in `middle_order`. The pinned stages do not move."""
+    stages = ensure_job_stages(db, job_id)
+    middle = [s.key for s in stages if is_movable(s)]
+    if len(middle_order) != len(set(middle_order)) or set(middle_order) != set(middle):
+        raise PipelineError(
+            "The new order must list every interview stage exactly once. "
+            "Resume submitted stays first and the offer stages stay last."
+        )
+    _renumber(_layout(stages, middle_order))
+    db.flush()
+    _close_rows_left_behind(db, job_id)
+    db.flush()
+
+
+def remove_custom_stage(db: Session, job_id: int, key: str) -> None:
+    """Delete a stage this job added, if no candidate has history at it."""
+    stages = ensure_job_stages(db, job_id)
+    stage = next((s for s in stages if s.key == key), None)
+    if stage is None:
+        raise PipelineError(f"No stage named '{key}' on this job.")
+    if not is_custom(stage):
+        raise PipelineError(f"'{stage.name}' is a default stage. Turn it off instead of removing it.")
+    rows = db.query(ApplicationStage).filter(ApplicationStage.stage_id == stage.id).all()
+    if any(r.status in (IN_PROGRESS, PASSED, FAILED) for r in rows):
+        raise PipelineError(
+            f"'{stage.name}' already has candidate history. Turn it off instead of removing it."
+        )
+    application_ids = {r.application_id for r in rows}
+    for row in rows:
+        db.delete(row)
+    db.delete(stage)
+    db.flush()
+    _renumber([s for s in stages if s.id != stage.id])
+    db.flush()
+    if application_ids:
+        for application in db.query(JobApplication).filter(JobApplication.id.in_(application_ids)).all():
+            db.expire(application, ["stages"])

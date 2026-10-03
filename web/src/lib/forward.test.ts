@@ -6,7 +6,7 @@ import { SESSION_COOKIE } from "./config";
 const cookieStore = { get: vi.fn() };
 vi.mock("next/headers", () => ({ cookies: async () => cookieStore }));
 
-const { forwardWrite } = await import("./forward");
+const { forwardRead, forwardWrite } = await import("./forward");
 
 function setCookie(value: string | undefined) {
   cookieStore.get.mockImplementation((name: string) =>
@@ -63,5 +63,31 @@ describe("forwardWrite", () => {
     vi.mocked(fetch).mockRejectedValue(new TypeError("fetch failed"));
     const response = await forwardWrite(request({}), "/api/team/me", "PUT");
     expect(response.status).toBe(503);
+  });
+});
+
+describe("forwardRead", () => {
+  it("refuses without a session", async () => {
+    setCookie(undefined);
+    const response = await forwardRead("/api/applications/3/emails/preview?template_key=offer");
+    expect(response.status).toBe(401);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("sends a GET with the token and passes the status through", async () => {
+    setCookie("jwt-abc");
+    vi.mocked(fetch).mockResolvedValue(new Response('{"detail":"Not found"}', { status: 404 }));
+    const response = await forwardRead("/api/applications/3/emails/preview?template_key=offer");
+    expect(response.status).toBe(404);
+    const [url, init] = vi.mocked(fetch).mock.calls[0];
+    expect(String(url)).toMatch(/\/emails\/preview\?template_key=offer$/);
+    expect((init as RequestInit).method).toBeUndefined();
+    expect(new Headers((init as RequestInit).headers).get("authorization")).toBe("Bearer jwt-abc");
+  });
+
+  it("reports an unreachable API as 503", async () => {
+    setCookie("jwt-abc");
+    vi.mocked(fetch).mockRejectedValue(new TypeError("fetch failed"));
+    expect((await forwardRead("/api/email-templates")).status).toBe(503);
   });
 });

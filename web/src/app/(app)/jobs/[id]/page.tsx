@@ -66,8 +66,16 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-baseline justify-between gap-2">
               <CardTitle className="text-base">Pipeline</CardTitle>
+              {writable ? (
+                <Link
+                  href={`/jobs/${job.id}/stages`}
+                  className="text-xs font-medium text-indigo-700 hover:underline"
+                >
+                  Edit stages
+                </Link>
+              ) : null}
             </CardHeader>
             <CardContent>
               <Suspense fallback={<Skeleton className="h-40 w-full rounded-lg" />}>

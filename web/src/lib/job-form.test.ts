@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_JOB,
+  applyDraft,
+  canRequestDraft,
+  copyJobValues,
+  draftRequestFrom,
+  hasWrittenDescription,
   jobToFormValues,
   toJobPayload,
   validateJob,
@@ -149,5 +154,58 @@ describe("jobToFormValues", () => {
     expect(payload.title).toBe("Senior Data Engineer");
     expect(payload.skills).toEqual(["Python", "SQL"]);
     expect(payload.min_salary).toBe(170000);
+  });
+});
+
+describe("copyJobValues", () => {
+  it("copies the role but starts it as a draft with no dates", () => {
+    const job = {
+      id: 7,
+      title: "Data Engineer",
+      department: "Data",
+      job_overview: "Pipelines.",
+      required_qualifications: "SQL",
+      skills: ["SQL", "dbt"],
+      status: "open",
+      application_deadline: "2026-11-01T00:00:00",
+      start_date: "2026-12-01T00:00:00",
+    } as unknown as Job;
+    const copied = copyJobValues(job);
+    expect(copied.title).toBe("Data Engineer");
+    expect(copied.skills).toBe("SQL, dbt");
+    expect(copied.status).toBe("draft");
+    expect(copied.application_deadline).toBe("");
+    expect(copied.start_date).toBe("");
+  });
+});
+
+describe("AI draft helpers", () => {
+  const filled = { ...EMPTY_JOB, title: " Data Engineer ", department: "Data", skills: "SQL, , dbt" };
+
+  it("sends only the structured fields", () => {
+    expect(draftRequestFrom(filled)).toEqual({
+      title: "Data Engineer",
+      department: "Data",
+      experience_level: "mid",
+      location_type: "on_site",
+      skills: ["SQL", "dbt"],
+    });
+  });
+
+  it("needs a title", () => {
+    expect(canRequestDraft(filled)).toBe(true);
+    expect(canRequestDraft({ ...filled, title: "  " })).toBe(false);
+  });
+
+  it("knows when applying would overwrite text", () => {
+    expect(hasWrittenDescription(filled)).toBe(false);
+    expect(hasWrittenDescription({ ...filled, required_qualifications: "SQL" })).toBe(true);
+  });
+
+  it("applies the draft to the two description fields only", () => {
+    const next = applyDraft(filled, { job_overview: "O", required_qualifications: "Q" });
+    expect(next.job_overview).toBe("O");
+    expect(next.required_qualifications).toBe("Q");
+    expect(next.title).toBe(filled.title);
   });
 });

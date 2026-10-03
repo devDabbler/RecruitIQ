@@ -56,6 +56,34 @@ export async function forwardWrite(
   });
 }
 
+/**
+ * Forward one read to the API with the session token (ATS Phase E: the email
+ * preview a client component asks for). Same pass-through as forwardWrite.
+ */
+export async function forwardRead(upstreamPath: string): Promise<NextResponse> {
+  const token = await getToken();
+  if (!token) {
+    return NextResponse.json({ detail: "Sign in to see this." }, { status: 401 });
+  }
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${API_BASE_URL}${upstreamPath}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return NextResponse.json(
+      { detail: `Cannot reach the API at ${API_BASE_URL}. Is uvicorn running?` },
+      { status: 503 },
+    );
+  }
+  const text = await upstream.text();
+  return new NextResponse(text || "{}", {
+    status: upstream.status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 /** Path segments the routes accept, checked before anything reaches the API. */
 export const NUMERIC_ID = /^\d+$/;
 export const USER_ID = /^[0-9a-f-]{36}$/i;
@@ -63,6 +91,8 @@ export const STAGE_KEY = /^[a-z0-9_]+$/;
 /** ATS Phase C: candidate ids are UUIDs; tags are stored lower-kebab-case. */
 export const CANDIDATE_ID = /^[0-9a-f-]{36}$/i;
 export const TAG = /^[a-z0-9-]{1,50}$/;
+/** ATS Phase E: email template keys. */
+export const TEMPLATE_KEY = /^[a-z_]{1,50}$/;
 
 export function badRequest(detail: string): NextResponse {
   return NextResponse.json({ detail }, { status: 400 });

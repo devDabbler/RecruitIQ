@@ -67,6 +67,10 @@ class Settings(BaseSettings):
             "openrouter:google/gemini-2.5-flash-lite,anthropic,ollama",
         )
     )
+    # ATS Phase E job description drafts. Empty means the default chain.
+    llm_provider_order_job_description: str = Field(
+        default=os.getenv("LLM_PROVIDER_ORDER_JOB_DESCRIPTION", "")
+    )
     
     # Database settings
     postgres_conn: str = Field(
@@ -109,6 +113,20 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default=os.getenv("JWT_ALGORITHM", "HS256"))
     jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
     demo_user_email: str = Field(default=os.getenv("DEMO_USER_EMAIL", "demo@recruitiq.local"))
+
+    # Outbound email (ATS Phase E). No host or no from address means "no
+    # transport": the composer offers the finished text to copy instead of
+    # sending. Real values live in /etc/recruitiq/env on the droplet, never
+    # in git.
+    smtp_host: str = Field(default=os.getenv("SMTP_HOST", ""))
+    smtp_port: int = Field(default=int(os.getenv("SMTP_PORT", "587")))
+    smtp_username: str = Field(default=os.getenv("SMTP_USERNAME", ""))
+    smtp_password: str = Field(default=os.getenv("SMTP_PASSWORD", ""))
+    smtp_from: str = Field(default=os.getenv("SMTP_FROM", ""))
+    smtp_starttls: bool = Field(default=os.getenv("SMTP_STARTTLS", "true").lower() == "true")
+    # Where candidate-facing links point. Status links in email are built
+    # from this, never from a request's Host header.
+    public_app_url: str = Field(default=os.getenv("PUBLIC_APP_URL", "http://localhost:3000"))
     
     # Resume parser settings
     LLM_VALIDATE_ADDRESSES: bool = Field(default=os.getenv("LLM_VALIDATE_ADDRESSES", "false").lower() == "true")
