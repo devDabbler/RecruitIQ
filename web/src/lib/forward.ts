@@ -60,6 +60,9 @@ export async function forwardWrite(
 export const NUMERIC_ID = /^\d+$/;
 export const USER_ID = /^[0-9a-f-]{36}$/i;
 export const STAGE_KEY = /^[a-z0-9_]+$/;
+/** ATS Phase C: candidate ids are UUIDs; tags are stored lower-kebab-case. */
+export const CANDIDATE_ID = /^[0-9a-f-]{36}$/i;
+export const TAG = /^[a-z0-9-]{1,50}$/;
 
 export function badRequest(detail: string): NextResponse {
   return NextResponse.json({ detail }, { status: 400 });

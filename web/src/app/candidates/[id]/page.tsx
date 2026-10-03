@@ -4,8 +4,11 @@ import { Suspense } from "react";
 import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
 
 import { ApplicationTimeline } from "@/components/application-timeline";
+import { CandidateTags } from "@/components/candidate-tags";
+import { ConsiderForRole } from "@/components/consider-for-role";
 import { InterviewPanel } from "@/components/interview-panel";
 import { MatchScore, SubScore } from "@/components/match-score";
+import { NotesThread } from "@/components/notes-thread";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,8 +19,11 @@ import {
   getApplicationInterviews,
   getCandidate,
   getCandidateApplications,
+  getCandidateNotes,
   getCandidateResumes,
   getCandidateSavedJobs,
+  getCandidateTags,
+  listJobs,
   listTeam,
   matchJobsForCandidate,
 } from "@/lib/data";
@@ -37,12 +43,16 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
   // ~1.6s of the page's 1.75s, holding the whole navigation open while the
   // profile — already fetched — sat waiting on it. It streams below instead,
   // the same way /jobs/[id] handles its own matching panel.
-  const [applications, savedJobs, resumes, writable, user] = await Promise.all([
+  const [applications, savedJobs, resumes, writable, user, notes, tags, jobList] = await Promise.all([
     getCandidateApplications(id),
     getCandidateSavedJobs(id),
     getCandidateResumes(id),
     canWrite(),
     getUser(),
+    getCandidateNotes(id),
+    getCandidateTags(id),
+    // Optional context: a failed job list only hides "Consider for another role".
+    listJobs().catch(() => null),
   ]);
   const [details, team] = await Promise.all([
     Promise.all(applications.map((application) => getApplication(application.id))).then((all) =>
@@ -51,6 +61,18 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
     // Only writers assign interviewers; nobody else needs the team list.
     writable ? listTeam().catch(() => []) : Promise.resolve([]),
   ]);
+  const appliedJobIds = new Set(applications.map((application) => application.job_id));
+  const otherJobs = (jobList?.results ?? [])
+    .filter((job) => job.status === "open" && !appliedJobIds.has(job.id))
+    .map(({ id: jobId, title, department }) => ({ id: jobId, title, department }));
+  const noteContexts = details
+    .filter((detail) => detail.status === "active" && detail.current_stage_key)
+    .map((detail) => ({
+      value: `${detail.id}:${detail.current_stage_key}`,
+      label: `${detail.job_title}, ${detail.current_stage_name ?? detail.current_stage_key}`,
+      applicationId: detail.id,
+      stageKey: detail.current_stage_key ?? null,
+    }));
   const interviews = new Map(
     await Promise.all(
       details.map(async (detail) => [detail.id, await getApplicationInterviews(detail.id)] as const),
@@ -117,6 +139,8 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
                 </div>
               ) : null}
 
+              <CandidateTags candidateId={id} tags={tags} writable={writable} />
+
               {candidate.source ? (
                 <p className="text-xs text-slate-500">
                   Source: <span className="text-slate-700">{candidate.source}</span>
@@ -154,6 +178,8 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {writable ? <ConsiderForRole candidateId={id} jobs={otherJobs} /> : null}
+
           {details.length === 0 ? (
             <Card>
               <CardHeader>
@@ -161,7 +187,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-slate-500">
-                  Not in any pipeline yet. Open a job and add them to it.
+                  Not in any pipeline yet.
                 </p>
               </CardContent>
             </Card>
@@ -179,16 +205,12 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
             ))
           )}
 
-          {candidate.notes ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-line text-slate-700">{candidate.notes}</p>
-              </CardContent>
-            </Card>
-          ) : null}
+          <NotesThread
+            candidateId={id}
+            notes={notes}
+            contexts={noteContexts}
+            writable={writable}
+          />
 
           <Card>
             <CardHeader>

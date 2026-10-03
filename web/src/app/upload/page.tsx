@@ -1,5 +1,7 @@
+import { BulkUploader } from "@/components/bulk-uploader";
 import { PageHeader } from "@/components/page-header";
 import { ResumeUploader, type SelectableJob } from "@/components/resume-uploader";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { listJobs } from "@/lib/data";
 import { redirectInterviewer } from "@/lib/guards";
 import { CANDIDATES_ADD } from "@/lib/permissions";
@@ -41,11 +43,26 @@ export default async function UploadPage() {
         title="Resume Upload"
         description={
           writable
-            ? "Parse a resume, review the extraction and fit, then save it to the pipeline."
+            ? "Parse a resume, review it, then save it straight onto a job's pipeline. Or add several at once."
             : "Extraction runs against a real file you provide. Nothing is written to the database."
         }
       />
-      <ResumeUploader canWrite={writable} jobs={jobs} />
+      {writable ? (
+        <Tabs defaultValue="one">
+          <TabsList className="mb-4">
+            <TabsTrigger value="one">One resume</TabsTrigger>
+            <TabsTrigger value="many">Several resumes</TabsTrigger>
+          </TabsList>
+          <TabsContent value="one">
+            <ResumeUploader canWrite jobs={jobs} />
+          </TabsContent>
+          <TabsContent value="many">
+            <BulkUploader jobs={jobs} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <ResumeUploader canWrite={false} jobs={jobs} />
+      )}
     </>
   );
 }
