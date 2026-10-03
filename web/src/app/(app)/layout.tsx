@@ -49,9 +49,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           <footer className="border-t border-slate-200 bg-white">
             <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-slate-500 sm:px-6">
               <span>RecruitIQ is a portfolio demo. Data is seeded and read-only.</span>
-              <a href="/docs" className="font-medium text-slate-700 hover:underline">
+              <Link href="/docs" className="font-medium text-slate-700 hover:underline">
                 API docs
-              </a>
+              </Link>
             </div>
           </footer>
         </div>

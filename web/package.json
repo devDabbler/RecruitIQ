@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "types:api": "openapi-typescript ../openapi.json -o src/lib/schema.d.ts"
+    "types:api": "openapi-typescript ../openapi.json -o src/lib/schema.d.ts && node -e \"require('fs').copyFileSync('../openapi.json', 'src/lib/openapi.json')\""
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
