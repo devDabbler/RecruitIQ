@@ -468,6 +468,17 @@
             "title": "File",
             "type": "string"
           },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
           "parsed_data": {
             "title": "Parsed Data",
             "type": "string"
@@ -570,6 +581,129 @@
           "file"
         ],
         "title": "Body_upload_candidate_resume_api_candidates__candidate_id__upload_resume_post",
+        "type": "object"
+      },
+      "BulkItemResult": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "candidate_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Name"
+          },
+          "current_stage_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Stage Key"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "required": [
+          "application_id",
+          "ok"
+        ],
+        "title": "BulkItemResult",
+        "type": "object"
+      },
+      "BulkTransitionRequest": {
+        "properties": {
+          "application_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Application Ids",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "application_ids"
+        ],
+        "title": "BulkTransitionRequest",
+        "type": "object"
+      },
+      "BulkTransitionResponse": {
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkItemResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "action",
+          "succeeded",
+          "failed",
+          "results"
+        ],
+        "title": "BulkTransitionResponse",
         "type": "object"
       },
       "CandidateApplicationSummary": {
@@ -1477,6 +1611,27 @@
         "title": "CandidateStatus",
         "type": "string"
       },
+      "CandidateTagsResponse": {
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "tags"
+        ],
+        "title": "CandidateTagsResponse",
+        "type": "object"
+      },
       "CandidateUpdate": {
         "description": "Schema for updating an existing candidate.",
         "properties": {
@@ -1546,17 +1701,6 @@
               }
             ],
             "title": "Location"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
           },
           "phone": {
             "anyOf": [
@@ -2584,6 +2728,11 @@
       "JobResponse": {
         "description": "Schema for job response with all details. 'skills' is a list of required skills for the job.",
         "properties": {
+          "active_applications": {
+            "default": 0,
+            "title": "Active Applications",
+            "type": "integer"
+          },
           "application_deadline": {
             "anyOf": [
               {
@@ -2961,6 +3110,116 @@
           "message"
         ],
         "title": "MessageOut",
+        "type": "object"
+      },
+      "NoteCreate": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "stage_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Key"
+          }
+        },
+        "required": [
+          "body"
+        ],
+        "title": "NoteCreate",
+        "type": "object"
+      },
+      "NoteOut": {
+        "properties": {
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
+          "author_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author Name"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Name"
+          }
+        },
+        "required": [
+          "id",
+          "candidate_id",
+          "body",
+          "created_at"
+        ],
+        "title": "NoteOut",
         "type": "object"
       },
       "PairTrace": {
@@ -3729,6 +3988,22 @@
       "SaveCandidateResponse": {
         "description": "API response model for saving a reviewed parse as a candidate.",
         "properties": {
+          "already_in_pipeline": {
+            "default": false,
+            "title": "Already In Pipeline",
+            "type": "boolean"
+          },
+          "application_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Application Id"
+          },
           "candidate_id": {
             "anyOf": [
               {
@@ -4468,6 +4743,38 @@
           "name"
         ],
         "title": "StageUpdate",
+        "type": "object"
+      },
+      "TagCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "count"
+        ],
+        "title": "TagCount",
+        "type": "object"
+      },
+      "TagCreate": {
+        "properties": {
+          "tag": {
+            "maxLength": 80,
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag"
+        ],
+        "title": "TagCreate",
         "type": "object"
       },
       "Task": {
@@ -5406,6 +5713,59 @@
         ]
       }
     },
+    "/api/applications/bulk/{action}": {
+      "post": {
+        "description": "Advance or reject many applications; each one succeeds or fails on its own.\n\nEvery application runs in its own savepoint, so one that a colleague\nalready rejected is reported by name instead of blocking the rest (ATS\nPhase C decision). Declared above the single-application route on\npurpose: that route's `{application_id}` would otherwise capture \"bulk\"\nand answer 422.",
+        "operationId": "bulk_transition_api_applications_bulk__action__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTransitionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTransitionResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Transition",
+        "tags": [
+          "pipeline"
+        ]
+      }
+    },
     "/api/applications/{application_id}": {
       "get": {
         "description": "One application with its full stage timeline.",
@@ -5965,6 +6325,22 @@
           },
           {
             "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          },
+          {
+            "in": "query",
             "name": "sort_by",
             "required": false,
             "schema": {
@@ -6035,7 +6411,7 @@
         ]
       },
       "post": {
-        "description": "Create a new candidate.",
+        "description": "Create a candidate.\n\nWith `job_id`, they start that job's pipeline in the same transaction\n(ATS Phase C); an unknown job is a 404 and nothing is created. `notes`\nbecomes their first note rather than the read-only `candidates.notes`.",
         "operationId": "create_candidate_api_candidates__post",
         "requestBody": {
           "content": {
@@ -6070,6 +6446,84 @@
           }
         },
         "summary": "Create Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/api/candidates/export.csv": {
+      "get": {
+        "description": "The candidate list as CSV, with the same filters as the list (ATS Phase C).\n\nDeliberately contains no match scores and no notes. Declared before\n`/{candidate_id}`, which would otherwise read \"export.csv\" as an id.",
+        "operationId": "export_candidates_csv_api_candidates_export_csv_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "keyword",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Keyword"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/CandidateStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/csv": {}
+            },
+            "description": "The filtered candidate list. No scores."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Candidates Csv",
         "tags": [
           "candidates"
         ]
@@ -6236,6 +6690,104 @@
         ]
       }
     },
+    "/api/candidates/{candidate_id}/notes": {
+      "get": {
+        "description": "The candidate's notes thread, newest first.",
+        "operationId": "list_notes_api_candidates__candidate_id__notes_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/NoteOut"
+                  },
+                  "title": "Response List Notes Api Candidates  Candidate Id  Notes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Notes",
+        "tags": [
+          "notes"
+        ]
+      },
+      "post": {
+        "description": "Add a note about the person, one of their applications, or one stage of it.",
+        "operationId": "add_note_api_candidates__candidate_id__notes_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NoteCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NoteOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Note",
+        "tags": [
+          "notes"
+        ]
+      }
+    },
     "/api/candidates/{candidate_id}/parsed-resume": {
       "post": {
         "description": "Save parsed resume data for a candidate.",
@@ -6330,6 +6882,151 @@
         "summary": "Get Candidate Resumes",
         "tags": [
           "candidates"
+        ]
+      }
+    },
+    "/api/candidates/{candidate_id}/tags": {
+      "get": {
+        "operationId": "list_candidate_tags_api_candidates__candidate_id__tags_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateTagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Candidate Tags",
+        "tags": [
+          "tags"
+        ]
+      },
+      "post": {
+        "description": "Add one tag, normalized. Adding a tag the candidate already has is a no-op.",
+        "operationId": "add_candidate_tag_api_candidates__candidate_id__tags_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TagCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateTagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Candidate Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
+    "/api/candidates/{candidate_id}/tags/{tag}": {
+      "delete": {
+        "description": "Remove one tag. Idempotent: removing a tag that is not there is not an error.",
+        "operationId": "remove_candidate_tag_api_candidates__candidate_id__tags__tag__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "tag",
+            "required": true,
+            "schema": {
+              "title": "Tag",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateTagsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Candidate Tag",
+        "tags": [
+          "tags"
         ]
       }
     },
@@ -7953,7 +8650,7 @@
     },
     "/api/jobs/{job_id}/apply": {
       "post": {
-        "description": "Apply to a job.",
+        "description": "Apply to a job. One application per candidate per job (spec decision 2).",
         "operationId": "apply_to_job_api_jobs__job_id__apply_post",
         "parameters": [
           {
@@ -8778,7 +9475,7 @@
     },
     "/api/resume/save-candidate": {
       "post": {
-        "description": "Persist a reviewed parse: upsert the candidate, store the file, save the resume.\n\nTakes the parse the client already has instead of re-running the model, so a\nsave is a few hundred milliseconds rather than another LLM round trip.\n\nDeliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`\ngate refuses anonymous callers (401) and the demo role (403) before this\nhandler runs, so only an administrator can reach it.",
+        "description": "Persist a reviewed parse: upsert the candidate, store the file, save the resume.\n\nTakes the parse the client already has instead of re-running the model, so a\nsave is a few hundred milliseconds rather than another LLM round trip.\n\nDeliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`\ngate refuses anonymous callers (401), the demo role and interviewers (403)\nbefore this handler runs, so only roles with candidates.add reach it.\n\nWith `job_id` (ATS Phase C) the candidate also lands at the first stage of\nthat job's pipeline; saving the same person to the same job again returns\nthe existing application instead of failing.",
         "operationId": "save_candidate_from_parse_api_resume_save_candidate_post",
         "requestBody": {
           "content": {
@@ -9143,6 +9840,32 @@
         "tags": [
           "matching",
           "matching"
+        ]
+      }
+    },
+    "/api/tags": {
+      "get": {
+        "description": "Every tag in use with how many candidates carry it, most used first.",
+        "operationId": "list_tags_api_tags_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TagCount"
+                  },
+                  "title": "Response List Tags Api Tags Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Tags",
+        "tags": [
+          "tags"
         ]
       }
     },

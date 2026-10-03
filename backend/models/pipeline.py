@@ -79,3 +79,24 @@ class ApplicationDetail(BaseModel):
 
 class TransitionRequest(BaseModel):
     note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class BulkTransitionRequest(BaseModel):
+    application_ids: List[int] = Field(min_length=1, max_length=100)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class BulkItemResult(BaseModel):
+    application_id: int
+    ok: bool
+    detail: Optional[str] = None
+    candidate_name: Optional[str] = None
+    status: Optional[str] = None
+    current_stage_key: Optional[str] = None
+
+
+class BulkTransitionResponse(BaseModel):
+    action: str
+    succeeded: int
+    failed: int
+    results: List[BulkItemResult]
