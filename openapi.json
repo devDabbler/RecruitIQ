@@ -1,6 +1,67 @@
 {
   "components": {
     "schemas": {
+      "ActivityEvent": {
+        "properties": {
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "title": "Candidate Name",
+            "type": "string"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "stage_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage Name"
+          }
+        },
+        "required": [
+          "at",
+          "kind",
+          "candidate_id",
+          "candidate_name",
+          "job_id",
+          "job_title"
+        ],
+        "title": "ActivityEvent",
+        "type": "object"
+      },
       "ApplicationCard": {
         "description": "One candidate chip on the board.",
         "properties": {
@@ -1766,6 +1827,67 @@
         "title": "ChatResponse",
         "type": "object"
       },
+      "DashboardResponse": {
+        "properties": {
+          "activity": {
+            "items": {
+              "$ref": "#/components/schemas/ActivityEvent"
+            },
+            "title": "Activity",
+            "type": "array"
+          },
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/FunnelRow"
+            },
+            "title": "Funnel",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "interviewing_or_later": {
+            "title": "Interviewing Or Later",
+            "type": "integer"
+          },
+          "no_movement": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingApplication"
+            },
+            "title": "No Movement",
+            "type": "array"
+          },
+          "no_movement_total": {
+            "title": "No Movement Total",
+            "type": "integer"
+          },
+          "pending_feedback": {
+            "items": {
+              "$ref": "#/components/schemas/PendingFeedbackRow"
+            },
+            "title": "Pending Feedback",
+            "type": "array"
+          },
+          "total_applications": {
+            "title": "Total Applications",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "total_applications",
+          "interviewing_or_later",
+          "funnel",
+          "no_movement",
+          "no_movement_total",
+          "pending_feedback",
+          "activity"
+        ],
+        "title": "DashboardResponse",
+        "type": "object"
+      },
       "DefaultInterviewersRequest": {
         "properties": {
           "user_ids": {
@@ -1977,6 +2099,44 @@
           "multiplier"
         ],
         "title": "FinalPenalty",
+        "type": "object"
+      },
+      "FunnelRow": {
+        "properties": {
+          "currently_here": {
+            "title": "Currently Here",
+            "type": "integer"
+          },
+          "ever_reached": {
+            "title": "Ever Reached",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          },
+          "share_of_applicants": {
+            "title": "Share Of Applicants",
+            "type": "number"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "position",
+          "ever_reached",
+          "currently_here",
+          "share_of_applicants"
+        ],
+        "title": "FunnelRow",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -3340,6 +3500,65 @@
         "title": "PasswordChange",
         "type": "object"
       },
+      "PendingFeedbackRow": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "title": "Candidate Name",
+            "type": "string"
+          },
+          "days_pending": {
+            "title": "Days Pending",
+            "type": "integer"
+          },
+          "interview_id": {
+            "title": "Interview Id",
+            "type": "integer"
+          },
+          "interviewer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Interviewer Name"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "stage_name": {
+            "title": "Stage Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "interview_id",
+          "application_id",
+          "candidate_id",
+          "candidate_name",
+          "job_id",
+          "job_title",
+          "stage_name",
+          "days_pending"
+        ],
+        "title": "PendingFeedbackRow",
+        "type": "object"
+      },
       "PipelineUpdateRequest": {
         "properties": {
           "stages": {
@@ -3495,6 +3714,132 @@
           "name"
         ],
         "title": "ProfileUpdate",
+        "type": "object"
+      },
+      "QuarterOutcomes": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "hires": {
+            "title": "Hires",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "offers_declined": {
+            "title": "Offers Declined",
+            "type": "integer"
+          },
+          "rejections": {
+            "title": "Rejections",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "start",
+          "end",
+          "hires",
+          "rejections",
+          "offers_declined"
+        ],
+        "title": "QuarterOutcomes",
+        "type": "object"
+      },
+      "ReportsResponse": {
+        "properties": {
+          "funnel": {
+            "items": {
+              "$ref": "#/components/schemas/FunnelRow"
+            },
+            "title": "Funnel",
+            "type": "array"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "job_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Title"
+          },
+          "no_movement": {
+            "items": {
+              "$ref": "#/components/schemas/WaitingApplication"
+            },
+            "title": "No Movement",
+            "type": "array"
+          },
+          "no_movement_total": {
+            "title": "No Movement Total",
+            "type": "integer"
+          },
+          "quarters": {
+            "items": {
+              "$ref": "#/components/schemas/QuarterOutcomes"
+            },
+            "title": "Quarters",
+            "type": "array"
+          },
+          "source_mix": {
+            "items": {
+              "$ref": "#/components/schemas/SourceRow"
+            },
+            "title": "Source Mix",
+            "type": "array"
+          },
+          "time_in_stage": {
+            "items": {
+              "$ref": "#/components/schemas/StageTiming"
+            },
+            "title": "Time In Stage",
+            "type": "array"
+          },
+          "total_applications": {
+            "title": "Total Applications",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "generated_at",
+          "total_applications",
+          "funnel",
+          "time_in_stage",
+          "no_movement",
+          "no_movement_total",
+          "source_mix",
+          "quarters"
+        ],
+        "title": "ReportsResponse",
         "type": "object"
       },
       "ResumeConfirmRequest": {
@@ -4634,6 +4979,29 @@
         "title": "SkillStep",
         "type": "object"
       },
+      "SourceRow": {
+        "properties": {
+          "applications": {
+            "title": "Applications",
+            "type": "integer"
+          },
+          "hired": {
+            "title": "Hired",
+            "type": "integer"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "applications",
+          "hired"
+        ],
+        "title": "SourceRow",
+        "type": "object"
+      },
       "StageDefaults": {
         "properties": {
           "stage_key": {
@@ -4707,6 +5075,45 @@
           "enabled"
         ],
         "title": "StageOut",
+        "type": "object"
+      },
+      "StageTiming": {
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "integer"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "median_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Days"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "position": {
+            "title": "Position",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "position",
+          "completed"
+        ],
+        "title": "StageTiming",
         "type": "object"
       },
       "StageUpdate": {
@@ -5462,6 +5869,60 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WaitingApplication": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "title": "Candidate Name",
+            "type": "string"
+          },
+          "days_waiting": {
+            "title": "Days Waiting",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "since": {
+            "format": "date-time",
+            "title": "Since",
+            "type": "string"
+          },
+          "stage_key": {
+            "title": "Stage Key",
+            "type": "string"
+          },
+          "stage_name": {
+            "title": "Stage Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "application_id",
+          "candidate_id",
+          "candidate_name",
+          "job_id",
+          "job_title",
+          "stage_key",
+          "stage_name",
+          "since",
+          "days_waiting"
+        ],
+        "title": "WaitingApplication",
         "type": "object"
       },
       "WeightTier": {
@@ -9341,6 +9802,80 @@
         "summary": "Get Pitch By Id",
         "tags": [
           "pitches"
+        ]
+      }
+    },
+    "/api/reports/dashboard": {
+      "get": {
+        "description": "Funnel, attention list, and activity for the dashboard.",
+        "operationId": "get_dashboard_api_reports_dashboard_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Dashboard",
+        "tags": [
+          "reports"
+        ]
+      }
+    },
+    "/api/reports/summary": {
+      "get": {
+        "description": "Everything on the Reports page, for all jobs or one.",
+        "operationId": "get_summary_api_reports_summary_get",
+        "parameters": [
+          {
+            "description": "Limit every number to one job",
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Limit every number to one job",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Summary",
+        "tags": [
+          "reports"
         ]
       }
     },

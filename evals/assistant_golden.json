@@ -735,6 +735,36 @@
         "calls": [{"tool": "list_pending_feedback", "arguments": {}}],
         "reply": "{{value:pending_count}} interviews are waiting for feedback."
       }
+    },
+    {
+      "id": "job-pipeline",
+      "question": "Where is everyone in the hiring process for {{cast:job}}?",
+      "expected_tools": ["get_job_pipeline"],
+      "checks": {
+        "numbers_from_results": true,
+        "require_link": true,
+        "must_mention": ["{{cast:job}}"]
+      },
+      "replay": {
+        "calls": [{"tool": "get_job_pipeline", "arguments": {"job": "{{cast:job}}"}}],
+        "reply": {
+          "default": "{{link:job:{{cast:job}}}} has {{value:in_progress}} people in progress. By stage: {{dict:stage_counts}}.",
+          "empty": "Nobody is in progress for {{link:job:{{cast:job}}}} right now."
+        }
+      }
+    },
+    {
+      "id": "who-at-stage",
+      "question": "Who is at the resume submitted stage right now?",
+      "expected_tools": ["find_candidates_at_stage"],
+      "checks": {"numbers_from_results": true},
+      "replay": {
+        "calls": [{"tool": "find_candidates_at_stage", "arguments": {"stage": "resume submitted"}}],
+        "reply": {
+          "default": "{{value:count}} people are at {{list:stages_matched}}, including {{links:candidates}}.",
+          "empty": "Nobody is at {{list:stages_matched}} right now."
+        }
+      }
     }
   ]
 }

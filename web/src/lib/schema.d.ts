@@ -1355,6 +1355,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/reports/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Dashboard
+         * @description Funnel, attention list, and activity for the dashboard.
+         */
+        get: operations["get_dashboard_api_reports_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/reports/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Summary
+         * @description Everything on the Reports page, for all jobs or one.
+         */
+        get: operations["get_summary_api_reports_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/resume/confirm": {
         parameters: {
             query?: never;
@@ -2019,6 +2059,28 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActivityEvent */
+        ActivityEvent: {
+            /** Actor Name */
+            actor_name?: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            /** Job Id */
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /** Kind */
+            kind: string;
+            /** Stage Name */
+            stage_name?: string | null;
+        };
         /**
          * ApplicationCard
          * @description One candidate chip on the board.
@@ -2561,6 +2623,28 @@ export interface components {
             /** Response */
             response: string;
         };
+        /** DashboardResponse */
+        DashboardResponse: {
+            /** Activity */
+            activity: components["schemas"]["ActivityEvent"][];
+            /** Funnel */
+            funnel: components["schemas"]["FunnelRow"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Interviewing Or Later */
+            interviewing_or_later: number;
+            /** No Movement */
+            no_movement: components["schemas"]["WaitingApplication"][];
+            /** No Movement Total */
+            no_movement_total: number;
+            /** Pending Feedback */
+            pending_feedback: components["schemas"]["PendingFeedbackRow"][];
+            /** Total Applications */
+            total_applications: number;
+        };
         /** DefaultInterviewersRequest */
         DefaultInterviewersRequest: {
             /** User Ids */
@@ -2643,6 +2727,21 @@ export interface components {
             condition: string;
             /** Multiplier */
             multiplier: number;
+        };
+        /** FunnelRow */
+        FunnelRow: {
+            /** Currently Here */
+            currently_here: number;
+            /** Ever Reached */
+            ever_reached: number;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+            /** Share Of Applicants */
+            share_of_applicants: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3116,6 +3215,27 @@ export interface components {
             /** New Password */
             new_password: string;
         };
+        /** PendingFeedbackRow */
+        PendingFeedbackRow: {
+            /** Application Id */
+            application_id: number;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            /** Days Pending */
+            days_pending: number;
+            /** Interview Id */
+            interview_id: number;
+            /** Interviewer Name */
+            interviewer_name?: string | null;
+            /** Job Id */
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /** Stage Name */
+            stage_name: string;
+        };
         /** PipelineUpdateRequest */
         PipelineUpdateRequest: {
             /** Stages */
@@ -3173,6 +3293,53 @@ export interface components {
             name: string;
             /** Timezone */
             timezone?: string | null;
+        };
+        /** QuarterOutcomes */
+        QuarterOutcomes: {
+            /**
+             * End
+             * Format: date-time
+             */
+            end: string;
+            /** Hires */
+            hires: number;
+            /** Label */
+            label: string;
+            /** Offers Declined */
+            offers_declined: number;
+            /** Rejections */
+            rejections: number;
+            /**
+             * Start
+             * Format: date-time
+             */
+            start: string;
+        };
+        /** ReportsResponse */
+        ReportsResponse: {
+            /** Funnel */
+            funnel: components["schemas"]["FunnelRow"][];
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Job Id */
+            job_id?: number | null;
+            /** Job Title */
+            job_title?: string | null;
+            /** No Movement */
+            no_movement: components["schemas"]["WaitingApplication"][];
+            /** No Movement Total */
+            no_movement_total: number;
+            /** Quarters */
+            quarters: components["schemas"]["QuarterOutcomes"][];
+            /** Source Mix */
+            source_mix: components["schemas"]["SourceRow"][];
+            /** Time In Stage */
+            time_in_stage: components["schemas"]["StageTiming"][];
+            /** Total Applications */
+            total_applications: number;
         };
         /**
          * ResumeConfirmRequest
@@ -3541,6 +3708,15 @@ export interface components {
             /** Score */
             score: number;
         };
+        /** SourceRow */
+        SourceRow: {
+            /** Applications */
+            applications: number;
+            /** Hired */
+            hired: number;
+            /** Source */
+            source: string;
+        };
         /** StageDefaults */
         StageDefaults: {
             /** Stage Key */
@@ -3562,6 +3738,19 @@ export interface components {
             key: string;
             /** Kind */
             kind: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+        };
+        /** StageTiming */
+        StageTiming: {
+            /** Completed */
+            completed: number;
+            /** Key */
+            key: string;
+            /** Median Days */
+            median_days?: number | null;
             /** Name */
             name: string;
             /** Position */
@@ -3847,6 +4036,30 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WaitingApplication */
+        WaitingApplication: {
+            /** Application Id */
+            application_id: number;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            /** Days Waiting */
+            days_waiting: number;
+            /** Job Id */
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Stage Key */
+            stage_key: string;
+            /** Stage Name */
+            stage_name: string;
         };
         /** WeightTier */
         WeightTier: {
@@ -6282,6 +6495,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dashboard_api_reports_dashboard_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardResponse"];
+                };
+            };
+        };
+    };
+    get_summary_api_reports_summary_get: {
+        parameters: {
+            query?: {
+                /** @description Limit every number to one job */
+                job_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportsResponse"];
                 };
             };
             /** @description Validation Error */
