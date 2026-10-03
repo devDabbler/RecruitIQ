@@ -268,25 +268,22 @@ def test_spread_moves_seeded_interviews_and_feedback_with_their_stage(db_session
     db_session.commit()
 
 
-def test_seed_timelines_only_touches_seeded_candidates(db_session, seed):
-    from backend.models.models import Candidate
-    from scripts.seed_demo import seed_timelines
+def test_seed_timelines_only_touches_seeded_applications(db_session, seed):
+    from scripts.seed_demo import SEEDED_APPLICATION_NOTE, seed_timelines
 
     job = _test_job(db_session, "Seed Timelines Only Role")
     flat_at = datetime(2025, 3, 1, 9, 0, 0)
-    domain = "timelines-only.example.com"
-    seeded = Candidate(id="00000000-0000-4000-8000-0000000e0001", first_name="Seeded", last_name="Person", email=f"s@{domain}")
-    db_session.add(seeded)
-    db_session.flush()
-    mine = _flat_application(db_session, job, seeded.id, flat_at)
+    mine = _flat_application(db_session, job, seed["candidate_ids"][1], flat_at)
+    mine.notes = f"{SEEDED_APPLICATION_NOTE} (active)."
     other = _flat_application(db_session, job, seed["candidate_ids"][2], flat_at)
+    db_session.flush()
 
-    assert seed_timelines(db_session, datetime(2025, 6, 1, 12, 0, 0), email_domain=domain) == 1
+    now = datetime(2025, 6, 1, 12, 0, 0)
+    seed_timelines(db_session, now)
     assert mine.applied_at != flat_at
     assert other.applied_at == flat_at
     assert all(r.started_at in (None, flat_at) for r in other.stages)
-    assert seed_timelines(db_session, datetime(2025, 6, 1, 12, 0, 0), email_domain=domain) == 0
+    assert seed_timelines(db_session, now) == 0  # a re-run is a no-op
 
     db_session.delete(job)
-    db_session.delete(seeded)
     db_session.commit()

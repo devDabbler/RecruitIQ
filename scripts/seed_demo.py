@@ -763,18 +763,21 @@ def _spread_stage_timeline(db, application: JobApplication, now: datetime) -> bo
     return True
 
 
-def seed_timelines(db, now: datetime, email_domain: str = EMAIL_DOMAIN) -> int:
-    """Spread the stage timestamps of the seeded candidates' applications.
+SEEDED_APPLICATION_NOTE = "Seeded demo application"
+
+
+def seed_timelines(db, now: datetime) -> int:
+    """Spread the stage timestamps of the applications this script created.
 
     The `--timelines-only` path, for a database seeded before ATS Phase D
-    (prod). Touches only applications of seeded candidates (the demo email
-    domain) whose history is still flat; everything else is left alone.
+    (prod). seed_pipeline marks every application it writes with
+    SEEDED_APPLICATION_NOTE, so this touches exactly those, and of those only
+    the ones whose history is still flat; everything else is left alone.
     Returns how many were laid out.
     """
     applications = (
         db.query(JobApplication)
-        .join(Candidate, Candidate.id == JobApplication.candidate_id)
-        .filter(Candidate.email.like(f"%@{email_domain}"))
+        .filter(JobApplication.notes.like(f"{SEEDED_APPLICATION_NOTE}%"))
         .order_by(JobApplication.id)
         .all()
     )
@@ -809,7 +812,7 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
             application = JobApplication(job_id=job.id, candidate_id=candidate.id)
             db.add(application)
         application.source = candidate.source or "direct"
-        application.notes = f"Seeded demo application ({app_status})."
+        application.notes = f"{SEEDED_APPLICATION_NOTE} ({app_status})."
         db.flush()
         _seed_stage_history(db, application, candidate.status or "active")
         db.flush()
@@ -1023,8 +1026,8 @@ def main() -> int:
         "--timelines-only",
         action="store_true",
         help=(
-            "only lay out realistic stage timestamps (ATS Phase D) on the seeded "
-            "candidates' applications whose history is still flat. Never changes an "
+            "only lay out realistic stage timestamps (ATS Phase D) on the applications "
+            "this script created whose history is still flat. Never changes an "
             "application a person has moved, a candidate, or a status"
         ),
     )
