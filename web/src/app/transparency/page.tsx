@@ -202,7 +202,10 @@ function UploadPrivacy({ policy }: { policy: UploadPolicy }) {
             {policy.parse_writes_nothing
               ? "Parsing stores nothing. "
               : null}
-            What is stored is {policy.stored_only_when_saved}.
+            What is stored is {policy.stored_only_when_saved}. Matching covers saved candidates
+            only, and the ranker reads{" "}
+            {policy.matching_reads.map((f) => f.replace(/_/g, " ")).join(" and ")}, never the
+            name or contact details.
           </Step>
         </ol>
 
@@ -219,12 +222,30 @@ function UploadPrivacy({ policy }: { policy: UploadPolicy }) {
               </div>
             ))}
           </dl>
-          <p className="mt-4 text-xs text-slate-500">
-            Why it matters: these prompts leave the machine, and a name plus an employer is
-            enough to identify someone to a provider that never needed to know. The quality
-            scores also feed the fit score shown on the upload screen, and a name carries
-            gender and ethnicity signal that must not move that number.
-          </p>
+          {policy.hosted_providers.length > 0 ? (
+            <p className="mt-4 text-xs text-slate-500">
+              Why it matters: on this deployment these prompts can reach a hosted provider (
+              <span className="font-mono">{policy.hosted_providers.join(", ")}</span>), and a
+              name plus an employer is enough to identify someone to a provider that never
+              needed to know. The quality scores also feed the fit score shown on the upload
+              screen, and a name carries gender and ethnicity signal that must not move that
+              number.
+            </p>
+          ) : (
+            <p className="mt-4 text-xs text-slate-500">
+              This deployment runs every model on hardware it controls, so no resume text
+              leaves the server. De-identification still applies: the quality scores feed the
+              fit score shown on the upload screen, and a name carries gender and ethnicity
+              signal that must not move that number.
+            </p>
+          )}
+          {policy.hosted_providers.length > 0 ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Self-hosting: every model call can be pointed at a local model (Ollama), and this
+              card then reports that nothing leaves the server. It is read from the live
+              configuration, so it always shows what this deployment actually uses.
+            </p>
+          ) : null}
         </div>
       </CardContent>
     </Card>

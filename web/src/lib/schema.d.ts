@@ -3105,8 +3105,12 @@ export interface components {
         UploadPrivacyPolicy: {
             /** Dropped Keys */
             dropped_keys: string[];
+            /** Hosted Providers */
+            hosted_providers: string[];
             /** Identifying Fields Removed */
             identifying_fields_removed: string[];
+            /** Matching Reads */
+            matching_reads: string[];
             /** Model Calls After Parse */
             model_calls_after_parse: components["schemas"]["PostParseModelCall"][];
             /** Parse Writes Nothing */
