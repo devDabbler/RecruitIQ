@@ -1,0 +1,64 @@
+{
+  "permissions": [
+    "jobs.write",
+    "candidates.add",
+    "pipeline.move",
+    "feedback.submit",
+    "users.invite",
+    "users.change_role",
+    "records.delete",
+    "score.before_feedback",
+    "reports.view",
+    "templates.manage",
+    "profile.edit"
+  ],
+  "roles": {
+    "admin": [
+      "candidates.add",
+      "feedback.submit",
+      "jobs.write",
+      "pipeline.move",
+      "profile.edit",
+      "records.delete",
+      "reports.view",
+      "score.before_feedback",
+      "templates.manage",
+      "users.change_role",
+      "users.invite"
+    ],
+    "demo": [
+      "reports.view",
+      "score.before_feedback"
+    ],
+    "hiring_manager": [
+      "candidates.add",
+      "feedback.submit",
+      "jobs.write",
+      "pipeline.move",
+      "profile.edit",
+      "reports.view",
+      "score.before_feedback",
+      "templates.manage",
+      "users.invite"
+    ],
+    "hiring_team": [
+      "candidates.add",
+      "feedback.submit",
+      "pipeline.move",
+      "profile.edit",
+      "reports.view",
+      "score.before_feedback"
+    ],
+    "interviewer": [
+      "feedback.submit",
+      "profile.edit"
+    ]
+  },
+  "labels": {
+    "admin": "Admin",
+    "demo": "Read-only demo",
+    "hiring_manager": "Hiring manager",
+    "hiring_team": "Hiring team",
+    "interviewer": "Interviewer"
+  }
+}

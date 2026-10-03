@@ -199,6 +199,7 @@
       "department": "str",
       "experience_level": "str",
       "hiring_manager": "null",
+      "hiring_manager_id": "null",
       "id": "int",
       "job_metadata": {},
       "job_overview": "str",
@@ -208,6 +209,7 @@
       "max_salary": "null",
       "min_salary": "null",
       "recruiter": "null",
+      "recruiter_id": "null",
       "required_qualifications": "str",
       "skills": [],
       "start_date": "null",
@@ -232,6 +234,7 @@
       "department": "str",
       "experience_level": "str",
       "hiring_manager": "str",
+      "hiring_manager_id": "null",
       "id": "int",
       "job_metadata": {},
       "job_overview": "str",
@@ -241,6 +244,7 @@
       "max_salary": "int",
       "min_salary": "int",
       "recruiter": "str",
+      "recruiter_id": "null",
       "required_qualifications": "str",
       "skills": [
         "str"
@@ -289,6 +293,7 @@
           "department": "str",
           "experience_level": "str",
           "hiring_manager": "str",
+          "hiring_manager_id": "null",
           "id": "int",
           "job_metadata": {},
           "job_overview": "str",
@@ -298,6 +303,7 @@
           "max_salary": "int",
           "min_salary": "int",
           "recruiter": "str",
+          "recruiter_id": "null",
           "required_qualifications": "str",
           "skills": [
             "str"
@@ -328,6 +334,7 @@
       "department": "str",
       "experience_level": "str",
       "hiring_manager": "null",
+      "hiring_manager_id": "null",
       "id": "int",
       "job_metadata": {},
       "job_overview": "str",
@@ -337,6 +344,7 @@
       "max_salary": "null",
       "min_salary": "null",
       "recruiter": "null",
+      "recruiter_id": "null",
       "required_qualifications": "str",
       "skills": [],
       "start_date": "null",

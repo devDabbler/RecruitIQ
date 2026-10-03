@@ -82,6 +82,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/applications/{application_id}/interviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Application Interviews
+         * @description Everyone assigned to this application, stage by stage, with feedback
+         *     where the viewer may read it.
+         */
+        get: operations["list_application_interviews_api_applications__application_id__interviews_get"];
+        put?: never;
+        /** Assign Interviewer */
+        post: operations["assign_interviewer_api_applications__application_id__interviews_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications/{application_id}/{action}": {
         parameters: {
             query?: never;
@@ -721,7 +743,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/interviews/": {
+    "/api/interviews": {
         parameters: {
             query?: never;
             header?: never;
@@ -729,54 +751,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Interviews
-         * @description Retrieve all interviews, with optional filtering.
+         * List Interviews
+         * @description `mine` for anyone signed in, `pending` and `all` for everyone but interviewers.
          */
-        get: operations["get_interviews_api_interviews__get"];
-        put?: never;
-        /**
-         * Create Interview
-         * @description Schedule a new interview.
-         */
-        post: operations["create_interview_api_interviews__post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/interviews/candidate/{candidate_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Interviews For Candidate
-         * @description Get all interviews for a specific candidate.
-         */
-        get: operations["get_interviews_for_candidate_api_interviews_candidate__candidate_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/interviews/job/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Interviews For Job
-         * @description Get all interviews for a specific job.
-         */
-        get: operations["get_interviews_for_job_api_interviews_job__job_id__get"];
+        get: operations["list_interviews_api_interviews_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -792,28 +770,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Interview
-         * @description Retrieve a specific interview by ID.
-         */
-        get: operations["get_interview_api_interviews__interview_id__get"];
-        /**
-         * Update Interview
-         * @description Update an existing interview.
-         */
-        put: operations["update_interview_api_interviews__interview_id__put"];
+        get?: never;
+        put?: never;
         post?: never;
-        /**
-         * Delete Interview
-         * @description Delete an interview.
-         */
-        delete: operations["delete_interview_api_interviews__interview_id__delete"];
+        /** Unassign Interviewer */
+        delete: operations["unassign_interviewer_api_interviews__interview_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/interviews/{interview_id}/complete": {
+    "/api/interviews/{interview_id}/feedback": {
         parameters: {
             query?: never;
             header?: never;
@@ -822,15 +789,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
+        /** Submit Feedback */
+        post: operations["submit_feedback_api_interviews__interview_id__feedback_post"];
         delete?: never;
         options?: never;
         head?: never;
-        /**
-         * Complete Interview
-         * @description Mark an interview as completed and provide feedback.
-         */
-        patch: operations["complete_interview_api_interviews__interview_id__complete_patch"];
+        patch?: never;
         trace?: never;
     };
     "/api/jobs": {
@@ -1031,6 +995,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/jobs/{job_id}/default-interviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Default Interviewers */
+        get: operations["get_default_interviewers_api_jobs__job_id__default_interviewers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs/{job_id}/matching-candidates": {
         parameters: {
             query?: never;
@@ -1060,7 +1041,7 @@ export interface paths {
         };
         /**
          * Get Job Pipeline
-         * @description The job's stages and who is at each one.
+         * @description The job's stages and who is at each one (an interviewer sees only their candidates).
          */
         get: operations["get_job_pipeline_api_jobs__job_id__pipeline_get"];
         /**
@@ -1089,6 +1070,23 @@ export interface paths {
          * @description Save a job for later.
          */
         post: operations["save_job_api_jobs__job_id__save_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/stages/{stage_key}/default-interviewers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Default Interviewers */
+        put: operations["set_default_interviewers_api_jobs__job_id__stages__stage_key__default_interviewers_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1597,6 +1595,93 @@ export interface paths {
         patch: operations["complete_task_api_tasks__task_id__complete_patch"];
         trace?: never;
     };
+    "/api/team/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** My Profile */
+        get: operations["my_profile_api_team_me_get"];
+        /** Update My Profile */
+        put: operations["update_my_profile_api_team_me_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change My Password */
+        put: operations["change_my_password_api_team_me_password_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Team */
+        get: operations["list_team_api_team_users_get"];
+        put?: never;
+        /** Invite */
+        post: operations["invite_api_team_users_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove */
+        delete: operations["remove_api_team_users__user_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/team/users/{user_id}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Change Role */
+        put: operations["change_role_api_team_users__user_id__role_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/transparency/match-trace": {
         parameters: {
             query?: never;
@@ -1851,6 +1936,13 @@ export interface components {
             started_at?: string | null;
             /** Status */
             status: string;
+        };
+        /** AssignRequest */
+        AssignRequest: {
+            /** Interviewer Id */
+            interviewer_id: string;
+            /** Stage Key */
+            stage_key: string;
         };
         /** BoardColumn */
         BoardColumn: {
@@ -2287,6 +2379,18 @@ export interface components {
             /** Response */
             response: string;
         };
+        /** DefaultInterviewersRequest */
+        DefaultInterviewersRequest: {
+            /** User Ids */
+            user_ids?: string[];
+        };
+        /** DefaultInterviewersResponse */
+        DefaultInterviewersResponse: {
+            /** Job Id */
+            job_id: number;
+            /** Stages */
+            stages: components["schemas"]["StageDefaults"][];
+        };
         /**
          * ExperienceLevel
          * @enum {string}
@@ -2315,6 +2419,42 @@ export interface components {
             /** Years Match */
             years_match: number;
         };
+        /** FeedbackIn */
+        FeedbackIn: {
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Rating */
+            rating: number;
+            /**
+             * Recommendation
+             * @enum {string}
+             */
+            recommendation: "strong_hire" | "hire" | "no_hire" | "strong_no_hire";
+        };
+        /** FeedbackOut */
+        FeedbackOut: {
+            /** Notes */
+            notes?: string | null;
+            /** Rating */
+            rating: number;
+            /** Recommendation */
+            recommendation: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+        };
+        /** FeedbackPolicy */
+        FeedbackPolicy: {
+            /** Never Used For */
+            never_used_for: string[];
+            /** Used For */
+            used_for: string[];
+        };
         /** FinalPenalty */
         FinalPenalty: {
             /** Condition */
@@ -2327,110 +2467,101 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** Interview */
-        Interview: {
+        /** InterviewListItem */
+        InterviewListItem: {
+            /** Application Id */
+            application_id: number;
+            /** Assignment Source */
+            assignment_source: string;
             /** Candidate Id */
             candidate_id: string;
             /** Candidate Name */
             candidate_name: string;
+            feedback?: components["schemas"]["FeedbackOut"] | null;
             /**
-             * Completed
+             * Feedback Hidden
              * @default false
              */
-            completed: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Date
-             * Format: date
-             */
-            date: string;
-            /** Duration */
-            duration: string;
-            /** Feedback */
-            feedback?: string | null;
+            feedback_hidden: boolean;
             /** Id */
-            id: string;
-            /**
-             * Interviewers
-             * @default []
-             */
-            interviewers: string[];
+            id: number;
+            /** Interviewer Id */
+            interviewer_id: string;
+            /** Interviewer Name */
+            interviewer_name: string;
             /** Job Id */
-            job_id: string;
-            /** Location */
-            location?: string | null;
-            /** Meeting Link */
-            meeting_link?: string | null;
-            /** Notes */
-            notes?: string | null;
-            /** Position */
-            position: string;
-            /** Stage */
-            stage: string;
-            /** Status */
-            status?: string | null;
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /** Score Visible */
+            score_visible: boolean;
+            /** Stage Key */
+            stage_key: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Stage Status */
+            stage_status: string;
             /**
-             * Time
-             * Format: time
+             * State
+             * @enum {string}
              */
-            time: string;
-            /** Updated At */
-            updated_at?: string | null;
+            state: "upcoming" | "waiting" | "submitted" | "skipped";
         };
-        /** InterviewCreate */
-        InterviewCreate: {
-            /** Candidate Id */
-            candidate_id: string;
-            /**
-             * Date
-             * Format: date
-             */
-            date: string;
-            /** Duration */
-            duration: string;
-            /**
-             * Interviewers
-             * @default []
-             */
-            interviewers: string[];
-            /** Job Id */
-            job_id: string;
-            /** Location */
-            location?: string | null;
-            /** Meeting Link */
-            meeting_link?: string | null;
-            /** Notes */
-            notes?: string | null;
-            /** Stage */
-            stage: string;
-            /**
-             * Time
-             * Format: time
-             */
-            time: string;
+        /** InterviewListResponse */
+        InterviewListResponse: {
+            /** Items */
+            items: components["schemas"]["InterviewListItem"][];
         };
-        /** InterviewUpdate */
-        InterviewUpdate: {
-            /** Date */
-            date?: null;
-            /** Duration */
-            duration?: string | null;
-            /** Interviewers */
-            interviewers?: string[] | null;
-            /** Location */
-            location?: string | null;
-            /** Meeting Link */
-            meeting_link?: string | null;
-            /** Notes */
-            notes?: string | null;
-            /** Stage */
-            stage?: string | null;
-            /** Time */
-            time?: null;
+        /** InterviewOut */
+        InterviewOut: {
+            /** Application Id */
+            application_id: number;
+            /** Assignment Source */
+            assignment_source: string;
+            feedback?: components["schemas"]["FeedbackOut"] | null;
+            /**
+             * Feedback Hidden
+             * @default false
+             */
+            feedback_hidden: boolean;
+            /** Id */
+            id: number;
+            /** Interviewer Id */
+            interviewer_id: string;
+            /** Interviewer Name */
+            interviewer_name: string;
+            /** Stage Key */
+            stage_key: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Stage Status */
+            stage_status: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "upcoming" | "waiting" | "submitted" | "skipped";
+        };
+        /** InviteRequest */
+        InviteRequest: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Name */
+            name: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "admin" | "hiring_manager" | "hiring_team" | "interviewer";
+        };
+        /** InviteResponse */
+        InviteResponse: {
+            member: components["schemas"]["TeamMember"];
+            /** Temporary Password */
+            temporary_password: string;
         };
         /**
          * JobApplicationCreate
@@ -2496,6 +2627,8 @@ export interface components {
             experience_level: components["schemas"]["ExperienceLevel"];
             /** Hiring Manager */
             hiring_manager?: string | null;
+            /** Hiring Manager Id */
+            hiring_manager_id?: string | null;
             /** Job Metadata */
             job_metadata?: Record<string, never>;
             /** Job Overview */
@@ -2512,6 +2645,8 @@ export interface components {
             min_salary?: number | null;
             /** Recruiter */
             recruiter?: string | null;
+            /** Recruiter Id */
+            recruiter_id?: string | null;
             /** Required Qualifications */
             required_qualifications: string;
             /** Skills */
@@ -2602,6 +2737,8 @@ export interface components {
             experience_level: string;
             /** Hiring Manager */
             hiring_manager?: string | null;
+            /** Hiring Manager Id */
+            hiring_manager_id?: string | null;
             /** Id */
             id: number;
             /** Job Metadata */
@@ -2620,6 +2757,8 @@ export interface components {
             min_salary?: number | null;
             /** Recruiter */
             recruiter?: string | null;
+            /** Recruiter Id */
+            recruiter_id?: string | null;
             /** Required Qualifications */
             required_qualifications: string;
             /** Skills */
@@ -2711,6 +2850,11 @@ export interface components {
             /** Traces */
             traces: components["schemas"]["PairTrace"][];
         };
+        /** MessageOut */
+        MessageOut: {
+            /** Message */
+            message: string;
+        };
         /** PairTrace */
         PairTrace: {
             /** Above Threshold */
@@ -2747,6 +2891,13 @@ export interface components {
             /** Resume Id */
             resume_id: number;
         };
+        /** PasswordChange */
+        PasswordChange: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
+        };
         /** PipelineUpdateRequest */
         PipelineUpdateRequest: {
             /** Stages */
@@ -2779,6 +2930,31 @@ export interface components {
             file_name: string;
             /** Url */
             url: string;
+        };
+        /** ProfileResponse */
+        ProfileResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role: string;
+            /** Timezone */
+            timezone?: string | null;
+        };
+        /** ProfileUpdate */
+        ProfileUpdate: {
+            /** Name */
+            name: string;
+            /** Timezone */
+            timezone?: string | null;
         };
         /**
          * ResumeConfirmRequest
@@ -2876,6 +3052,14 @@ export interface components {
             /** Resume Id */
             resume_id: number;
         };
+        /** RoleChangeRequest */
+        RoleChangeRequest: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "admin" | "hiring_manager" | "hiring_team" | "interviewer";
+        };
         /** RoleStep */
         RoleStep: {
             /** Base Score */
@@ -2967,6 +3151,7 @@ export interface components {
             cross_domain_skill_penalty_factor: number;
             /** Default Match Threshold */
             default_match_threshold: number;
+            feedback_policy: components["schemas"]["FeedbackPolicy"];
             /** Fields Not Collected */
             fields_not_collected: string[];
             final_penalty: components["schemas"]["FinalPenalty"];
@@ -3131,6 +3316,15 @@ export interface components {
             /** Score */
             score: number;
         };
+        /** StageDefaults */
+        StageDefaults: {
+            /** Stage Key */
+            stage_key: string;
+            /** Stage Name */
+            stage_name: string;
+            /** Users */
+            users: components["schemas"]["TeamMemberBrief"][];
+        };
         /** StageOut */
         StageOut: {
             /** Description */
@@ -3246,6 +3440,36 @@ export interface components {
             recruiter_id?: string | null;
             /** Title */
             title: string;
+        };
+        /** TeamListResponse */
+        TeamListResponse: {
+            /** Members */
+            members: components["schemas"]["TeamMember"][];
+        };
+        /** TeamMember */
+        TeamMember: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Email */
+            email?: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name?: string | null;
+            /** Role */
+            role: string;
+        };
+        /** TeamMemberBrief */
+        TeamMemberBrief: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Role */
+            role: string;
         };
         /** TokenResponse */
         TokenResponse: {
@@ -3370,11 +3594,13 @@ export interface components {
             email: string;
             /** Id */
             id: string;
+            /** Name */
+            name?: string | null;
             /**
              * Role
              * @enum {string}
              */
-            role: "admin" | "demo";
+            role: "admin" | "hiring_manager" | "hiring_team" | "interviewer" | "demo";
         };
         /** ValidationError */
         ValidationError: {
@@ -3564,6 +3790,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApplicationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_application_interviews_api_applications__application_id__interviews_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_interviewer_api_applications__application_id__interviews_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewOut"];
                 };
             };
             /** @description Validation Error */
@@ -4655,21 +4947,10 @@ export interface operations {
             };
         };
     };
-    get_interviews_api_interviews__get: {
+    list_interviews_api_interviews_get: {
         parameters: {
             query?: {
-                /** @description Filter by start date */
-                date_from?: string | null;
-                /** @description Filter by end date */
-                date_to?: string | null;
-                /** @description Filter by interview stage */
-                stage?: string | null;
-                /** @description Filter by job ID */
-                job_id?: string | null;
-                /** @description Filter by candidate ID */
-                candidate_id?: string | null;
-                /** @description Filter by completion status */
-                completed?: boolean | null;
+                scope?: "mine" | "pending" | "all";
             };
             header?: never;
             path?: never;
@@ -4683,15 +4964,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Interview"][];
+                    "application/json": components["schemas"]["InterviewListResponse"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -4704,176 +4978,49 @@ export interface operations {
             };
         };
     };
-    create_interview_api_interviews__post: {
+    unassign_interviewer_api_interviews__interview_id__delete: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                interview_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_feedback_api_interviews__interview_id__feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interview_id: number;
+            };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["InterviewCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Interview"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_interviews_for_candidate_api_interviews_candidate__candidate_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The candidate ID to get interviews for */
-                candidate_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Interview"][];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_interviews_for_job_api_interviews_job__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The job ID to get interviews for */
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Interview"][];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_interview_api_interviews__interview_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The ID of the interview to retrieve */
-                interview_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Interview"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_interview_api_interviews__interview_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The ID of the interview to update */
-                interview_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["InterviewUpdate"];
+                "application/json": components["schemas"]["FeedbackIn"];
             };
         };
         responses: {
@@ -4883,94 +5030,8 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Interview"];
+                    "application/json": components["schemas"]["InterviewOut"];
                 };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_interview_api_interviews__interview_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description The ID of the interview to delete */
-                interview_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    complete_interview_api_interviews__interview_id__complete_patch: {
-        parameters: {
-            query?: {
-                feedback?: string | null;
-                status?: string;
-            };
-            header?: never;
-            path: {
-                /** @description The ID of the interview to mark as complete */
-                interview_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Interview"];
-                };
-            };
-            /** @description Not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -5341,6 +5402,37 @@ export interface operations {
             };
         };
     };
+    get_default_interviewers_api_jobs__job_id__default_interviewers_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultInterviewersResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_matching_candidates_api_jobs__job_id__matching_candidates_get: {
         parameters: {
             query?: {
@@ -5463,6 +5555,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SavedJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_interviewers_api_jobs__job_id__stages__stage_key__default_interviewers_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+                stage_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefaultInterviewersRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DefaultInterviewersResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6386,6 +6514,211 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_profile_api_team_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+        };
+    };
+    update_my_profile_api_team_me_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_my_password_api_team_me_password_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_team_api_team_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamListResponse"];
+                };
+            };
+        };
+    };
+    invite_api_team_users_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InviteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InviteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_api_team_users__user_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_role_api_team_users__user_id__role_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RoleChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamMember"];
+                };
             };
             /** @description Validation Error */
             422: {

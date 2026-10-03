@@ -90,3 +90,12 @@ def test_demo_holds_no_write_permission():
 )
 def test_route_permission(method, path, expected):
     assert p.route_permission(method, path) == expected
+
+
+def test_permissions_json_is_current():
+    from scripts.export_permissions import TARGET, render
+
+    assert TARGET.exists(), "run: poetry run python scripts/export_permissions.py"
+    assert TARGET.read_text(encoding="utf-8") == render(), (
+        "web/src/lib/role-permissions.json is stale; run: poetry run python scripts/export_permissions.py"
+    )

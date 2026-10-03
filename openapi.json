@@ -207,6 +207,28 @@
         "title": "ApplicationStageOut",
         "type": "object"
       },
+      "AssignRequest": {
+        "properties": {
+          "interviewer_id": {
+            "maxLength": 36,
+            "minLength": 1,
+            "title": "Interviewer Id",
+            "type": "string"
+          },
+          "stage_key": {
+            "maxLength": 50,
+            "minLength": 1,
+            "title": "Stage Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stage_key",
+          "interviewer_id"
+        ],
+        "title": "AssignRequest",
+        "type": "object"
+      },
       "BoardColumn": {
         "properties": {
           "applications": {
@@ -1600,6 +1622,41 @@
         "title": "ChatResponse",
         "type": "object"
       },
+      "DefaultInterviewersRequest": {
+        "properties": {
+          "user_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 20,
+            "title": "User Ids",
+            "type": "array"
+          }
+        },
+        "title": "DefaultInterviewersRequest",
+        "type": "object"
+      },
+      "DefaultInterviewersResponse": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/StageDefaults"
+            },
+            "title": "Stages",
+            "type": "array"
+          }
+        },
+        "required": [
+          "job_id",
+          "stages"
+        ],
+        "title": "DefaultInterviewersResponse",
+        "type": "object"
+      },
       "ExperienceLevel": {
         "enum": [
           "entry",
@@ -1669,6 +1726,97 @@
         "title": "ExperienceStep",
         "type": "object"
       },
+      "FeedbackIn": {
+        "properties": {
+          "notes": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "rating": {
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating",
+            "type": "integer"
+          },
+          "recommendation": {
+            "enum": [
+              "strong_hire",
+              "hire",
+              "no_hire",
+              "strong_no_hire"
+            ],
+            "title": "Recommendation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating",
+          "recommendation"
+        ],
+        "title": "FeedbackIn",
+        "type": "object"
+      },
+      "FeedbackOut": {
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "title": "Rating",
+            "type": "integer"
+          },
+          "recommendation": {
+            "title": "Recommendation",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rating",
+          "recommendation",
+          "submitted_at"
+        ],
+        "title": "FeedbackOut",
+        "type": "object"
+      },
+      "FeedbackPolicy": {
+        "properties": {
+          "never_used_for": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Never Used For",
+            "type": "array"
+          },
+          "used_for": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Used For",
+            "type": "array"
+          }
+        },
+        "required": [
+          "used_for",
+          "never_used_for"
+        ],
+        "title": "FeedbackPolicy",
+        "type": "object"
+      },
       "FinalPenalty": {
         "properties": {
           "condition": {
@@ -1700,8 +1848,16 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "Interview": {
+      "InterviewListItem": {
         "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "assignment_source": {
+            "title": "Assignment Source",
+            "type": "string"
+          },
           "candidate_id": {
             "title": "Candidate Id",
             "type": "string"
@@ -1710,299 +1866,224 @@
             "title": "Candidate Name",
             "type": "string"
           },
-          "completed": {
+          "feedback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "feedback_hidden": {
             "default": false,
-            "title": "Completed",
+            "title": "Feedback Hidden",
             "type": "boolean"
           },
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "interviewer_id": {
+            "title": "Interviewer Id",
             "type": "string"
           },
-          "date": {
-            "format": "date",
-            "title": "Date",
+          "interviewer_name": {
+            "title": "Interviewer Name",
             "type": "string"
           },
-          "duration": {
-            "title": "Duration",
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "score_visible": {
+            "title": "Score Visible",
+            "type": "boolean"
+          },
+          "stage_key": {
+            "title": "Stage Key",
+            "type": "string"
+          },
+          "stage_name": {
+            "title": "Stage Name",
+            "type": "string"
+          },
+          "stage_status": {
+            "title": "Stage Status",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "upcoming",
+              "waiting",
+              "submitted",
+              "skipped"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "application_id",
+          "stage_key",
+          "stage_name",
+          "stage_status",
+          "state",
+          "interviewer_id",
+          "interviewer_name",
+          "assignment_source",
+          "candidate_id",
+          "candidate_name",
+          "job_id",
+          "job_title",
+          "score_visible"
+        ],
+        "title": "InterviewListItem",
+        "type": "object"
+      },
+      "InterviewListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InterviewListItem"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "InterviewListResponse",
+        "type": "object"
+      },
+      "InterviewOut": {
+        "properties": {
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "assignment_source": {
+            "title": "Assignment Source",
             "type": "string"
           },
           "feedback": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/FeedbackOut"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Feedback"
+            ]
+          },
+          "feedback_hidden": {
+            "default": false,
+            "title": "Feedback Hidden",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
+            "type": "integer"
+          },
+          "interviewer_id": {
+            "title": "Interviewer Id",
             "type": "string"
           },
-          "interviewers": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Interviewers",
-            "type": "array"
-          },
-          "job_id": {
-            "title": "Job Id",
+          "interviewer_name": {
+            "title": "Interviewer Name",
             "type": "string"
           },
-          "location": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location"
-          },
-          "meeting_link": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Link"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "position": {
-            "title": "Position",
+          "stage_key": {
+            "title": "Stage Key",
             "type": "string"
           },
-          "stage": {
-            "title": "Stage",
+          "stage_name": {
+            "title": "Stage Name",
             "type": "string"
           },
-          "status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Status"
-          },
-          "time": {
-            "format": "time",
-            "title": "Time",
+          "stage_status": {
+            "title": "Stage Status",
             "type": "string"
           },
-          "updated_at": {
-            "anyOf": [
-              {
-                "format": "date-time",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+          "state": {
+            "enum": [
+              "upcoming",
+              "waiting",
+              "submitted",
+              "skipped"
             ],
-            "title": "Updated At"
+            "title": "State",
+            "type": "string"
           }
         },
         "required": [
-          "candidate_id",
-          "job_id",
-          "date",
-          "time",
-          "stage",
-          "duration",
           "id",
-          "candidate_name",
-          "position",
-          "created_at"
+          "application_id",
+          "stage_key",
+          "stage_name",
+          "stage_status",
+          "state",
+          "interviewer_id",
+          "interviewer_name",
+          "assignment_source"
         ],
-        "title": "Interview",
+        "title": "InterviewOut",
         "type": "object"
       },
-      "InterviewCreate": {
+      "InviteRequest": {
         "properties": {
-          "candidate_id": {
-            "title": "Candidate Id",
+          "email": {
+            "format": "email",
+            "title": "Email",
             "type": "string"
           },
-          "date": {
-            "format": "date",
-            "title": "Date",
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
             "type": "string"
           },
-          "duration": {
-            "title": "Duration",
-            "type": "string"
-          },
-          "interviewers": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Interviewers",
-            "type": "array"
-          },
-          "job_id": {
-            "title": "Job Id",
-            "type": "string"
-          },
-          "location": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+          "role": {
+            "enum": [
+              "admin",
+              "hiring_manager",
+              "hiring_team",
+              "interviewer"
             ],
-            "title": "Location"
-          },
-          "meeting_link": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Link"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "stage": {
-            "title": "Stage",
-            "type": "string"
-          },
-          "time": {
-            "format": "time",
-            "title": "Time",
+            "title": "Role",
             "type": "string"
           }
         },
         "required": [
-          "candidate_id",
-          "job_id",
-          "date",
-          "time",
-          "stage",
-          "duration"
+          "email",
+          "name",
+          "role"
         ],
-        "title": "InterviewCreate",
+        "title": "InviteRequest",
         "type": "object"
       },
-      "InterviewUpdate": {
+      "InviteResponse": {
         "properties": {
-          "date": {
-            "title": "Date",
-            "type": "null"
+          "member": {
+            "$ref": "#/components/schemas/TeamMember"
           },
-          "duration": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Duration"
-          },
-          "interviewers": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Interviewers"
-          },
-          "location": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Location"
-          },
-          "meeting_link": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Meeting Link"
-          },
-          "notes": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Notes"
-          },
-          "stage": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stage"
-          },
-          "time": {
-            "title": "Time",
-            "type": "null"
+          "temporary_password": {
+            "title": "Temporary Password",
+            "type": "string"
           }
         },
-        "title": "InterviewUpdate",
+        "required": [
+          "member",
+          "temporary_password"
+        ],
+        "title": "InviteResponse",
         "type": "object"
       },
       "JobApplicationCreate": {
@@ -2191,6 +2272,17 @@
             ],
             "title": "Hiring Manager"
           },
+          "hiring_manager_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hiring Manager Id"
+          },
           "job_metadata": {
             "title": "Job Metadata",
             "type": "object"
@@ -2250,6 +2342,17 @@
               }
             ],
             "title": "Recruiter"
+          },
+          "recruiter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recruiter Id"
           },
           "required_qualifications": {
             "title": "Required Qualifications",
@@ -2522,6 +2625,17 @@
             ],
             "title": "Hiring Manager"
           },
+          "hiring_manager_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hiring Manager Id"
+          },
           "id": {
             "title": "Id",
             "type": "integer"
@@ -2585,6 +2699,17 @@
               }
             ],
             "title": "Recruiter"
+          },
+          "recruiter_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recruiter Id"
           },
           "required_qualifications": {
             "title": "Required Qualifications",
@@ -2825,6 +2950,19 @@
         "title": "MatchTraceResponse",
         "type": "object"
       },
+      "MessageOut": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "MessageOut",
+        "type": "object"
+      },
       "PairTrace": {
         "properties": {
           "above_threshold": {
@@ -2922,6 +3060,27 @@
         "title": "ParsedResumeSaveResponse",
         "type": "object"
       },
+      "PasswordChange": {
+        "properties": {
+          "current_password": {
+            "minLength": 1,
+            "title": "Current Password",
+            "type": "string"
+          },
+          "new_password": {
+            "maxLength": 128,
+            "minLength": 12,
+            "title": "New Password",
+            "type": "string"
+          }
+        },
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "title": "PasswordChange",
+        "type": "object"
+      },
       "PipelineUpdateRequest": {
         "properties": {
           "stages": {
@@ -2993,6 +3152,90 @@
           "file_id"
         ],
         "title": "PreviewUrlResponse",
+        "type": "object"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "created_at"
+        ],
+        "title": "ProfileResponse",
+        "type": "object"
+      },
+      "ProfileUpdate": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timezone"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProfileUpdate",
         "type": "object"
       },
       "ResumeConfirmRequest": {
@@ -3369,6 +3612,25 @@
         "title": "ResumeUploadResponse",
         "type": "object"
       },
+      "RoleChangeRequest": {
+        "properties": {
+          "role": {
+            "enum": [
+              "admin",
+              "hiring_manager",
+              "hiring_team",
+              "interviewer"
+            ],
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "RoleChangeRequest",
+        "type": "object"
+      },
       "RoleStep": {
         "properties": {
           "base_score": {
@@ -3610,6 +3872,9 @@
             "title": "Default Match Threshold",
             "type": "number"
           },
+          "feedback_policy": {
+            "$ref": "#/components/schemas/FeedbackPolicy"
+          },
           "fields_not_collected": {
             "items": {
               "type": "string"
@@ -3672,7 +3937,8 @@
           "default_match_threshold",
           "search_relevance_floor",
           "search_relevance_bands",
-          "search_embedded_fields"
+          "search_embedded_fields",
+          "feedback_policy"
         ],
         "title": "ScoringPolicy",
         "type": "object"
@@ -4093,6 +4359,32 @@
         "title": "SkillStep",
         "type": "object"
       },
+      "StageDefaults": {
+        "properties": {
+          "stage_key": {
+            "title": "Stage Key",
+            "type": "string"
+          },
+          "stage_name": {
+            "title": "Stage Name",
+            "type": "string"
+          },
+          "users": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMemberBrief"
+            },
+            "title": "Users",
+            "type": "array"
+          }
+        },
+        "required": [
+          "stage_key",
+          "stage_name",
+          "users"
+        ],
+        "title": "StageDefaults",
+        "type": "object"
+      },
       "StageOut": {
         "properties": {
           "description": {
@@ -4488,6 +4780,91 @@
         "title": "TaskCreate",
         "type": "object"
       },
+      "TeamListResponse": {
+        "properties": {
+          "members": {
+            "items": {
+              "$ref": "#/components/schemas/TeamMember"
+            },
+            "title": "Members",
+            "type": "array"
+          }
+        },
+        "required": [
+          "members"
+        ],
+        "title": "TeamListResponse",
+        "type": "object"
+      },
+      "TeamMember": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "created_at"
+        ],
+        "title": "TeamMember",
+        "type": "object"
+      },
+      "TeamMemberBrief": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role"
+        ],
+        "title": "TeamMemberBrief",
+        "type": "object"
+      },
       "TokenResponse": {
         "properties": {
           "access_token": {
@@ -4715,9 +5092,23 @@
             "title": "Id",
             "type": "string"
           },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
           "role": {
             "enum": [
               "admin",
+              "hiring_manager",
+              "hiring_team",
+              "interviewer",
               "demo"
             ],
             "title": "Role",
@@ -5055,6 +5446,103 @@
         "summary": "Get Application",
         "tags": [
           "pipeline"
+        ]
+      }
+    },
+    "/api/applications/{application_id}/interviews": {
+      "get": {
+        "description": "Everyone assigned to this application, stage by stage, with feedback\nwhere the viewer may read it.",
+        "operationId": "list_application_interviews_api_applications__application_id__interviews_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/InterviewOut"
+                  },
+                  "title": "Response List Application Interviews Api Applications  Application Id  Interviews Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Application Interviews",
+        "tags": [
+          "interviews"
+        ]
+      },
+      "post": {
+        "operationId": "assign_interviewer_api_applications__application_id__interviews_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Interviewer",
+        "tags": [
+          "interviews"
         ]
       }
     },
@@ -6722,215 +7210,23 @@
         ]
       }
     },
-    "/api/interviews/": {
+    "/api/interviews": {
       "get": {
-        "description": "Retrieve all interviews, with optional filtering.",
-        "operationId": "get_interviews_api_interviews__get",
+        "description": "`mine` for anyone signed in, `pending` and `all` for everyone but interviewers.",
+        "operationId": "list_interviews_api_interviews_get",
         "parameters": [
           {
-            "description": "Filter by start date",
             "in": "query",
-            "name": "date_from",
+            "name": "scope",
             "required": false,
             "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
+              "default": "mine",
+              "enum": [
+                "mine",
+                "pending",
+                "all"
               ],
-              "description": "Filter by start date",
-              "title": "Date From"
-            }
-          },
-          {
-            "description": "Filter by end date",
-            "in": "query",
-            "name": "date_to",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "format": "date",
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by end date",
-              "title": "Date To"
-            }
-          },
-          {
-            "description": "Filter by interview stage",
-            "in": "query",
-            "name": "stage",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by interview stage",
-              "title": "Stage"
-            }
-          },
-          {
-            "description": "Filter by job ID",
-            "in": "query",
-            "name": "job_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by job ID",
-              "title": "Job Id"
-            }
-          },
-          {
-            "description": "Filter by candidate ID",
-            "in": "query",
-            "name": "candidate_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by candidate ID",
-              "title": "Candidate Id"
-            }
-          },
-          {
-            "description": "Filter by completion status",
-            "in": "query",
-            "name": "completed",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "boolean"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Filter by completion status",
-              "title": "Completed"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Interview"
-                  },
-                  "title": "Response Get Interviews Api Interviews  Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Interviews",
-        "tags": [
-          "interviews",
-          "interviews"
-        ]
-      },
-      "post": {
-        "description": "Schedule a new interview.",
-        "operationId": "create_interview_api_interviews__post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InterviewCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Interview"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Create Interview",
-        "tags": [
-          "interviews",
-          "interviews"
-        ]
-      }
-    },
-    "/api/interviews/candidate/{candidate_id}": {
-      "get": {
-        "description": "Get all interviews for a specific candidate.",
-        "operationId": "get_interviews_for_candidate_api_interviews_candidate__candidate_id__get",
-        "parameters": [
-          {
-            "description": "The candidate ID to get interviews for",
-            "in": "path",
-            "name": "candidate_id",
-            "required": true,
-            "schema": {
-              "description": "The candidate ID to get interviews for",
-              "title": "Candidate Id",
+              "title": "Scope",
               "type": "string"
             }
           }
@@ -6940,18 +7236,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Interview"
-                  },
-                  "title": "Response Get Interviews For Candidate Api Interviews Candidate  Candidate Id  Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/InterviewListResponse"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
           },
           "422": {
             "content": {
@@ -6964,120 +7253,23 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Interviews For Candidate",
+        "summary": "List Interviews",
         "tags": [
-          "interviews",
-          "interviews"
-        ]
-      }
-    },
-    "/api/interviews/job/{job_id}": {
-      "get": {
-        "description": "Get all interviews for a specific job.",
-        "operationId": "get_interviews_for_job_api_interviews_job__job_id__get",
-        "parameters": [
-          {
-            "description": "The job ID to get interviews for",
-            "in": "path",
-            "name": "job_id",
-            "required": true,
-            "schema": {
-              "description": "The job ID to get interviews for",
-              "title": "Job Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Interview"
-                  },
-                  "title": "Response Get Interviews For Job Api Interviews Job  Job Id  Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Get Interviews For Job",
-        "tags": [
-          "interviews",
           "interviews"
         ]
       }
     },
     "/api/interviews/{interview_id}": {
       "delete": {
-        "description": "Delete an interview.",
-        "operationId": "delete_interview_api_interviews__interview_id__delete",
+        "operationId": "unassign_interviewer_api_interviews__interview_id__delete",
         "parameters": [
           {
-            "description": "The ID of the interview to delete",
             "in": "path",
             "name": "interview_id",
             "required": true,
             "schema": {
-              "description": "The ID of the interview to delete",
               "title": "Interview Id",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Interview",
-        "tags": [
-          "interviews",
-          "interviews"
-        ]
-      },
-      "get": {
-        "description": "Retrieve a specific interview by ID.",
-        "operationId": "get_interview_api_interviews__interview_id__get",
-        "parameters": [
-          {
-            "description": "The ID of the interview to retrieve",
-            "in": "path",
-            "name": "interview_id",
-            "required": true,
-            "schema": {
-              "description": "The ID of the interview to retrieve",
-              "title": "Interview Id",
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
@@ -7086,14 +7278,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Interview"
+                  "$ref": "#/components/schemas/MessageOut"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
           },
           "422": {
             "content": {
@@ -7106,25 +7295,23 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Interview",
+        "summary": "Unassign Interviewer",
         "tags": [
-          "interviews",
           "interviews"
         ]
-      },
-      "put": {
-        "description": "Update an existing interview.",
-        "operationId": "update_interview_api_interviews__interview_id__put",
+      }
+    },
+    "/api/interviews/{interview_id}/feedback": {
+      "post": {
+        "operationId": "submit_feedback_api_interviews__interview_id__feedback_post",
         "parameters": [
           {
-            "description": "The ID of the interview to update",
             "in": "path",
             "name": "interview_id",
             "required": true,
             "schema": {
-              "description": "The ID of the interview to update",
               "title": "Interview Id",
-              "type": "string"
+              "type": "integer"
             }
           }
         ],
@@ -7132,24 +7319,22 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/InterviewUpdate"
+                "$ref": "#/components/schemas/FeedbackIn"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Interview"
+                  "$ref": "#/components/schemas/InterviewOut"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
           },
           "422": {
             "content": {
@@ -7162,84 +7347,8 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Interview",
+        "summary": "Submit Feedback",
         "tags": [
-          "interviews",
-          "interviews"
-        ]
-      }
-    },
-    "/api/interviews/{interview_id}/complete": {
-      "patch": {
-        "description": "Mark an interview as completed and provide feedback.",
-        "operationId": "complete_interview_api_interviews__interview_id__complete_patch",
-        "parameters": [
-          {
-            "description": "The ID of the interview to mark as complete",
-            "in": "path",
-            "name": "interview_id",
-            "required": true,
-            "schema": {
-              "description": "The ID of the interview to mark as complete",
-              "title": "Interview Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "feedback",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Feedback"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "required": false,
-            "schema": {
-              "default": "Completed",
-              "title": "Status",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Interview"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Complete Interview",
-        "tags": [
-          "interviews",
           "interviews"
         ]
       }
@@ -7958,6 +8067,48 @@
         ]
       }
     },
+    "/api/jobs/{job_id}/default-interviewers": {
+      "get": {
+        "operationId": "get_default_interviewers_api_jobs__job_id__default_interviewers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultInterviewersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Default Interviewers",
+        "tags": [
+          "interviews"
+        ]
+      }
+    },
     "/api/jobs/{job_id}/matching-candidates": {
       "get": {
         "description": "Get candidates that match a job posting using Agentic Zero (CandidateMatchingAgent).",
@@ -8015,7 +8166,7 @@
     },
     "/api/jobs/{job_id}/pipeline": {
       "get": {
-        "description": "The job's stages and who is at each one.",
+        "description": "The job's stages and who is at each one (an interviewer sees only their candidates).",
         "operationId": "get_job_pipeline_api_jobs__job_id__pipeline_get",
         "parameters": [
           {
@@ -8157,6 +8308,67 @@
         "summary": "Save Job",
         "tags": [
           "jobs"
+        ]
+      }
+    },
+    "/api/jobs/{job_id}/stages/{stage_key}/default-interviewers": {
+      "put": {
+        "operationId": "set_default_interviewers_api_jobs__job_id__stages__stage_key__default_interviewers_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "stage_key",
+            "required": true,
+            "schema": {
+              "title": "Stage Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DefaultInterviewersRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DefaultInterviewersResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Default Interviewers",
+        "tags": [
+          "interviews"
         ]
       }
     },
@@ -9402,6 +9614,261 @@
         "tags": [
           "tasks",
           "tasks"
+        ]
+      }
+    },
+    "/api/team/me": {
+      "get": {
+        "operationId": "my_profile_api_team_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Profile",
+        "tags": [
+          "team"
+        ]
+      },
+      "put": {
+        "operationId": "update_my_profile_api_team_me_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update My Profile",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/me/password": {
+      "put": {
+        "operationId": "change_my_password_api_team_me_password_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change My Password",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/users": {
+      "get": {
+        "operationId": "list_team_api_team_users_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Team",
+        "tags": [
+          "team"
+        ]
+      },
+      "post": {
+        "operationId": "invite_api_team_users_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InviteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InviteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invite",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/users/{user_id}": {
+      "delete": {
+        "operationId": "remove_api_team_users__user_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove",
+        "tags": [
+          "team"
+        ]
+      }
+    },
+    "/api/team/users/{user_id}/role": {
+      "put": {
+        "operationId": "change_role_api_team_users__user_id__role_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RoleChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeamMember"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Role",
+        "tags": [
+          "team"
         ]
       }
     },
