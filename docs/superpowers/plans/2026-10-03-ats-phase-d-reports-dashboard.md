@@ -12,6 +12,15 @@
 
 **Prerequisites:** Phases A, B, and C merged to `main`. This plan only *uses* names Phases B and C define (see "Assumptions about Phases B and C" below); Task 1 verifies they exist before any code is written.
 
+## As built (2026-10-03)
+
+Phase C shipped two things differently from its plan, and this phase follows them:
+
+- **Web forwarding.** There is no `web/src/lib/proxy.ts`; Phase B's `web/src/lib/forward.ts` is the shared forwarding code. Phase D adds no route handler of its own: the Reports page links to Phase C's existing `/api/candidates/export` handler, and everything else reads through `lib/data.ts`. Do not add a second copy.
+- **Prod seed without a reseed.** Like `--team-only` (B) and `--notes-tags-only` (C), the seed got `--timelines-only`: it lays out realistic stage timestamps on the applications the seed created (marked `Seeded demo application`) whose history is still flat, and nothing else. Task 10's prod follow-up is that flag, not a full seed run.
+
+Other differences from the tasks below: the dashboard keeps Phase B's `redirectInterviewer()`; the spread also moves seeded interview and feedback dates with their stage; the chat endpoints pass the viewer via `request_user(request)` rather than a new dependency; the funnel row puts the bar under the name and counts so it keeps its width on a phone, and grid cards carry `min-w-0`.
+
 ---
 
 ## Conventions for every task

@@ -6,6 +6,7 @@
  * cannot use it; the API refuses them anyway, so this is courtesy.
  */
 import {
+  BarChart3,
   Bot,
   Briefcase,
   CalendarCheck,
@@ -55,6 +56,7 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     label: "Admin",
     items: [
+      { href: "/reports", label: "Reports", icon: BarChart3, hiddenFor: ["interviewer"] },
       { href: "/team", label: "Team", icon: UserCog, hiddenFor: ["interviewer"] },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
