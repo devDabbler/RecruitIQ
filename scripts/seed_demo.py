@@ -9,6 +9,7 @@ change is the intended way to repair a half-populated database.
     poetry run python scripts/seed_demo.py --no-embeddings   # skip Ollama
     poetry run python scripts/seed_demo.py --team-only       # team and interviews only
     poetry run python scripts/seed_demo.py --notes-tags-only # notes and tags only
+    poetry run python scripts/seed_demo.py --timelines-only  # stage timestamps only
 
 Authored during Phase 3 rather than Phase 4 because a Dashboard or Matching
 screen cannot be built or verified against an empty database. Phase 4 loads this
@@ -29,7 +30,7 @@ import os
 import random
 import sys
 import zlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import backend.utils.win_compat  # noqa: F401  (must precede deps needing pwd)
 
@@ -588,12 +589,25 @@ def seed_candidates(db, rng: random.Random) -> list[Candidate]:
                 )
     db.commit()
 
-    # Every candidate gets a funnel position, including the ones already in the
-    # database from earlier phases -- 7 of those carry a NULL status, which the
-    # Dashboard would otherwise render as a blank column.
+    # Every candidate not yet on a pipeline gets a funnel position, including
+    # the ones already in the database from earlier phases -- 7 of those carry
+    # a NULL status, which the Dashboard would otherwise render as a blank column.
     candidates = db.query(Candidate).order_by(Candidate.created_at, Candidate.id).all()
+    # A candidate on a pipeline gets their status from it (pipeline_service
+    # keeps it in sync). Reassigning it here would contradict their board,
+    # and the draw shifts for everyone whenever a candidate is added (Phase C
+    # added Add candidate and upload intake), so only people with no stage
+    # history yet are given a funnel position.
+    on_a_pipeline = {
+        candidate_id
+        for (candidate_id,) in db.query(JobApplication.candidate_id)
+        .join(ApplicationStage, ApplicationStage.application_id == JobApplication.id)
+        .distinct()
+    }
     funnel_rng = random.Random(SEED_FUNNEL)
     for candidate, status in zip(candidates, _weighted_statuses(funnel_rng, len(candidates))):
+        if candidate.id in on_a_pipeline:
+            continue
         if not candidate.status or candidate.status == "active":
             candidate.status = status
     db.commit()
@@ -639,8 +653,140 @@ def _seed_stage_history(db, application: JobApplication, candidate_status: str) 
     application.status = final
 
 
+def stage_timeline(seed_key: str, rows: list[tuple[str, str, str]], now: datetime):
+    """Believable, deterministic timestamps for one seeded application.
+
+    rows: (stage key, stage kind, status) in pipeline order. Returns
+    (applied_at, [(started_at, completed_at), ...]) aligned with rows, or
+    (None, ...) when nothing was ever reached.
+
+    The application's latest moment is anchored to `now`: the stage it is
+    waiting at started 1 to 5 days ago (about a quarter of the time, 8 to 13
+    days ago, so "No movement in 7+ days" has honest entries), or, for a
+    finished application, its outcome landed 2 to 76 days ago. Earlier rounds
+    are laid out backwards from there, each lasting 1 to 6 days plus some
+    hours, ending exactly when the next began. Every number comes from
+    stable_index, so the same application gets the same shape every run.
+    """
+    spans: list[tuple] = [(None, None)] * len(rows)
+    worked = [
+        i
+        for i, (_key, kind, status) in enumerate(rows)
+        if kind == "round" and status in ("passed", "failed", "in_progress")
+    ]
+    if not worked:
+        return None, spans
+    current = next((i for i in worked if rows[i][2] == "in_progress"), None)
+    hours = timedelta(hours=stable_index(f"hour-{seed_key}", 9))
+    if current is not None:
+        if stable_index(f"stuck-{seed_key}", 4) == 0:
+            wait = timedelta(days=8 + stable_index(f"wait-{seed_key}", 6))
+        else:
+            wait = timedelta(days=1 + stable_index(f"wait-{seed_key}", 5))
+        anchor = now - wait - hours
+    else:
+        anchor = now - timedelta(days=2 + stable_index(f"end-{seed_key}", 75)) - hours
+
+    spans = list(spans)
+    boundary = anchor
+    for index in reversed(worked):
+        if index == current:
+            spans[index] = (anchor, None)
+            continue
+        key = rows[index][0]
+        duration = timedelta(
+            days=1 + stable_index(f"{seed_key}:{key}", 6),
+            hours=stable_index(f"{seed_key}:{key}:h", 20),
+        )
+        spans[index] = (boundary - duration, boundary)
+        boundary -= duration
+
+    for index, (_key, kind, status) in enumerate(rows):
+        if kind == "outcome" and status == "passed":
+            spans[index] = (anchor, anchor)
+        elif status == "skipped":
+            later = [spans[i][0] for i in worked if i > index]
+            spans[index] = (None, later[0] if later else anchor)
+
+    applied_at = spans[worked[0]][0] - timedelta(hours=1 + stable_index(f"applied-{seed_key}", 5))
+    return applied_at, spans
+
+
+def _spread_stage_timeline(db, application: JobApplication, now: datetime) -> bool:
+    """Give one seeded application realistic stage timestamps, once.
+
+    Only touches an application whose rows still carry the flat timestamps
+    _seed_stage_history and the Phase A migration wrote: every started or
+    completed time equal to applied_at. Anything a person has moved has real
+    timestamps and is left exactly as it is. A spread application starts its
+    first stage an hour or more after applied_at, so it is no longer flat and
+    a re-run is a no-op.
+
+    Interviews and feedback seed_interviews wrote from those flat times move
+    with their stage (assigned when it started, submitted when it ended), so
+    no feedback reads as submitted before its round began. Interviews and
+    feedback with any other timestamp were written by a person and are kept.
+    """
+    if application.applied_at is None:
+        return False
+    rows = (
+        db.query(ApplicationStage, PipelineStage)
+        .join(PipelineStage, PipelineStage.id == ApplicationStage.stage_id)
+        .filter(ApplicationStage.application_id == application.id)
+        .order_by(PipelineStage.position)
+        .all()
+    )
+    touched = [row for row, _stage in rows if row.status != "pending"]
+    if not touched:
+        return False
+    flat_at = application.applied_at
+    flat_values = (None, flat_at)
+    if not all(row.started_at in flat_values and row.completed_at in flat_values for row in touched):
+        return False
+    applied_at, spans = stage_timeline(
+        f"{application.candidate_id}:{application.job_id}",
+        [(stage.key, stage.kind, row.status) for row, stage in rows],
+        now,
+    )
+    if applied_at is None:
+        return False
+    for (row, _stage), (started, completed) in zip(rows, spans):
+        row.started_at = started
+        row.completed_at = completed
+        for interview in row.interviews:
+            if interview.created_at == flat_at and started is not None:
+                interview.created_at = started
+            feedback = interview.feedback
+            if feedback is not None and feedback.submitted_at == flat_at:
+                feedback.submitted_at = completed or started or feedback.submitted_at
+    application.applied_at = applied_at
+    return True
+
+
+def seed_timelines(db, now: datetime, email_domain: str = EMAIL_DOMAIN) -> int:
+    """Spread the stage timestamps of the seeded candidates' applications.
+
+    The `--timelines-only` path, for a database seeded before ATS Phase D
+    (prod). Touches only applications of seeded candidates (the demo email
+    domain) whose history is still flat; everything else is left alone.
+    Returns how many were laid out.
+    """
+    applications = (
+        db.query(JobApplication)
+        .join(Candidate, Candidate.id == JobApplication.candidate_id)
+        .filter(Candidate.email.like(f"%@{email_domain}"))
+        .order_by(JobApplication.id)
+        .all()
+    )
+    spread = sum(_spread_stage_timeline(db, application, now) for application in applications)
+    db.commit()
+    return spread
+
+
 def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
     """Applications and saved jobs, consistent with each candidate's status."""
+    now = datetime.utcnow()
+    spread = 0
     by_title = {job.title: job for job in jobs}
 
     for candidate in candidates:
@@ -666,6 +812,8 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
         application.notes = f"Seeded demo application ({app_status})."
         db.flush()
         _seed_stage_history(db, application, candidate.status or "active")
+        db.flush()
+        spread += _spread_stage_timeline(db, application, now)
 
         # A third of candidates also save an unrelated job, so the saved-jobs
         # route returns something on the Candidate Detail screen. Decided from
@@ -694,6 +842,7 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
             db.query(JobApplication).filter(JobApplication.job_id == job.id).count()
         )
     db.commit()
+    print(f"  stage timelines laid out: {spread}")
 
 
 def seed_notes_and_tags(db, candidates: list[Candidate]) -> None:
@@ -870,11 +1019,24 @@ def main() -> int:
             "candidates. Additive: never changes a candidate or an existing note or tag"
         ),
     )
+    parser.add_argument(
+        "--timelines-only",
+        action="store_true",
+        help=(
+            "only lay out realistic stage timestamps (ATS Phase D) on the seeded "
+            "candidates' applications whose history is still flat. Never changes an "
+            "application a person has moved, a candidate, or a status"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
+
+        if args.timelines_only:
+            print(f"  stage timelines laid out: {seed_timelines(db, datetime.utcnow())}")
+            return 0
 
         if args.notes_tags_only:
             seeded = (
