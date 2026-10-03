@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
   const token = await getToken();
   if (!token) {
     return NextResponse.json(
-      { detail: "Sign in as an administrator to save candidates." },
+      { detail: "Sign in to save candidates." },
       { status: 401 },
     );
   }

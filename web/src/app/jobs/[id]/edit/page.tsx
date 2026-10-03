@@ -6,13 +6,14 @@ import { JobForm } from "@/components/job-form";
 import { PageHeader } from "@/components/page-header";
 import { getJob } from "@/lib/data";
 import { jobToFormValues } from "@/lib/job-form";
-import { canWrite } from "@/lib/session";
+import { JOBS_WRITE } from "@/lib/permissions";
+import { hasPermission } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditJobPage({ params }: PageProps<"/jobs/[id]/edit">) {
   const { id } = await params;
-  if (!(await canWrite())) redirect(`/jobs/${id}`);
+  if (!(await hasPermission(JOBS_WRITE))) redirect(`/jobs/${id}`);
 
   const job = await getJob(id);
   if (!job) notFound();

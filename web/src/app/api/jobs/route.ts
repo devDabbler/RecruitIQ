@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
   const token = await getToken();
   if (!token) {
     return NextResponse.json(
-      { detail: "Sign in as an administrator to create jobs." },
+      { detail: "Sign in to create jobs." },
       { status: 401 },
     );
   }

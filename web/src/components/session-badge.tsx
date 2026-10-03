@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Eye, ShieldCheck } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { roleLabel } from "@/lib/permissions";
 import { getUser } from "@/lib/session";
 
 /**
@@ -51,13 +52,15 @@ export async function SessionBadge() {
 
   return (
     <span className="flex items-center gap-3 whitespace-nowrap">
-      <span
-        className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700"
+      <Link
+        href="/settings"
+        className="flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 hover:border-emerald-300"
         title={`Signed in as ${user.email}`}
       >
         <ShieldCheck className="h-3.5 w-3.5" aria-hidden />
-        Admin
-      </span>
+        {user.name ? <span className="hidden max-w-40 truncate sm:inline">{user.name} ·</span> : null}
+        {roleLabel(user.role)}
+      </Link>
       <form action="/api/auth/logout" method="post">
         <button
           type="submit"

@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 
 import { JobForm } from "@/components/job-form";
 import { PageHeader } from "@/components/page-header";
-import { canWrite } from "@/lib/session";
+import { JOBS_WRITE } from "@/lib/permissions";
+import { hasPermission } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export const dynamic = "force-dynamic";
  * is guaranteed to 403.
  */
 export default async function NewJobPage() {
-  if (!(await canWrite())) redirect("/jobs");
+  if (!(await hasPermission(JOBS_WRITE))) redirect("/jobs");
 
   return (
     <>

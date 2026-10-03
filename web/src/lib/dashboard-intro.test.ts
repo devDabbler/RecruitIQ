@@ -1,9 +1,7 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { describe, expect, it } from "vitest";
 
 import { INTRO_DATA_NOTE, INTRO_SUMMARY, INTRO_TITLE, TOUR_STEPS } from "./dashboard-intro";
+import { NAV_GROUPS } from "./nav";
 
 const allCopy = [
   INTRO_TITLE,
@@ -22,10 +20,10 @@ describe("dashboard intro", () => {
   it("only links the tour to screens that are in the nav", () => {
     // A tour step pointing at a route the nav dropped would be a dead end on
     // the first page a visitor sees.
-    const nav = readFileSync(resolve(__dirname, "../components/nav.tsx"), "utf8");
+    const hrefs = NAV_GROUPS.flatMap((group) => group.items.map((item) => item.href));
     expect(TOUR_STEPS.length).toBeGreaterThanOrEqual(3);
     for (const step of TOUR_STEPS) {
-      expect(nav).toContain(`href: "${step.href}"`);
+      expect(hrefs).toContain(step.href);
     }
     expect(new Set(TOUR_STEPS.map((s) => s.href)).size).toBe(TOUR_STEPS.length);
   });

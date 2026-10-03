@@ -9,7 +9,8 @@ import { ApiError } from "@/lib/api";
 import { listJobs } from "@/lib/data";
 import type { JobList } from "@/lib/domain";
 import { formatSalary, humanize } from "@/lib/format";
-import { canWrite } from "@/lib/session";
+import { DELETE_RECORDS, JOBS_WRITE, can } from "@/lib/permissions";
+import { getUser } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,9 @@ const STATUS_CLASSES: Record<string, string> = {
 export default async function JobsPage() {
   // Resolved before the fetch so the "New job" button is still offered on the
   // error path, where creating a role is a plausible next move.
-  const writable = await canWrite();
+  const user = await getUser();
+  const writable = can(user?.role, JOBS_WRITE);
+  const deletable = can(user?.role, DELETE_RECORDS);
 
   let jobs: JobList;
   try {
@@ -104,16 +107,18 @@ export default async function JobsPage() {
                   </span>
                 </div>
 
-                {writable ? (
+                {writable || deletable ? (
                   <div className="flex items-center gap-2 border-t border-slate-100 pt-3">
-                    <Link
-                      href={`/jobs/${job.id}/edit`}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
-                    >
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                      Edit
-                    </Link>
-                    <DeleteJobButton jobId={job.id} title={job.title} />
+                    {writable ? (
+                      <Link
+                        href={`/jobs/${job.id}/edit`}
+                        className={buttonVariants({ variant: "outline", size: "sm" })}
+                      >
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                        Edit
+                      </Link>
+                    ) : null}
+                    {deletable ? <DeleteJobButton jobId={job.id} title={job.title} /> : null}
                   </div>
                 ) : null}
               </CardContent>

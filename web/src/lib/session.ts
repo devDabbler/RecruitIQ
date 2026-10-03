@@ -12,12 +12,14 @@ import { cookies } from "next/headers";
 
 import { apiFetch } from "./api";
 import { SESSION_COOKIE } from "./config";
+import { can, PIPELINE_MOVE, type Permission, type Role } from "./permissions";
 
-export type Role = "admin" | "demo";
+export type { Role } from "./permissions";
 
 export interface SessionUser {
   id: string;
   email: string;
+  name: string | null;
   role: Role;
   created_at: string;
 }
@@ -50,12 +52,19 @@ export async function getUser(): Promise<SessionUser | null> {
 }
 
 /**
- * Whether the current session may write.
+ * Whether the current session may move candidates through the pipeline
+ * (admin, hiring manager, hiring team). Kept under its Phase A name because
+ * the candidate page's stage actions are what it gates.
  *
- * Used only to hide mutating controls. The real gate is `enforce_read_only` in
- * the backend — a hidden button is not an access control (spec §2).
+ * Used only to hide controls. The real gate is `enforce_read_only` in the
+ * backend: a hidden button is not an access control (spec section 2).
  */
 export async function canWrite(): Promise<boolean> {
+  return hasPermission(PIPELINE_MOVE);
+}
+
+/** Whether the current session holds one permission from the generated table. */
+export async function hasPermission(permission: Permission): Promise<boolean> {
   const user = await getUser();
-  return user?.role === "admin";
+  return can(user?.role, permission);
 }

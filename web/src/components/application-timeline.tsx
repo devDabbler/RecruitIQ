@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Check, Circle, CircleDot, Minus, X } from "lucide-react";
 
@@ -33,9 +34,11 @@ const ICON_CLASSES: Record<string, string> = {
 export function ApplicationTimeline({
   application,
   writable,
+  children,
 }: {
   application: ApplicationDetail;
   writable: boolean;
+  children?: ReactNode;
 }) {
   const actions = writable ? availableActions(application) : [];
   const current = application.stages.find((s) => s.status === "in_progress");
@@ -105,6 +108,7 @@ export function ApplicationTimeline({
         {actions.length > 0 && current ? (
           <StageActions applicationId={application.id} actions={actions} stageName={current.name} />
         ) : null}
+        {children}
       </CardContent>
     </Card>
   );

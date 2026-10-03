@@ -1,14 +1,17 @@
 import { PageHeader } from "@/components/page-header";
 import { ResumeUploader, type SelectableJob } from "@/components/resume-uploader";
 import { listJobs } from "@/lib/data";
-import { canWrite } from "@/lib/session";
+import { redirectInterviewer } from "@/lib/guards";
+import { CANDIDATES_ADD } from "@/lib/permissions";
+import { hasPermission } from "@/lib/session";
 
 export const metadata = { title: "Resume Upload · RecruitIQ" };
 
 export const dynamic = "force-dynamic";
 
 export default async function UploadPage() {
-  const writable = await canWrite();
+  await redirectInterviewer();
+  const writable = await hasPermission(CANDIDATES_ADD);
 
   // Scoring against a real requisition is the better path, but it is not worth
   // taking the upload screen down for: if the list cannot be fetched the
