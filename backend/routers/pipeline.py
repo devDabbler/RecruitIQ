@@ -90,6 +90,20 @@ def _detail(db: Session, application: JobApplication) -> ApplicationDetail:
     )
 
 
+def _stage_out(stage) -> StageOut:
+    return StageOut(
+        id=stage.id,
+        key=stage.key,
+        name=stage.name,
+        kind=stage.kind,
+        description=stage.description,
+        position=stage.position,
+        enabled=stage.enabled,
+        custom=ps.is_custom(stage),
+        movable=ps.is_movable(stage),
+    )
+
+
 def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipelineResponse:
     stages = ps.ensure_job_stages(db, job.id)
     applications = (
@@ -146,7 +160,7 @@ def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipe
 
     return JobPipelineResponse(
         job_id=job.id,
-        stages=[StageOut.model_validate(s) for s in stages],
+        stages=[_stage_out(s) for s in stages],
         columns=columns,
         outcomes=outcomes,
     )
@@ -163,38 +177,54 @@ def get_job_pipeline(job_id: int, request: Request, db: Session = Depends(get_db
 def update_job_pipeline(
     job_id: int, payload: PipelineUpdateRequest, db: Session = Depends(get_db)
 ) -> JobPipelineResponse:
-    """Enable, disable, or rename stages. Outcomes and the first round stay enabled."""
+    """Edit a job's stages in one transaction.
+
+    Applied in a fixed order so one request can do everything the stage
+    editor offers: remove added stages, enable/disable/rename, reorder the
+    interview stages, then add new ones (placed by `after_key`, so they never
+    need to appear in `order`). Any refusal rolls the whole request back.
+    Outcomes and the first round stay enabled.
+    """
     job = _job_or_404(db, job_id)
-    stages = {s.key: s for s in ps.ensure_job_stages(db, job.id)}
-    for update in payload.stages:
-        stage = stages.get(update.key)
-        if stage is None:
-            db.rollback()
-            raise HTTPException(status_code=404, detail=f"No stage named '{update.key}' on this job.")
-        if not update.enabled and (stage.kind == ps.OUTCOME or stage.position == 1):
-            db.rollback()
-            raise HTTPException(status_code=409, detail=f"'{stage.name}' cannot be turned off.")
-        if not update.enabled and stage.enabled:
-            in_use = (
-                db.query(ApplicationStage)
-                .join(JobApplication)
-                .filter(
-                    ApplicationStage.stage_id == stage.id,
-                    ApplicationStage.status == ps.IN_PROGRESS,
-                    JobApplication.status == ps.APP_ACTIVE,
-                )
-                .count()
-            )
-            if in_use:
+    try:
+        for key in payload.remove:
+            ps.remove_custom_stage(db, job.id, key)
+
+        stages = {s.key: s for s in ps.ensure_job_stages(db, job.id)}
+        for update in payload.stages:
+            stage = stages.get(update.key)
+            if stage is None:
                 db.rollback()
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"{in_use} candidate(s) are at '{stage.name}' right now. Move them first.",
+                raise HTTPException(status_code=404, detail=f"No stage named '{update.key}' on this job.")
+            if not update.enabled and (stage.kind == ps.OUTCOME or stage.key == ps.FIRST_ROUND):
+                raise ps.PipelineError(f"'{stage.name}' cannot be turned off.")
+            if not update.enabled and stage.enabled:
+                in_use = (
+                    db.query(ApplicationStage)
+                    .join(JobApplication)
+                    .filter(
+                        ApplicationStage.stage_id == stage.id,
+                        ApplicationStage.status == ps.IN_PROGRESS,
+                        JobApplication.status == ps.APP_ACTIVE,
+                    )
+                    .count()
                 )
-        stage.enabled = update.enabled
-        stage.name = update.name.strip()
-        if update.description is not None:
-            stage.description = update.description.strip() or None
+                if in_use:
+                    raise ps.PipelineError(
+                        f"{in_use} candidate(s) are at '{stage.name}' right now. Move them first."
+                    )
+            stage.enabled = update.enabled
+            stage.name = update.name.strip()
+            if update.description is not None:
+                stage.description = update.description.strip() or None
+
+        if payload.order is not None:
+            ps.reorder_stages(db, job.id, payload.order)
+        for new in payload.add:
+            ps.add_custom_stage(db, job.id, new.name, new.description, new.after_key)
+    except ps.PipelineError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
     db.commit()
     return _board(db, job)
 

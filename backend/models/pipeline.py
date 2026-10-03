@@ -15,6 +15,9 @@ class StageOut(BaseModel):
     description: Optional[str] = None
     position: int
     enabled: bool
+    # Phase E: added for this job (removable) and allowed to move.
+    custom: bool = False
+    movable: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -48,8 +51,24 @@ class StageUpdate(BaseModel):
     description: Optional[str] = None
 
 
+class NewStage(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=500)
+    # Key of the round the new stage follows: resume_submitted or an interview
+    # stage. None places it just before the offer.
+    after_key: Optional[str] = None
+
+
 class PipelineUpdateRequest(BaseModel):
-    stages: List[StageUpdate]
+    """Everything the stage editor can change, applied in one transaction.
+
+    Order of application: remove, then stages (enable, disable, rename), then
+    order (interview stage keys only), then add.
+    """
+    stages: List[StageUpdate] = Field(default_factory=list)
+    order: Optional[List[str]] = None
+    add: List[NewStage] = Field(default_factory=list)
+    remove: List[str] = Field(default_factory=list)
 
 
 class ApplicationStageOut(BaseModel):
