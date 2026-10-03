@@ -1923,6 +1923,266 @@
         "title": "DefaultInterviewersResponse",
         "type": "object"
       },
+      "EmailLogOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "sent_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sent By Name"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "template_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Key"
+          },
+          "to_address": {
+            "title": "To Address",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "to_address",
+          "subject",
+          "body",
+          "status",
+          "created_at"
+        ],
+        "title": "EmailLogOut",
+        "type": "object"
+      },
+      "EmailPreview": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "template_key": {
+            "title": "Template Key",
+            "type": "string"
+          },
+          "to_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "To Address"
+          },
+          "transport_configured": {
+            "title": "Transport Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "template_key",
+          "subject",
+          "body",
+          "missing",
+          "transport_configured"
+        ],
+        "title": "EmailPreview",
+        "type": "object"
+      },
+      "EmailSendRequest": {
+        "properties": {
+          "body": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "mode": {
+            "enum": [
+              "send",
+              "copied"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          },
+          "template_key": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Template Key"
+          }
+        },
+        "required": [
+          "subject",
+          "body",
+          "mode"
+        ],
+        "title": "EmailSendRequest",
+        "type": "object"
+      },
+      "EmailTemplateOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "subject": {
+            "title": "Subject",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "key",
+          "name",
+          "subject",
+          "body"
+        ],
+        "title": "EmailTemplateOut",
+        "type": "object"
+      },
+      "EmailTemplateUpdate": {
+        "properties": {
+          "body": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "subject",
+          "body"
+        ],
+        "title": "EmailTemplateUpdate",
+        "type": "object"
+      },
+      "EmailTemplatesResponse": {
+        "properties": {
+          "placeholders": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Placeholders",
+            "type": "array"
+          },
+          "templates": {
+            "items": {
+              "$ref": "#/components/schemas/EmailTemplateOut"
+            },
+            "title": "Templates",
+            "type": "array"
+          },
+          "transport_configured": {
+            "title": "Transport Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "templates",
+          "transport_configured",
+          "placeholders"
+        ],
+        "title": "EmailTemplatesResponse",
+        "type": "object"
+      },
       "ExperienceLevel": {
         "enum": [
           "entry",
@@ -2699,6 +2959,84 @@
         "title": "JobCreateUpdate",
         "type": "object"
       },
+      "JobDescriptionDraft": {
+        "properties": {
+          "job_overview": {
+            "title": "Job Overview",
+            "type": "string"
+          },
+          "required_qualifications": {
+            "title": "Required Qualifications",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_overview",
+          "required_qualifications"
+        ],
+        "title": "JobDescriptionDraft",
+        "type": "object"
+      },
+      "JobDraftRequest": {
+        "description": "Only the structured job fields. There is deliberately no free-text field.",
+        "properties": {
+          "department": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "experience_level": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Experience Level"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "maxLength": 50,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 30,
+            "title": "Skills",
+            "type": "array"
+          },
+          "title": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "JobDraftRequest",
+        "type": "object"
+      },
       "JobMatchResult": {
         "properties": {
           "department": {
@@ -3272,6 +3610,44 @@
         "title": "MessageOut",
         "type": "object"
       },
+      "NewStage": {
+        "properties": {
+          "after_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Key"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "NewStage",
+        "type": "object"
+      },
       "NoteCreate": {
         "properties": {
           "application_id": {
@@ -3560,7 +3936,36 @@
         "type": "object"
       },
       "PipelineUpdateRequest": {
+        "description": "Everything the stage editor can change, applied in one transaction.\n\nOrder of application: remove, then stages (enable, disable, rename), then\norder (interview stage keys only), then add.",
         "properties": {
+          "add": {
+            "items": {
+              "$ref": "#/components/schemas/NewStage"
+            },
+            "title": "Add",
+            "type": "array"
+          },
+          "order": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Order"
+          },
+          "remove": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          },
           "stages": {
             "items": {
               "$ref": "#/components/schemas/StageUpdate"
@@ -3569,9 +3974,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "stages"
-        ],
         "title": "PipelineUpdateRequest",
         "type": "object"
       },
@@ -3714,6 +4116,83 @@
           "name"
         ],
         "title": "ProfileUpdate",
+        "type": "object"
+      },
+      "PublicStage": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "state"
+        ],
+        "title": "PublicStage",
+        "type": "object"
+      },
+      "PublicStatus": {
+        "properties": {
+          "department": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Department"
+          },
+          "first_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Name"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "stages": {
+            "items": {
+              "$ref": "#/components/schemas/PublicStage"
+            },
+            "title": "Stages",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_title",
+          "status",
+          "stages"
+        ],
+        "title": "PublicStatus",
         "type": "object"
       },
       "QuarterOutcomes": {
@@ -5030,6 +5509,11 @@
       },
       "StageOut": {
         "properties": {
+          "custom": {
+            "default": false,
+            "title": "Custom",
+            "type": "boolean"
+          },
           "description": {
             "anyOf": [
               {
@@ -5056,6 +5540,11 @@
           "kind": {
             "title": "Kind",
             "type": "string"
+          },
+          "movable": {
+            "default": false,
+            "title": "Movable",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -5150,6 +5639,42 @@
           "name"
         ],
         "title": "StageUpdate",
+        "type": "object"
+      },
+      "StatusLinkOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Path"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "title": "StatusLinkOut",
         "type": "object"
       },
       "TagCount": {
@@ -6270,6 +6795,198 @@
         ]
       }
     },
+    "/api/applications/{application_id}/candidate-view": {
+      "get": {
+        "description": "The same page a status link shows, for staff and the demo to preview.",
+        "operationId": "get_candidate_view_api_applications__application_id__candidate_view_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Candidate View",
+        "tags": [
+          "status-links"
+        ]
+      }
+    },
+    "/api/applications/{application_id}/emails": {
+      "get": {
+        "operationId": "list_emails_api_applications__application_id__emails_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EmailLogOut"
+                  },
+                  "title": "Response List Emails Api Applications  Application Id  Emails Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Emails",
+        "tags": [
+          "email"
+        ]
+      },
+      "post": {
+        "description": "Send through SMTP, or log that the text was copied to send by hand.",
+        "operationId": "send_email_api_applications__application_id__emails_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailSendRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailLogOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Email",
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/applications/{application_id}/emails/preview": {
+      "get": {
+        "operationId": "preview_email_api_applications__application_id__emails_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template_key",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z_]{1,50}$",
+              "title": "Template Key",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailPreview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Email",
+        "tags": [
+          "email"
+        ]
+      }
+    },
     "/api/applications/{application_id}/interviews": {
       "get": {
         "description": "Everyone assigned to this application, stage by stage, with feedback\nwhere the viewer may read it.",
@@ -6364,6 +7081,129 @@
         "summary": "Assign Interviewer",
         "tags": [
           "interviews"
+        ]
+      }
+    },
+    "/api/applications/{application_id}/status-link": {
+      "delete": {
+        "operationId": "revoke_status_link_api_applications__application_id__status_link_delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Status Link",
+        "tags": [
+          "status-links"
+        ]
+      },
+      "get": {
+        "operationId": "get_status_link_api_applications__application_id__status_link_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Status Link",
+        "tags": [
+          "status-links"
+        ]
+      },
+      "post": {
+        "description": "Create the link, or replace it (the old one stops working immediately).",
+        "operationId": "create_status_link_api_applications__application_id__status_link_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusLinkOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Status Link",
+        "tags": [
+          "status-links"
         ]
       }
     },
@@ -7707,6 +8547,79 @@
         ]
       }
     },
+    "/api/email-templates": {
+      "get": {
+        "operationId": "list_templates_api_email_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplatesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Templates",
+        "tags": [
+          "email"
+        ]
+      }
+    },
+    "/api/email-templates/{key}": {
+      "put": {
+        "operationId": "update_template_api_email_templates__key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailTemplateUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmailTemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Template",
+        "tags": [
+          "email"
+        ]
+      }
+    },
     "/api/enhanced-matching/match-candidates": {
       "post": {
         "description": "Find candidates that match the given jobs using enhanced matching.",
@@ -8508,6 +9421,47 @@
         "summary": "Submit Feedback",
         "tags": [
           "interviews"
+        ]
+      }
+    },
+    "/api/job-drafts/description": {
+      "post": {
+        "operationId": "draft_job_description_api_job_drafts_description_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobDraftRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobDescriptionDraft"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Draft Job Description",
+        "tags": [
+          "job-drafts"
         ]
       }
     },
@@ -9365,7 +10319,7 @@
         ]
       },
       "put": {
-        "description": "Enable, disable, or rename stages. Outcomes and the first round stay enabled.",
+        "description": "Edit a job's stages in one transaction.\n\nApplied in a fixed order so one request can do everything the stage\neditor offers: remove added stages, enable/disable/rename, reorder the\ninterview stages, then add new ones (placed by `after_key`, so they never\nneed to appear in `order`). Any refusal rolls the whole request back.\nOutcomes and the first round stay enabled.",
         "operationId": "update_job_pipeline_api_jobs__job_id__pipeline_put",
         "parameters": [
           {
@@ -9802,6 +10756,49 @@
         "summary": "Get Pitch By Id",
         "tags": [
           "pitches"
+        ]
+      }
+    },
+    "/api/public/status/{token}": {
+      "get": {
+        "description": "What a candidate sees at their status link. No authentication.",
+        "operationId": "get_public_status_api_public_status__token__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Public Status",
+        "tags": [
+          "status-links"
         ]
       }
     },

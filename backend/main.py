@@ -26,6 +26,7 @@ from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
 from backend.routers import auth, tasks, pitches, agent, performance, cache, transparency, pipeline, feedback, team
 from backend.routers import notes, reports, tags
+from backend.routers import emails, job_drafts, status_links
 from backend.api.routes import job_routes
 from backend.services.access_service import enforce_interviewer_scope
 from backend.utils.auth import enforce_read_only
@@ -105,6 +106,12 @@ app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 # otherwise swallow POST /applications/{id}/interviews.
 app.include_router(feedback.router, prefix="/api", tags=["interviews"])  # ATS Phase B
 app.include_router(team.router, prefix="/api", tags=["team"])  # ATS Phase B
+# ATS Phase E. Mounted above the pipeline router on purpose: its
+# POST /api/applications/{id}/{action} matches any third path segment and
+# would answer "Unknown action" for /status-link and /emails.
+app.include_router(status_links.router, prefix="/api", tags=["status-links"])
+app.include_router(emails.router, prefix="/api", tags=["email"])
+app.include_router(job_drafts.router, prefix="/api", tags=["job-drafts"])
 app.include_router(pipeline.router, prefix="/api", tags=["pipeline"])  # ATS Phase A board and transitions
 app.include_router(reports.router, prefix="/api", tags=["reports"])  # ATS Phase D reports and dashboard numbers
 app.include_router(notes.router, prefix="/api", tags=["notes"])  # ATS Phase C candidate notes
