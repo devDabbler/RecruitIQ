@@ -4,22 +4,26 @@ import { Suspense } from "react";
 import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
 
 import { ApplicationTimeline } from "@/components/application-timeline";
+import { InterviewPanel } from "@/components/interview-panel";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiError } from "@/lib/api";
 import {
   getApplication,
+  getApplicationInterviews,
   getCandidate,
   getCandidateApplications,
   getCandidateResumes,
   getCandidateSavedJobs,
+  listTeam,
   matchJobsForCandidate,
 } from "@/lib/data";
 import { fullName, initials } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
-import { canWrite } from "@/lib/session";
+import { canWrite, getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -33,15 +37,25 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
   // ~1.6s of the page's 1.75s, holding the whole navigation open while the
   // profile — already fetched — sat waiting on it. It streams below instead,
   // the same way /jobs/[id] handles its own matching panel.
-  const [applications, savedJobs, resumes, writable] = await Promise.all([
+  const [applications, savedJobs, resumes, writable, user] = await Promise.all([
     getCandidateApplications(id),
     getCandidateSavedJobs(id),
     getCandidateResumes(id),
     canWrite(),
+    getUser(),
   ]);
-  const details = (
-    await Promise.all(applications.map((application) => getApplication(application.id)))
-  ).filter((detail): detail is NonNullable<typeof detail> => detail !== null);
+  const [details, team] = await Promise.all([
+    Promise.all(applications.map((application) => getApplication(application.id))).then((all) =>
+      all.filter((detail): detail is NonNullable<typeof detail> => detail !== null),
+    ),
+    // Only writers assign interviewers; nobody else needs the team list.
+    writable ? listTeam().catch(() => []) : Promise.resolve([]),
+  ]);
+  const interviews = new Map(
+    await Promise.all(
+      details.map(async (detail) => [detail.id, await getApplicationInterviews(detail.id)] as const),
+    ),
+  );
 
   return (
     <>
@@ -153,7 +167,15 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
             </Card>
           ) : (
             details.map((detail) => (
-              <ApplicationTimeline key={detail.id} application={detail} writable={writable} />
+              <ApplicationTimeline key={detail.id} application={detail} writable={writable}>
+                <InterviewPanel
+                  application={detail}
+                  interviews={interviews.get(detail.id) ?? []}
+                  team={team}
+                  viewerId={user?.id ?? null}
+                  canAssign={writable}
+                />
+              </ApplicationTimeline>
             ))
           )}
 
@@ -208,10 +230,16 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
 
 async function RecommendedRoles({ candidateId }: { candidateId: string }) {
   // If matching fails, the profile still renders; an empty panel beats a 500 on
-  // the whole route.
-  const matches = await matchJobsForCandidate(candidateId).catch(
-    () => [] as Awaited<ReturnType<typeof matchJobsForCandidate>>,
-  );
+  // the whole route. A 403 is the score rule (ATS Phase B): an interviewer
+  // sees match scores only after giving feedback, and the API says so.
+  let matches: Awaited<ReturnType<typeof matchJobsForCandidate>> = [];
+  try {
+    matches = await matchJobsForCandidate(candidateId);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 403) {
+      return <p className="text-sm text-slate-500">{error.detail}</p>;
+    }
+  }
 
   if (matches.length === 0) {
     return (

@@ -51,6 +51,9 @@ class JobCreateUpdate(BaseModel):
     status: JobStatus = JobStatus.DRAFT
     hiring_manager: Optional[str] = None
     recruiter: Optional[str] = None
+    # ATS Phase B: optional links to team members (user ids).
+    hiring_manager_id: Optional[str] = None
+    recruiter_id: Optional[str] = None
     application_deadline: Optional[datetime] = None
     start_date: Optional[datetime] = None
     job_metadata: Dict[str, Any] = Field(default_factory=dict)
@@ -73,6 +76,9 @@ class JobResponse(BaseModel):
     status: str
     hiring_manager: Optional[str] = None
     recruiter: Optional[str] = None
+    # ATS Phase B: optional links to team members (user ids).
+    hiring_manager_id: Optional[str] = None
+    recruiter_id: Optional[str] = None
     application_deadline: Optional[datetime] = None
     start_date: Optional[datetime] = None
     views: int = 0

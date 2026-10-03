@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ArrowLeft, Pencil } from "lucide-react";
 
+import { DefaultInterviewersEditor } from "@/components/default-interviewers-editor";
 import { DeleteJobButton } from "@/components/delete-job-button";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
@@ -10,16 +11,29 @@ import { PipelineBoard } from "@/components/pipeline-board";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getJob, getJobPipeline, matchCandidatesForJob } from "@/lib/data";
+import {
+  getDefaultInterviewers,
+  getJob,
+  getJobPipeline,
+  listTeam,
+  matchCandidatesForJob,
+} from "@/lib/data";
 import { formatDate, formatSalary, humanize } from "@/lib/format";
-import { canWrite } from "@/lib/session";
+import { memberName } from "@/lib/interviews";
+import { DELETE_RECORDS, JOBS_WRITE, SCORE_BEFORE_FEEDBACK, can } from "@/lib/permissions";
+import { getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">) {
   const { id } = await params;
-  const [job, writable] = await Promise.all([getJob(id), canWrite()]);
+  const [job, user] = await Promise.all([getJob(id), getUser()]);
   if (!job) notFound();
+  const role = user?.role;
+  const writable = can(role, JOBS_WRITE);
+  const deletable = can(role, DELETE_RECORDS);
+  // Interviewers see match scores only per candidate, after their feedback.
+  const seesScores = can(role, SCORE_BEFORE_FEEDBACK);
 
   return (
     <>
@@ -82,6 +96,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             </CardContent>
           </Card>
 
+          {seesScores ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Matching candidates</CardTitle>
@@ -96,6 +111,23 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
               </Suspense>
             </CardContent>
           </Card>
+          ) : null}
+
+          {role !== "interviewer" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Default interviewers</CardTitle>
+                <p className="text-xs text-slate-500">
+                  Assigned automatically when a candidate reaches the stage.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <Suspense fallback={<Skeleton className="h-24 w-full rounded-lg" />}>
+                  <DefaultInterviewers jobId={job.id} editable={writable} />
+                </Suspense>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         <div className="space-y-6">
@@ -136,7 +168,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             </Card>
           ) : null}
 
-          {writable ? <DeleteJobButton jobId={job.id} title={job.title} variant="full" /> : null}
+          {deletable ? <DeleteJobButton jobId={job.id} title={job.title} variant="full" /> : null}
         </div>
       </div>
     </>
@@ -149,6 +181,24 @@ async function Board({ jobId }: { jobId: number }) {
     return <p className="text-sm text-slate-500">The pipeline could not be loaded.</p>;
   }
   return <PipelineBoard pipeline={pipeline} />;
+}
+
+async function DefaultInterviewers({ jobId, editable }: { jobId: number; editable: boolean }) {
+  const [stages, team] = await Promise.all([
+    getDefaultInterviewers(jobId).catch(() => null),
+    editable ? listTeam().catch(() => []) : Promise.resolve([]),
+  ]);
+  if (!stages) {
+    return <p className="text-sm text-slate-500">Default interviewers could not be loaded.</p>;
+  }
+  return (
+    <DefaultInterviewersEditor
+      jobId={jobId}
+      stages={stages}
+      team={team.map((m) => ({ id: m.id, name: memberName(m) }))}
+      editable={editable}
+    />
+  );
 }
 
 async function Matches({ jobId }: { jobId: number }) {

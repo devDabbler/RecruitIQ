@@ -4,11 +4,11 @@ The SQLAlchemy `User` model lives in `models/models.py` alongside the rest of
 the ORM so it registers against the same `Base`.
 """
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, EmailStr
 
-Role = Literal["admin", "demo"]
+Role = Literal["admin", "hiring_manager", "hiring_team", "interviewer", "demo"]
 
 
 class LoginRequest(BaseModel):
@@ -19,6 +19,7 @@ class LoginRequest(BaseModel):
 class UserResponse(BaseModel):
     id: str
     email: str
+    name: Optional[str] = None
     role: Role
     created_at: datetime
 

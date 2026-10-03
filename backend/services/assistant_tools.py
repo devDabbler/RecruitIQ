@@ -6,7 +6,8 @@ over the existing services and ORM queries, so they stay independently
 testable without any LLM in the loop.
 
 Spec §4.6: search_candidates, match_to_job, explain_match, get_market_data,
-get_candidate, get_job, list_pipeline, get_candidate_resume.
+get_candidate, get_job, list_pipeline, get_candidate_resume. ATS Phase B adds
+list_pending_feedback.
 (`get_candidate_resume` stands in for the spec's `parse_resume`: chat has no
 file upload, so the useful chat-side capability is reading an already-parsed
 resume. Fresh parsing still happens on the upload endpoint.)
@@ -510,8 +511,32 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             "parsed_content": content,
         }
 
-    return [
-        Tool(
+    async def list_pending_feedback(limit: int = 10) -> dict:
+        from backend.services import feedback_service
+
+        limit = clamp_limit(limit, default=10)
+        interviews = feedback_service.pending_feedback(db)
+        pending = []
+        for interview in interviews[:limit]:
+            row = interview.application_stage
+            application = row.application
+            job = db.get(Job, application.job_id)
+            pending.append(
+                {
+                    "interviewer": feedback_service.display_name(interview.interviewer),
+                    "candidate_id": application.candidate_id,
+                    "candidate": feedback_service.candidate_name(
+                        db.get(Candidate, application.candidate_id)
+                    ),
+                    "job_id": application.job_id,
+                    "job": job.title if job else None,
+                    "stage": row.stage.name,
+                    "waiting_since": row.started_at.date().isoformat() if row.started_at else None,
+                }
+            )
+        return {"pending_count": len(interviews), "pending": pending}
+
+    return [        Tool(
             name="search_candidates",
             description=(
                 "Semantic search over all candidates in the ATS. Call this whenever the user asks to "
@@ -655,8 +680,23 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             },
             run=get_candidate_resume,
         ),
+        Tool(
+            name="list_pending_feedback",
+            description=(
+                "List interviews that have happened but have no feedback yet: who owes it, for "
+                "which candidate, job, and stage, and since when. Call this for questions like "
+                "'who still owes feedback' or 'what feedback is outstanding'. pending_count is the "
+                "total; pending holds the oldest first."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "How many to list (default 10)"},
+                },
+            },
+            run=list_pending_feedback,
+        ),
     ]
-
 
 # U+2015 (horizontal bar) is what some resume exports use for a dash.
 _DASHES = str.maketrans({"—": "-", "–": "-", "―": "-"})

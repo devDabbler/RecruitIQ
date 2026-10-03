@@ -29,7 +29,7 @@ export async function POST(
   const token = await getToken();
   if (!token) {
     return NextResponse.json(
-      { detail: "Sign in as an administrator to move candidates." },
+      { detail: "Sign in to move candidates." },
       { status: 401 },
     );
   }

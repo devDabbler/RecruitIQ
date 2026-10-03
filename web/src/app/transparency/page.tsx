@@ -12,6 +12,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { getMatchTrace, getScoringPolicy, getSearchTrace, getUploadPolicy, listJobs } from "@/lib/data";
 import type { PairTrace, ScoringPolicy, SearchHit, UploadPolicy } from "@/lib/domain";
+import { SCORE_BEFORE_FEEDBACK } from "@/lib/permissions";
+import { hasPermission } from "@/lib/session";
 import { pct, scoreLadder, similarity } from "@/lib/transparency";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +68,10 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
     department: job.department,
   }));
   const selected = choices.find((job) => String(job.id) === jobParam) ?? choices[0];
+  // Interviewers may not see scores before their own feedback, so the trace
+  // tools (which are all scores) are not drawn for them; the API refuses
+  // them too.
+  const showTraces = await hasPermission(SCORE_BEFORE_FEEDBACK);
 
   return (
     <>
@@ -77,7 +83,10 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
       <div className="space-y-6">
         <Inputs policy={policy} />
         <HowAScoreIsBuilt policy={policy} />
+        <FeedbackUse policy={policy} />
 
+        {showTraces ? (
+        <>
         <Card>
           <CardHeader>
             <CardTitle>Trace a ranking</CardTitle>
@@ -147,6 +156,8 @@ export default async function TransparencyPage({ searchParams }: PageProps<"/tra
             )}
           </CardContent>
         </Card>
+        </>
+        ) : null}
 
         <UploadPrivacy policy={uploadPolicy} />
         <Principles />
@@ -252,10 +263,44 @@ function UploadPrivacy({ policy }: { policy: UploadPolicy }) {
   );
 }
 
+// --- what interview feedback is for -----------------------------------------
+
+function FeedbackUse({ policy }: { policy: ScoringPolicy }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>What interview feedback is and is not used for</CardTitle>
+        <p className="text-xs text-slate-500">
+          A test reads every scoring module and fails if one of them mentions feedback.
+        </p>
+      </CardHeader>
+      <CardContent className="grid gap-6 text-sm lg:grid-cols-2">
+        <div>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">Used for</h3>
+          <ul className="space-y-1.5 text-slate-700">
+            {policy.feedback_policy.used_for.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase">
+            Never used for
+          </h3>
+          <ul className="space-y-1.5 text-slate-700">
+            {policy.feedback_policy.never_used_for.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // --- what the ranker reads --------------------------------------------------
 
-function Inputs({ policy }: { policy: ScoringPolicy }) {
-  return (
+function Inputs({ policy }: { policy: ScoringPolicy }) {  return (
     <div className="grid gap-6 lg:grid-cols-3">
       <Card>
         <CardHeader>

@@ -18,16 +18,22 @@ import type {
   Candidate,
   CandidateMatch,
   CandidateSearch,
+  InterviewEntry,
+  InterviewListItem,
+  InterviewScope,
   Job,
   JobList,
   JobMatch,
   JobPipeline,
   MatchTrace,
+  Profile,
   ResumeSummary,
   SavedJob,
   ScoringPolicy,
   SearchTrace,
   SkillsBreakdown,
+  StageDefaults,
+  TeamMember,
   UploadPolicy,
 } from "./domain";
 import { getToken } from "./session";
@@ -208,4 +214,42 @@ export async function getSearchTrace(q: string, location?: string): Promise<Sear
     token: await getToken(),
     query: { q, location },
   });
+}
+
+// --- ATS Phase B: team, interviews, feedback --------------------------------
+
+/** Everyone on the team. Emails are null for roles that cannot invite. */
+export async function listTeam(): Promise<TeamMember[]> {
+  const result = await apiFetch<{ members: TeamMember[] }>("/api/team/users", {
+    token: await getToken(),
+  });
+  return result.members;
+}
+
+export async function getMyProfile(): Promise<Profile | null> {
+  return apiFetchOptional<Profile>("/api/team/me", { token: await getToken() });
+}
+
+export async function listInterviews(scope: InterviewScope): Promise<InterviewListItem[]> {
+  const result = await apiFetch<{ items: InterviewListItem[] }>("/api/interviews", {
+    token: await getToken(),
+    query: { scope },
+  });
+  return result.items;
+}
+
+export async function getApplicationInterviews(applicationId: number): Promise<InterviewEntry[]> {
+  return (
+    (await apiFetchOptional<InterviewEntry[]>(`/api/applications/${applicationId}/interviews`, {
+      token: await getToken(),
+    })) ?? []
+  );
+}
+
+export async function getDefaultInterviewers(jobId: number): Promise<StageDefaults[] | null> {
+  const result = await apiFetchOptional<{ stages: StageDefaults[] }>(
+    `/api/jobs/${jobId}/default-interviewers`,
+    { token: await getToken() },
+  );
+  return result?.stages ?? null;
 }

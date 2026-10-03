@@ -5,7 +5,7 @@ import { SESSION_COOKIE } from "./config";
 const cookieStore = { get: vi.fn() };
 vi.mock("next/headers", () => ({ cookies: async () => cookieStore }));
 
-const { canWrite, getToken, getUser } = await import("./session");
+const { canWrite, getToken, getUser, hasPermission } = await import("./session");
 
 function setCookie(value: string | undefined) {
   cookieStore.get.mockImplementation((name: string) =>
@@ -96,5 +96,33 @@ describe("canWrite", () => {
   it("is false when signed out", async () => {
     setCookie(undefined);
     await expect(canWrite()).resolves.toBe(false);
+  });
+});
+
+describe("canWrite (ATS Phase B: may move the pipeline)", () => {
+  for (const [role, expected] of [
+    ["admin", true],
+    ["hiring_manager", true],
+    ["hiring_team", true],
+    ["interviewer", false],
+    ["demo", false],
+  ] as const) {
+    it(`is ${expected} for ${role}`, async () => {
+      setCookie("jwt-abc");
+      vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify({ ...DEMO_USER, role })));
+      await expect(canWrite()).resolves.toBe(expected);
+    });
+  }
+});
+
+describe("hasPermission", () => {
+  it("reads the generated table", async () => {
+    setCookie("jwt-abc");
+    // A fresh Response per call: each check asks /auth/me, and a body reads once.
+    vi.mocked(fetch).mockImplementation(
+      async () => new Response(JSON.stringify({ ...DEMO_USER, role: "hiring_team" })),
+    );
+    await expect(hasPermission("jobs.write")).resolves.toBe(false);
+    await expect(hasPermission("candidates.add")).resolves.toBe(true);
   });
 });

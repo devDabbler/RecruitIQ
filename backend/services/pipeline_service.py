@@ -116,6 +116,7 @@ def ensure_application_stages(db: Session, application: JobApplication) -> list[
 
     now = datetime.utcnow()
     started = any(row.status != PENDING for row in existing.values())
+    entered: Optional[ApplicationStage] = None
     for stage in stages:
         if stage.id in existing:
             continue
@@ -124,13 +125,26 @@ def ensure_application_stages(db: Session, application: JobApplication) -> list[
             row.status = IN_PROGRESS
             row.started_at = application.applied_at or now
             started = True
+            entered = row
         db.add(row)
     db.flush()
+    if entered is not None:
+        on_stage_entered(db, entered)
     db.refresh(application)
     if application.status not in TERMINAL:
         application.status = APP_ACTIVE
     sync_candidate_status(db, application)
     return _ordered(application)
+
+
+def on_stage_entered(db: Session, row: ApplicationStage) -> None:
+    """Runs whenever an application starts a round (ATS Phase B: default interviewers)."""
+    if row.application.status in TERMINAL:
+        return
+    # Imported here: feedback_service imports this module.
+    from backend.services import feedback_service
+
+    feedback_service.apply_default_interviewers(db, row)
 
 
 def start_application(db: Session, application: JobApplication) -> list[ApplicationStage]:
@@ -225,6 +239,7 @@ def advance(db: Session, application: JobApplication, actor_id: Optional[str] = 
         return
     nxt.status = IN_PROGRESS
     nxt.started_at = now
+    on_stage_entered(db, nxt)
     sync_candidate_status(db, application)
 
 
@@ -243,6 +258,7 @@ def skip(db: Session, application: JobApplication, actor_id: Optional[str] = Non
     _close(current, SKIPPED, now, actor_id, note)
     nxt.status = IN_PROGRESS
     nxt.started_at = now
+    on_stage_entered(db, nxt)
     sync_candidate_status(db, application)
 
 

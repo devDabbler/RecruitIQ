@@ -73,7 +73,8 @@ system):
   on purpose — do not raise `MemoryMax` without reading ADR 0003.
 - certbot owns the nginx site file after first issue; `deploy.sh` deliberately
   does not overwrite it.
-- One-off admin: `scripts/create_admin.py` (reads `ADMIN_PASSWORD` env);
+- One-off admin: `scripts/create_admin.py` (reads `ADMIN_PASSWORD` env;
+  `--role` sets up any staff role, e.g. a seeded interviewer);
   reseed: run `scripts/seed_demo.py` as `recruitiq` with `/etc/recruitiq/env`
   sourced.
 

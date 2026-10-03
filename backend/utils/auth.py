@@ -23,7 +23,14 @@ from backend.utils.database import get_db
 logger = logging.getLogger(__name__)
 
 ROLE_ADMIN = "admin"
+ROLE_HIRING_MANAGER = "hiring_manager"
+ROLE_HIRING_TEAM = "hiring_team"
+ROLE_INTERVIEWER = "interviewer"
 ROLE_DEMO = "demo"
+
+# ATS Phase B: the four roles a person on the team can hold. `demo` is the
+# public read-only account and is never a staff role.
+STAFF_ROLES = (ROLE_ADMIN, ROLE_HIRING_MANAGER, ROLE_HIRING_TEAM, ROLE_INTERVIEWER)
 
 MUTATING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
@@ -165,18 +172,53 @@ def current_role(request: Request) -> Optional[str]:
         return None
 
 
-def enforce_read_only(request: Request) -> None:
-    """Only an authenticated admin may write. Installed app-wide in main.py.
+def request_identity(request: Request, db: Session) -> tuple[Optional[str], Optional[User]]:
+    """(role, user) for this request, read from the database.
+
+    The token's role claim is what was true when it was issued; a role change
+    or a deleted account must take effect on the next request, not when a
+    24-hour token expires. Demo tokens skip the lookup: the demo role cannot
+    change and the public demo is most of the traffic, so `user` is None for
+    them. An unreadable token counts as anonymous here; whether that is fatal
+    is the route's business. Cached on `request.state` so both app-wide gates
+    and the handlers share one query.
+    """
+    cached = getattr(request.state, "identity", None)
+    if cached is not None:
+        return cached
+
+    identity: tuple[Optional[str], Optional[User]] = (None, None)
+    token = bearer_token(request)
+    if token:
+        try:
+            claims = decode_access_token(token)
+        except HTTPException:
+            claims = None
+        if claims is not None:
+            if claims.get("role") == ROLE_DEMO:
+                identity = (ROLE_DEMO, None)
+            else:
+                user = db.query(User).filter(User.id == claims.get("sub")).first()
+                if user is not None:
+                    identity = (user.role, user)
+    request.state.identity = identity
+    return identity
+
+
+def enforce_read_only(request: Request, db: Session = Depends(get_db)) -> None:
+    """Writes need a role that the permission table grants. Installed app-wide.
 
     The UI also hides mutating controls, but a hidden button is not an access
-    control — anyone can POST straight at the API. This is the gate; the UI is
-    courtesy (spec §2).
+    control: anyone can POST straight at the API. This is the gate; the UI is
+    courtesy (spec section 2).
 
-    Anonymous callers are refused too, not just the demo role. `/docs` is
-    deliberately public (spec §1), and Swagger UI's "Try it out" sends requests
-    with no Authorization header at all; treating "no token" as "not the demo
-    user, therefore allowed" would leave every write endpoint open to anyone who
-    found the docs page.
+    Anonymous callers are refused (401), not just the demo role (403). `/docs`
+    is deliberately public, and Swagger UI's "Try it out" sends requests with
+    no Authorization header at all.
+
+    ATS Phase B: admin may write anything. The other staff roles may write
+    only where `ROUTE_PERMISSIONS` grants them; a route missing from that
+    table is admin-only, so a forgotten route is denied rather than exposed.
     """
     if request.method not in MUTATING_METHODS:
         return
@@ -184,20 +226,35 @@ def enforce_read_only(request: Request) -> None:
     if path in READ_ONLY_POST_PATHS:
         return
 
-    role = current_role(request)
-    if role == ROLE_ADMIN:
-        return
+    role, _ = request_identity(request, db)
     if role is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required to modify data",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if role == ROLE_ADMIN:
+        return
+    if role == ROLE_DEMO:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This is a read-only demo account. Sign in as an administrator to "
+                "change data."
+            ),
+        )
+
+    # Imported here: permissions imports this module for the role constants.
+    from backend.utils.permissions import can, role_label, route_permission
+
+    permission = route_permission(request.method, path)
+    if permission is not None and can(role, permission):
+        return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=(
-            "This is a read-only demo account. Sign in as an administrator to "
-            "change data."
+            f"Your role ({role_label(role)}) cannot make this change. "
+            "Ask an administrator if you need it."
         ),
     )
 

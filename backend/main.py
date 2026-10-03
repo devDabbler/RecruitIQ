@@ -24,14 +24,18 @@ from backend.utils.database import Base, engine, verify_postgres_connection
 # Import routers
 from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
-from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache, transparency, pipeline
+from backend.routers import auth, tasks, pitches, agent, performance, cache, transparency, pipeline, feedback, team
 from backend.api.routes import job_routes
+from backend.services.access_service import enforce_interviewer_scope
 from backend.utils.auth import enforce_read_only
 
 # The read-only gate is an application-level dependency, not a per-route one, so
 # a route added later is refused for the demo role by default instead of being
 # quietly exposed. See backend/utils/auth.py for the read-only-POST allowlist.
-app = FastAPI(dependencies=[Depends(enforce_read_only)])
+# Order matters: the write gate first (401/403 for writes), then the
+# interviewer scope (default-deny reads for that role). Both share one
+# identity lookup through request.state.
+app = FastAPI(dependencies=[Depends(enforce_read_only), Depends(enforce_interviewer_scope)])
 
 # Import service registry and agent framework - this will handle all service initialization
 from backend.services.service_registry import provide_llm_service
@@ -96,7 +100,10 @@ app.include_router(assistant.router, prefix="/api", tags=["assistant"])
 # smart_assistant router removed - functionality merged into assistant.py
 app.include_router(crawler.router, prefix="/api", tags=["crawler"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
-app.include_router(interviews.router, prefix="/api", tags=["interviews"])
+# feedback before pipeline: pipeline's POST /applications/{id}/{action} would
+# otherwise swallow POST /applications/{id}/interviews.
+app.include_router(feedback.router, prefix="/api", tags=["interviews"])  # ATS Phase B
+app.include_router(team.router, prefix="/api", tags=["team"])  # ATS Phase B
 app.include_router(pipeline.router, prefix="/api", tags=["pipeline"])  # ATS Phase A board and transitions
 app.include_router(pitches.router, prefix="/api", tags=["pitches"])
 app.include_router(agent.router, tags=["agent"]) # Agent router

@@ -14,7 +14,8 @@ import jwt
 import pytest
 
 from backend.main import app
-from backend.tests.conftest import ADMIN_PASSWORD, SEED_EMAIL_DOMAIN
+from backend.tests.conftest import ADMIN_PASSWORD, SEED_EMAIL_DOMAIN, STAFF_ROLES_UNDER_TEST
+from backend.utils.permissions import can, route_permission
 from backend.utils.auth import (
     MUTATING_METHODS,
     READ_ONLY_POST_PATHS,
@@ -250,3 +251,74 @@ def test_admin_may_write(admin_client, seed):
 
 def test_reads_stay_open_to_everyone(client, seed):
     assert client.get(f"/api/jobs/{seed['job_id']}").status_code == 200
+
+
+# --- staff roles (ATS Phase B) ---------------------------------------------
+
+
+def _staff_cases():
+    """(role, method, path) for every mutating route the role is NOT granted."""
+    cases = []
+    for role in STAFF_ROLES_UNDER_TEST:
+        for method, path in MUTATING_ROUTES:
+            permission = route_permission(method, _concrete(path))
+            if permission is not None and can(role, permission):
+                continue
+            cases.append((role, method, path))
+    return cases
+
+
+STAFF_DENIED = _staff_cases()
+
+
+def test_the_staff_walk_covers_something_for_every_role():
+    roles = {role for role, _, _ in STAFF_DENIED}
+    assert roles == set(STAFF_ROLES_UNDER_TEST)
+
+
+@pytest.mark.parametrize(
+    ("role", "method", "path"),
+    STAFF_DENIED,
+    ids=[f"{r} {m} {p}" for r, m, p in STAFF_DENIED],
+)
+def test_staff_roles_are_refused_routes_they_are_not_granted(
+    role, method, path, hiring_manager_client, hiring_team_client, interviewer_client
+):
+    client = {
+        "hiring_manager": hiring_manager_client,
+        "hiring_team": hiring_team_client,
+        "interviewer": interviewer_client,
+    }[role]
+    response = client.request(method, _concrete(path))
+    assert response.status_code == 403, (
+        f"{role} {method} {path} was not refused (got {response.status_code})"
+    )
+
+
+def test_a_granted_route_passes_the_gate_for_a_hiring_manager(hiring_manager_client, seed):
+    # 404 or 422 means the gate let it through to the handler.
+    response = hiring_manager_client.put("/api/jobs/999999", json={})
+    assert response.status_code in (404, 422)
+
+
+def test_a_role_change_takes_effect_on_the_next_request(db_session, staff_users, client):
+    """The role comes from the database, not from the token's claim."""
+    from backend.models.models import User
+
+    user = User(
+        email=f"demoted@{SEED_EMAIL_DOMAIN}", name="Soon Demoted", role="hiring_manager"
+    )
+    db_session.add(user)
+    db_session.commit()  # commit, not flush: a handler rollback must not undo it
+    token = create_access_token(user)  # claim says hiring_manager
+    headers = {"Authorization": f"Bearer {token}"}
+
+    assert client.put("/api/jobs/999999", json={}, headers=headers).status_code in (404, 422)
+
+    user.role = "interviewer"
+    db_session.commit()
+    assert client.put("/api/jobs/999999", json={}, headers=headers).status_code == 403
+
+    db_session.delete(user)
+    db_session.commit()
+    assert client.put("/api/jobs/999999", json={}, headers=headers).status_code == 401

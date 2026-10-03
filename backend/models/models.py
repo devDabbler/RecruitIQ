@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index, Boolean, SmallInteger, CheckConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.utils.database import Base
@@ -113,6 +113,10 @@ class Job(Base):
     max_salary = Column(Integer, nullable=True)
     hiring_manager = Column(String(255), nullable=True)
     recruiter = Column(String(255), nullable=True)
+    # ATS Phase B: optional links to team members. The free-text columns
+    # above stay for display and seed data (spec 3.2).
+    hiring_manager_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    recruiter_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     application_deadline = Column(DateTime, nullable=True)
     start_date = Column(DateTime, nullable=True)
     job_metadata = Column(JSON, nullable=True)
@@ -391,9 +395,11 @@ class AgentMemory(Base):
 class User(Base):
     """An operator of the platform.
 
-    Two roles only: `admin` can write, `demo` cannot. The demo row is created on
-    demand by POST /auth/demo so a visitor following a link never meets a login
-    screen. Registration, password reset, and refresh-token rotation are out of
+    Five roles (ATS Phase B): admin, hiring_manager, hiring_team, and
+    interviewer are staff; demo is the read-only public account, created on
+    demand by POST /auth/demo so a visitor following a link never meets a
+    login screen. What each role may do lives in backend/utils/permissions.py.
+    Registration, password reset, and refresh-token rotation are out of
     scope for a portfolio demo (Phase 3 spec Â§2).
     """
     __tablename__ = "users"
@@ -402,6 +408,9 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     hashed_password = Column(String(255), nullable=True)  # null for the demo user
     role = Column(String(20), nullable=False, default="demo")
+    # ATS Phase B. Roles: admin, hiring_manager, hiring_team, interviewer, demo.
+    name = Column(String(100), nullable=True)
+    timezone = Column(String(64), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
@@ -488,6 +497,9 @@ class PipelineStage(Base):
     __table_args__ = (UniqueConstraint("job_id", "key", name="uq_pipeline_stage_job_key"),)
 
     job = relationship("Job", back_populates="pipeline_stages")
+    default_interviewers = relationship(
+        "StageDefaultInterviewer", cascade="all, delete-orphan", back_populates="stage"
+    )
 
     def __repr__(self):
         return f"<PipelineStage(job_id={self.job_id}, key='{self.key}', enabled={self.enabled})>"
@@ -516,6 +528,79 @@ class ApplicationStage(Base):
 
     application = relationship("JobApplication", back_populates="stages")
     stage = relationship("PipelineStage")
+    interviews = relationship(
+        "Interview",
+        back_populates="application_stage",
+        cascade="all, delete-orphan",
+        order_by="Interview.id",
+    )
 
     def __repr__(self):
         return f"<ApplicationStage(application_id={self.application_id}, stage_id={self.stage_id}, status='{self.status}')>"
+
+
+# ====================================================================
+# Interviews and feedback (ATS Phase B, spec 2026-10-03 section 3.1)
+# ====================================================================
+
+
+class Interview(Base):
+    """One interviewer assigned to one stage of one application."""
+    __tablename__ = "interviews"
+
+    id = Column(Integer, primary_key=True)
+    application_stage_id = Column(
+        Integer, ForeignKey("application_stages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    interviewer_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    assignment_source = Column(String(20), nullable=False, default="manual")  # manual or default
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("application_stage_id", "interviewer_id", name="uq_interview_stage_interviewer"),
+    )
+
+    application_stage = relationship("ApplicationStage", back_populates="interviews")
+    interviewer = relationship("User")
+    feedback = relationship(
+        "Feedback", back_populates="interview", uselist=False, cascade="all, delete-orphan"
+    )
+
+    def __repr__(self):
+        return f"<Interview(stage_row={self.application_stage_id}, interviewer={self.interviewer_id})>"
+
+
+class Feedback(Base):
+    """What one interviewer thought. Never read by the scorer (transparency page)."""
+    __tablename__ = "feedback"
+
+    id = Column(Integer, primary_key=True)
+    interview_id = Column(
+        Integer, ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    rating = Column(SmallInteger, nullable=False)
+    recommendation = Column(String(20), nullable=False)
+    notes = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (CheckConstraint("rating BETWEEN 1 AND 5", name="ck_feedback_rating"),)
+
+    interview = relationship("Interview", back_populates="feedback")
+
+
+class StageDefaultInterviewer(Base):
+    """Assigned automatically when an application enters this stage."""
+    __tablename__ = "stage_default_interviewers"
+
+    id = Column(Integer, primary_key=True)
+    pipeline_stage_id = Column(
+        Integer, ForeignKey("pipeline_stages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("pipeline_stage_id", "user_id", name="uq_stage_default_interviewer"),
+    )
+
+    stage = relationship("PipelineStage", back_populates="default_interviewers")
+    user = relationship("User")

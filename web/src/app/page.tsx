@@ -6,6 +6,7 @@ import { ErrorState } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
+import { redirectInterviewer } from "@/lib/guards";
 import { countByStage, getSkillsBreakdown, listCandidates, listJobs } from "@/lib/data";
 import { PIPELINE_STAGES, STAGE_LABELS, fullName } from "@/lib/domain";
 
@@ -39,6 +40,7 @@ function Stat({
 }
 
 export default async function DashboardPage() {
+  await redirectInterviewer();
   let candidates;
   let jobs;
   let skills: Record<string, number>;

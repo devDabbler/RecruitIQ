@@ -22,7 +22,7 @@ async function forward(
   const token = await getToken();
   if (!token) {
     return NextResponse.json(
-      { detail: `Sign in as an administrator to ${action} jobs.` },
+      { detail: `Sign in to ${action} jobs.` },
       { status: 401 },
     );
   }

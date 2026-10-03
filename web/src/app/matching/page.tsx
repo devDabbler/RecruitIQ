@@ -7,11 +7,13 @@ import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
+import { redirectInterviewer } from "@/lib/guards";
 import { listJobs, matchCandidatesForJob } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function MatchingPage({ searchParams }: PageProps<"/matching">) {
+  await redirectInterviewer();
   const params = await searchParams;
   const raw = Array.isArray(params.job) ? params.job[0] : params.job;
 

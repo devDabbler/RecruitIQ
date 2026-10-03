@@ -1,9 +1,11 @@
 import { AssistantChat } from "@/components/assistant-chat";
 import { PageHeader } from "@/components/page-header";
+import { redirectInterviewer } from "@/lib/guards";
 
 export const metadata = { title: "AI Assistant · RecruitIQ" };
 
-export default function AssistantPage() {
+export default async function AssistantPage() {
+  await redirectInterviewer();
   return (
     <>
       <PageHeader

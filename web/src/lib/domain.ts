@@ -28,6 +28,14 @@ export type ApplicationCard = Schemas["ApplicationCard"];
 export type ApplicationDetail = Schemas["ApplicationDetail"];
 export type ApplicationStage = Schemas["ApplicationStageOut"];
 
+/** ATS Phase B: the team, interviews, and feedback. */
+export type TeamMember = Schemas["TeamMember"];
+export type Profile = Schemas["ProfileResponse"];
+export type InterviewEntry = Schemas["InterviewOut"];
+export type InterviewListItem = Schemas["InterviewListItem"];
+export type StageDefaults = Schemas["StageDefaults"];
+export type InterviewScope = "mine" | "pending" | "all";
+
 /** Admin-only scoring transparency (`/api/transparency/*`). */
 export type ScoringPolicy = Schemas["ScoringPolicy"];
 export type MatchTrace = Schemas["MatchTraceResponse"];

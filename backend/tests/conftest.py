@@ -43,6 +43,8 @@ SEED_EPOCH = datetime(2025, 1, 1, 12, 0, 0)
 SEED_EMAIL_DOMAIN = "recruitiq-seed.example.com"
 
 ADMIN_PASSWORD = "contract-suite-admin-password"
+STAFF_PASSWORD = "contract-suite-staff-password"
+STAFF_ROLES_UNDER_TEST = ("hiring_manager", "hiring_team", "interviewer")
 
 
 @pytest.fixture(scope="session")
@@ -260,7 +262,10 @@ def admin_user(db_session: Session) -> User:
         created_at=SEED_EPOCH,
     )
     db_session.add(user)
-    db_session.flush()
+    # Commit, not flush: since ATS Phase B the write gate reads the role from
+    # the database, so a handler rollback that took this row with it would
+    # turn every later admin request into a 401.
+    db_session.commit()
     return user
 
 
@@ -291,6 +296,104 @@ def demo_client(override_get_db, seed, db_session: Session):
         raise_server_exceptions=False,
         headers={"Authorization": f"Bearer {token}"},
     )
+
+
+@pytest.fixture(scope="session")
+def staff_users(db_session: Session) -> dict:
+    """One user per non-admin staff role (ATS Phase B), keyed by role."""
+    users = {}
+    for role in STAFF_ROLES_UNDER_TEST:
+        user = User(
+            email=f"{role.replace('_', '-')}@{SEED_EMAIL_DOMAIN}",
+            name=f"Test {role.replace('_', ' ').title()}",
+            hashed_password=hash_password(STAFF_PASSWORD),
+            role=role,
+            created_at=SEED_EPOCH,
+        )
+        db_session.add(user)
+        users[role] = user
+    # Commit, not flush: a handler that rolls back on an error would otherwise
+    # take these users with it, and every later staff test would get a 401.
+    db_session.commit()
+    return users
+
+
+def _client_for(user: User) -> TestClient:
+    return TestClient(
+        app,
+        raise_server_exceptions=False,
+        headers={"Authorization": f"Bearer {create_access_token(user)}"},
+    )
+
+
+@pytest.fixture(scope="session")
+def hiring_manager_client(override_get_db, seed, staff_users):
+    return _client_for(staff_users["hiring_manager"])
+
+
+@pytest.fixture(scope="session")
+def hiring_team_client(override_get_db, seed, staff_users):
+    return _client_for(staff_users["hiring_team"])
+
+
+@pytest.fixture(scope="session")
+def interviewer_client(override_get_db, seed, staff_users):
+    return _client_for(staff_users["interviewer"])
+
+
+@pytest.fixture(scope="module")
+def scoped_application(db_session: Session, seed):
+    """A job and an application of their own, for interview and scoping tests.
+
+    Kept off the seeded application on purpose: test_pipeline expects that one
+    to have no stage rows when each of its tests starts. Removed (with every
+    interview and feedback row, by cascade) when the module finishes.
+    """
+    from backend.services import pipeline_service as ps
+
+    job = Job(
+        title="Scope Test Engineer",
+        department="Engineering",
+        job_overview="Exists for interview and access tests.",
+        required_qualifications="Python",
+        location="Remote",
+        location_type="remote",
+        job_type="full_time",
+        experience_level="mid",
+        status="open",
+        skills="Python",
+        job_metadata={},
+        views=0,
+        applications=1,
+        created_at=SEED_EPOCH,
+        updated_at=SEED_EPOCH,
+    )
+    db_session.add(job)
+    db_session.flush()
+    application = JobApplication(
+        job_id=job.id,
+        candidate_id=seed["candidate_ids"][2],
+        status="active",
+        applied_at=SEED_EPOCH,
+        updated_at=SEED_EPOCH,
+        source="direct",
+    )
+    db_session.add(application)
+    db_session.flush()
+    ps.start_application(db_session, application)
+    db_session.commit()
+
+    yield {
+        "job_id": job.id,
+        "application_id": application.id,
+        "candidate_id": seed["candidate_ids"][2],
+    }
+
+    db_session.rollback()
+    leftover = db_session.get(Job, job.id)
+    if leftover is not None:
+        db_session.delete(leftover)
+    db_session.commit()
 
 
 @pytest.fixture(autouse=True)
