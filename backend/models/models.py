@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.utils.database import Base
@@ -128,6 +128,12 @@ class Job(Base):
     job_applications = relationship("JobApplication", back_populates="job", cascade="all, delete-orphan")
     saved_by_candidates = relationship("SavedJob", back_populates="job", cascade="all, delete-orphan")
     pitches = relationship("CandidatePitch", back_populates="job")
+    pipeline_stages = relationship(
+        "PipelineStage",
+        back_populates="job",
+        cascade="all, delete-orphan",
+        order_by="PipelineStage.position",
+    )
 
     def __repr__(self):
         return f"<Job(id={self.id}, title='{self.title}', status='{self.status}')>"
@@ -388,7 +394,7 @@ class User(Base):
     Two roles only: `admin` can write, `demo` cannot. The demo row is created on
     demand by POST /auth/demo so a visitor following a link never meets a login
     screen. Registration, password reset, and refresh-token rotation are out of
-    scope for a portfolio demo (Phase 3 spec §2).
+    scope for a portfolio demo (Phase 3 spec Â§2).
     """
     __tablename__ = "users"
 
@@ -410,7 +416,7 @@ class JobApplication(Base):
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, ForeignKey("jobs.id"), nullable=False)
     candidate_id = Column(String(36), ForeignKey("candidates.id"), nullable=False)
-    status = Column(String(50), default="submitted", nullable=False)  # submitted, reviewing, interviewing, accepted, rejected
+    status = Column(String(50), default="active", nullable=False)  # active, hired, rejected, declined, withdrawn (ATS Phase A)
     cover_letter = Column(Text, nullable=True)
     applied_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -422,6 +428,12 @@ class JobApplication(Base):
     # Relationships
     job = relationship("Job", back_populates="job_applications")
     candidate = relationship("Candidate", back_populates="candidate_applications")
+    stages = relationship(
+        "ApplicationStage",
+        back_populates="application",
+        cascade="all, delete-orphan",
+        order_by="ApplicationStage.id",
+    )
 
     def __repr__(self):
         return f"<JobApplication(job_id={self.job_id}, candidate_id={self.candidate_id}, status='{self.status}')>"
@@ -447,3 +459,63 @@ class SavedJob(Base):
 
     def __repr__(self):
         return f"<SavedJob(job_id={self.job_id}, candidate_id={self.candidate_id})>"
+
+
+# ====================================================================
+# Pipeline (ATS Phase A, spec 2026-10-03 section 3)
+# ====================================================================
+
+
+class PipelineStage(Base):
+    """One stage of one job's pipeline.
+
+    Copied from `pipeline_service.DEFAULT_STAGES` when a job is created or the
+    first time its pipeline is read. `kind` is `round` (something the candidate
+    goes through) or `outcome` (where they end up). Disabled rounds are skipped
+    by every transition.
+    """
+    __tablename__ = "pipeline_stages"
+
+    id = Column(Integer, primary_key=True)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    key = Column(String(50), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    kind = Column(String(20), nullable=False, default="round")
+    position = Column(Integer, nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    __table_args__ = (UniqueConstraint("job_id", "key", name="uq_pipeline_stage_job_key"),)
+
+    job = relationship("Job", back_populates="pipeline_stages")
+
+    def __repr__(self):
+        return f"<PipelineStage(job_id={self.job_id}, key='{self.key}', enabled={self.enabled})>"
+
+
+class ApplicationStage(Base):
+    """Where one application stands at one stage. Together these rows are the history."""
+    __tablename__ = "application_stages"
+
+    id = Column(Integer, primary_key=True)
+    application_id = Column(
+        Integer, ForeignKey("job_applications.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    stage_id = Column(
+        Integer, ForeignKey("pipeline_stages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status = Column(String(20), nullable=False, default="pending")
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    changed_by = Column(String(36), ForeignKey("users.id"), nullable=True)
+    note = Column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("application_id", "stage_id", name="uq_application_stage"),
+    )
+
+    application = relationship("JobApplication", back_populates="stages")
+    stage = relationship("PipelineStage")
+
+    def __repr__(self):
+        return f"<ApplicationStage(application_id={self.application_id}, stage_id={self.stage_id}, status='{self.status}')>"

@@ -31,6 +31,7 @@ import zlib
 import backend.utils.win_compat  # noqa: F401  (must precede deps needing pwd)
 
 from backend.models.models import (
+    ApplicationStage,
     Candidate,
     CandidateSkill,
     Job,
@@ -80,17 +81,32 @@ PIPELINE_WEIGHTS = [
 
 SOURCES = ["linkedin", "referral", "job_board", "indeed", "direct_application", "agency"]
 
-# Applications mirror the candidate's own funnel position; a candidate who is
-# "interviewing" should not show a "submitted" application against the job they
-# are interviewing for.
+# Applications mirror the candidate's own funnel position, in the vocabulary
+# the ATS Phase A migration introduced: an application is active until it
+# reaches an outcome. Where it is inside the funnel lives in its stage rows.
 STATUS_TO_APPLICATION = {
-    "active": "submitted",
-    "screening": "reviewing",
-    "interviewing": "interviewing",
-    "offered": "interviewing",
-    "hired": "accepted",
+    "active": "active",
+    "screening": "active",
+    "interviewing": "active",
+    "offered": "active",
+    "hired": "hired",
     "rejected": "rejected",
-    "on_hold": "reviewing",
+    "on_hold": "active",
+    "withdrawn": "withdrawn",
+}
+
+# How far along the pipeline a seeded application is, by candidate status.
+# Index into pipeline_service.DEFAULT_STAGES of the round in progress; None
+# for terminal applications.
+STATUS_TO_STAGE_INDEX = {
+    "active": 0,
+    "screening": 1,
+    "interviewing": 3,
+    "offered": 7,
+    "on_hold": 1,
+    "hired": None,
+    "rejected": None,
+    "withdrawn": None,
 }
 
 NEW_JOBS = [
@@ -507,6 +523,45 @@ def seed_candidates(db, rng: random.Random) -> list[Candidate]:
     return candidates
 
 
+def _seed_stage_history(db, application: JobApplication, candidate_status: str) -> None:
+    """Position one application on its job's pipeline from the candidate's status.
+
+    Deterministic: the same status always yields the same rows, and an
+    application that already has rows is left alone so a re-run never
+    rewinds a board someone has been clicking on.
+    """
+    from backend.services import pipeline_service as ps
+
+    if application.stages:
+        return
+    stages = ps.ensure_job_stages(db, application.job_id)
+    target = STATUS_TO_STAGE_INDEX.get(candidate_status, 0)
+    final = STATUS_TO_APPLICATION.get(candidate_status, "active")
+    when = application.applied_at
+
+    for index, stage in enumerate(stages):
+        row = ApplicationStage(application_id=application.id, stage_id=stage.id, status="pending")
+        if final == "hired":
+            row.status = "skipped" if stage.key == "offer_declined" else "passed"
+        elif final in ("rejected", "withdrawn"):
+            if index == 0:
+                row.status = "passed"
+            elif index == 1:
+                row.status = "failed" if final == "rejected" else "skipped"
+            else:
+                row.status = "skipped"
+        elif target is not None and index < target:
+            row.status = "passed"
+        elif index == target:
+            row.status = "in_progress"
+        if row.status != "pending":
+            row.started_at = when
+        if row.status in ("passed", "failed", "skipped"):
+            row.completed_at = when
+        db.add(row)
+    application.status = final
+
+
 def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
     """Applications and saved jobs, consistent with each candidate's status."""
     by_title = {job.title: job for job in jobs}
@@ -517,7 +572,7 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
         job = by_title.get(candidate.position_applied or "") or jobs[
             stable_index(candidate.id, len(jobs))
         ]
-        app_status = STATUS_TO_APPLICATION.get(candidate.status or "active", "submitted")
+        app_status = STATUS_TO_APPLICATION.get(candidate.status or "active", "active")
 
         application = (
             db.query(JobApplication)
@@ -530,9 +585,10 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
         if application is None:
             application = JobApplication(job_id=job.id, candidate_id=candidate.id)
             db.add(application)
-        application.status = app_status
         application.source = candidate.source or "direct"
         application.notes = f"Seeded demo application ({app_status})."
+        db.flush()
+        _seed_stage_history(db, application, candidate.status or "active")
 
         # A third of candidates also save an unrelated job, so the saved-jobs
         # route returns something on the Candidate Detail screen. Decided from

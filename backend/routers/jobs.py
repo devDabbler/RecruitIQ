@@ -87,6 +87,9 @@ class CandidateApplicationSummary(BaseModel):
     status: str
     applied_at: str
     source: Optional[str] = None
+    # ATS Phase A: where this application stands. Null once it is terminal.
+    current_stage_key: Optional[str] = None
+    current_stage: Optional[str] = None
 
 class CandidateSavedJobSummary(BaseModel):
     id: int
@@ -149,7 +152,12 @@ def create_job(
         db.add(db_job)
         db.commit()
         db.refresh(db_job)
-        
+
+        # ATS Phase A: every job carries its own copy of the default stages.
+        from ..services import pipeline_service as ps
+        ps.ensure_job_stages(db, db_job.id)
+        db.commit()
+
         # Generate and store embeddings
         try:
             job_service.store_job_embeddings(db, db_job.id)
@@ -496,7 +504,7 @@ async def track_job_view(
     return {"message": "View tracked", "total_views": job.views}
 
 @router.post("/{job_id}/apply", response_model=JobApplicationResponse)
-async def apply_to_job(
+def apply_to_job(
     job_id: int,
     application: JobApplicationCreate,
     db: Session = Depends(get_db)
@@ -532,12 +540,16 @@ async def apply_to_job(
     )
     
     db.add(db_application)
-    
+
     # Update job applications count
     if job.applications is None:
         job.applications = 0
     job.applications += 1
-    
+
+    db.flush()
+    # ATS Phase A: the application starts at the first enabled round.
+    from ..services import pipeline_service as ps
+    ps.start_application(db, db_application)
     db.commit()
     db.refresh(db_application)
     
@@ -614,29 +626,38 @@ async def save_job(
     )
 
 @router.get("/applications/{candidate_id}", response_model=List[CandidateApplicationSummary])
-async def get_candidate_applications(
+def get_candidate_applications(
     # str, not int: candidate ids became UUID strings in Phase 1 and this
     # signature was missed, so every real id 422'd here.
     candidate_id: str,
     db: Session = Depends(get_db)
 ):
-    """Get all applications for a candidate."""
+    """Get all applications for a candidate, with the stage each one is at."""
+    from ..services import pipeline_service as ps
+
     applications = db.query(JobApplication).filter(
         JobApplication.candidate_id == candidate_id
     ).join(Job).all()
-    
-    return [
-        {
-            "id": app.id,
-            "job_id": app.job_id,
-            "job_title": app.job.title,
-            "job_department": app.job.department,
-            "status": app.status,
-            "applied_at": app.applied_at.isoformat(),
-            "source": app.source
-        }
-        for app in applications
-    ]
+
+    out = []
+    for app in applications:
+        ps.ensure_application_stages(db, app)
+        current = ps.current_stage(app)
+        out.append(
+            {
+                "id": app.id,
+                "job_id": app.job_id,
+                "job_title": app.job.title,
+                "job_department": app.job.department,
+                "status": app.status,
+                "applied_at": app.applied_at.isoformat(),
+                "source": app.source,
+                "current_stage_key": current.stage.key if current else None,
+                "current_stage": current.stage.name if current else None,
+            }
+        )
+    db.commit()
+    return out
 
 @router.get("/saved/{candidate_id}", response_model=List[CandidateSavedJobSummary])
 async def get_candidate_saved_jobs(

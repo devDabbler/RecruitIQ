@@ -62,6 +62,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/applications/{application_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Application
+         * @description One application with its full stage timeline.
+         */
+        get: operations["get_application_api_applications__application_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{application_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Transition Application
+         * @description Advance, skip, reject, or decline. One transaction; 409 when not allowed.
+         */
+        post: operations["transition_application_api_applications__application_id___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assistant/agent-task": {
         parameters: {
             query?: never;
@@ -857,7 +897,7 @@ export interface paths {
         };
         /**
          * Get Candidate Applications
-         * @description Get all applications for a candidate.
+         * @description Get all applications for a candidate, with the stage each one is at.
          */
         get: operations["get_candidate_applications_api_jobs_applications__candidate_id__get"];
         put?: never;
@@ -1004,6 +1044,30 @@ export interface paths {
          */
         get: operations["get_matching_candidates_api_jobs__job_id__matching_candidates_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/{job_id}/pipeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Job Pipeline
+         * @description The job's stages and who is at each one.
+         */
+        get: operations["get_job_pipeline_api_jobs__job_id__pipeline_get"];
+        /**
+         * Update Job Pipeline
+         * @description Enable, disable, or rename stages. Outcomes and the first round stay enabled.
+         */
+        put: operations["update_job_pipeline_api_jobs__job_id__pipeline_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1728,6 +1792,75 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * ApplicationCard
+         * @description One candidate chip on the board.
+         */
+        ApplicationCard: {
+            /** Application Id */
+            application_id: number;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            /** Current Position */
+            current_position?: string | null;
+            /** Entered At */
+            entered_at?: string | null;
+        };
+        /** ApplicationDetail */
+        ApplicationDetail: {
+            /** Applied At */
+            applied_at?: string | null;
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name: string;
+            /** Current Stage Key */
+            current_stage_key?: string | null;
+            /** Current Stage Name */
+            current_stage_name?: string | null;
+            /** Id */
+            id: number;
+            /** Job Id */
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /** Stages */
+            stages: components["schemas"]["ApplicationStageOut"][];
+            /** Status */
+            status: string;
+        };
+        /** ApplicationStageOut */
+        ApplicationStageOut: {
+            /** Completed At */
+            completed_at?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Note */
+            note?: string | null;
+            /** Started At */
+            started_at?: string | null;
+            /** Status */
+            status: string;
+        };
+        /** BoardColumn */
+        BoardColumn: {
+            /** Applications */
+            applications: components["schemas"]["ApplicationCard"][];
+            /** Stage Key */
+            stage_key: string;
+            /** Stage Name */
+            stage_name: string;
+        };
         /** Body_chat_with_assistant_api_assistant_chat_post */
         Body_chat_with_assistant_api_assistant_chat_post: {
             /**
@@ -1854,6 +1987,10 @@ export interface components {
         CandidateApplicationSummary: {
             /** Applied At */
             applied_at: string;
+            /** Current Stage */
+            current_stage?: string | null;
+            /** Current Stage Key */
+            current_stage_key?: string | null;
             /** Id */
             id: number;
             /** Job Department */
@@ -2414,6 +2551,19 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** JobPipelineResponse */
+        JobPipelineResponse: {
+            /** Columns */
+            columns: components["schemas"]["BoardColumn"][];
+            /** Job Id */
+            job_id: number;
+            /** Outcomes */
+            outcomes: {
+                [key: string]: number;
+            };
+            /** Stages */
+            stages: components["schemas"]["StageOut"][];
+        };
         /** JobRef */
         JobRef: {
             /** Department */
@@ -2596,6 +2746,11 @@ export interface components {
             message: string;
             /** Resume Id */
             resume_id: number;
+        };
+        /** PipelineUpdateRequest */
+        PipelineUpdateRequest: {
+            /** Stages */
+            stages: components["schemas"]["StageUpdate"][];
         };
         /** PostParseModelCall */
         PostParseModelCall: {
@@ -2976,6 +3131,34 @@ export interface components {
             /** Score */
             score: number;
         };
+        /** StageOut */
+        StageOut: {
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Name */
+            name: string;
+            /** Position */
+            position: number;
+        };
+        /** StageUpdate */
+        StageUpdate: {
+            /** Description */
+            description?: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+        };
         /** Task */
         Task: {
             /** Candidate Id */
@@ -3084,6 +3267,11 @@ export interface components {
             message: string;
             /** Total Views */
             total_views: number;
+        };
+        /** TransitionRequest */
+        TransitionRequest: {
+            /** Note */
+            note?: string | null;
         };
         /** UnscoredField */
         UnscoredField: {
@@ -3345,6 +3533,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_application_api_applications__application_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transition_application_api_applications__application_id___action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApplicationDetail"];
                 };
             };
             /** @description Validation Error */
@@ -5107,6 +5362,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CandidateMatchesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_job_pipeline_api_jobs__job_id__pipeline_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPipelineResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_job_pipeline_api_jobs__job_id__pipeline_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobPipelineResponse"];
                 };
             };
             /** @description Validation Error */

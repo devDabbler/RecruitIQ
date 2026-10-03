@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
 
+import { ApplicationTimeline } from "@/components/application-timeline";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  getApplication,
   getCandidate,
   getCandidateApplications,
   getCandidateResumes,
@@ -17,6 +19,7 @@ import {
 } from "@/lib/data";
 import { fullName, initials } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
+import { canWrite } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -30,11 +33,15 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
   // ~1.6s of the page's 1.75s, holding the whole navigation open while the
   // profile — already fetched — sat waiting on it. It streams below instead,
   // the same way /jobs/[id] handles its own matching panel.
-  const [applications, savedJobs, resumes] = await Promise.all([
+  const [applications, savedJobs, resumes, writable] = await Promise.all([
     getCandidateApplications(id),
     getCandidateSavedJobs(id),
     getCandidateResumes(id),
+    canWrite(),
   ]);
+  const details = (
+    await Promise.all(applications.map((application) => getApplication(application.id)))
+  ).filter((detail): detail is NonNullable<typeof detail> => detail !== null);
 
   return (
     <>
@@ -133,6 +140,23 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
         </div>
 
         <div className="space-y-6 lg:col-span-2">
+          {details.length === 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Pipeline</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-slate-500">
+                  Not in any pipeline yet. Open a job and add them to it.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            details.map((detail) => (
+              <ApplicationTimeline key={detail.id} application={detail} writable={writable} />
+            ))
+          )}
+
           {candidate.notes ? (
             <Card>
               <CardHeader>
@@ -155,61 +179,27 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
             </CardContent>
           </Card>
 
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Applications</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {applications.length === 0 ? (
-                  <p className="text-sm text-slate-500">No applications yet.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
-                    {applications.map((application) => (
-                      <li key={application.id} className="py-2 first:pt-0 last:pb-0">
-                        <Link
-                          href={`/jobs/${application.job_id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {application.job_title ?? `Job #${application.job_id}`}
-                        </Link>
-                        <p className="text-xs text-slate-500">
-                          {application.status} · applied {formatDate(application.applied_at)}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Saved jobs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {savedJobs.length === 0 ? (
-                  <p className="text-sm text-slate-500">Nothing saved.</p>
-                ) : (
-                  <ul className="divide-y divide-slate-100 text-sm">
-                    {savedJobs.map((saved) => (
-                      <li key={saved.id} className="py-2 first:pt-0 last:pb-0">
-                        <Link
-                          href={`/jobs/${saved.job_id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {saved.job_title ?? `Job #${saved.job_id}`}
-                        </Link>
-                        <p className="text-xs text-slate-500">
-                          Saved {formatDate(saved.saved_at)}
-                        </p>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Saved jobs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {savedJobs.length === 0 ? (
+                <p className="text-sm text-slate-500">Nothing saved.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100 text-sm">
+                  {savedJobs.map((saved) => (
+                    <li key={saved.id} className="py-2 first:pt-0 last:pb-0">
+                      <Link href={`/jobs/${saved.job_id}`} className="font-medium hover:underline">
+                        {saved.job_title ?? `Job #${saved.job_id}`}
+                      </Link>
+                      <p className="text-xs text-slate-500">Saved {formatDate(saved.saved_at)}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
     </>

@@ -133,7 +133,7 @@ def test_deleting_a_job_detaches_candidates_and_removes_its_records(
             JobApplication(
                 job_id=job.id,
                 candidate_id=candidate_id,
-                status="reviewing",
+                status="active",
                 applied_at=SEED_EPOCH,
                 updated_at=SEED_EPOCH,
                 source="direct",
