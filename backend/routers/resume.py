@@ -14,7 +14,8 @@ from pydantic import BaseModel
 from ..services.service_registry import provide_storage_service, provide_minio_storage_service, provide_resume_service
 from backend.services.agent_framework.agent_factory import AgentFactory
 from ..utils.resume_parsing import ResumeData
-from backend.utils.auth import ROLE_ADMIN, get_optional_user
+from backend.utils.auth import get_optional_user
+from backend.utils.permissions import CANDIDATES_ADD, can
 from backend.utils.database import get_db
 from backend.utils.parse_quota import enforce_parse_quota
 from backend.models.models import Job
@@ -33,11 +34,11 @@ def require_write_access_for_save(save_to_db: bool, current_user) -> None:
     """
     if not save_to_db:
         return
-    if current_user is not None and current_user.role == ROLE_ADMIN:
+    if current_user is not None and can(current_user.role, CANDIDATES_ADD):
         return
     raise HTTPException(
         status_code=403 if current_user is not None else 401,
-        detail="Saving a parsed resume requires an administrator account.",
+        detail="Saving a parsed resume needs a role that can add candidates.",
     )
 
 

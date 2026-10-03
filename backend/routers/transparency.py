@@ -43,6 +43,7 @@ from backend.services.vector_search_service import (
     _candidate_text,
     location_filter_patterns,
 )
+from backend.services.feedback_service import FEEDBACK_NEVER_USED_FOR, FEEDBACK_USED_FOR
 from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
 
@@ -85,6 +86,11 @@ class UnscoredField(BaseModel):
     reason: str
 
 
+class FeedbackPolicy(BaseModel):
+    used_for: List[str]
+    never_used_for: List[str]
+
+
 class ScoringPolicy(BaseModel):
     candidate_fields_scored: List[ScoredField]
     job_fields_scored: List[ScoredField]
@@ -98,6 +104,7 @@ class ScoringPolicy(BaseModel):
     search_relevance_floor: float
     search_relevance_bands: Dict[str, float]
     search_embedded_fields: List[str]
+    feedback_policy: FeedbackPolicy
 
 
 class SkillStep(BaseModel):
@@ -308,6 +315,11 @@ def scoring_policy() -> ScoringPolicy:
         search_relevance_floor=MIN_SEARCH_RELEVANCE,
         search_relevance_bands=dict(RELEVANCE_BANDS),
         search_embedded_fields=["current_position", "current_company", "headline", "skills"],
+        # ATS Phase B. test_feedback pins that no scoring module mentions feedback.
+        feedback_policy=FeedbackPolicy(
+            used_for=list(FEEDBACK_USED_FOR),
+            never_used_for=list(FEEDBACK_NEVER_USED_FOR),
+        ),
     )
 
 

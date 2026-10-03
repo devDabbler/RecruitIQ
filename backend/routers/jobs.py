@@ -16,7 +16,8 @@ from ..models.job import (
     LocationType,
     ExperienceLevel
 )
-from ..models.models import Job, Candidate, Resume, JobApplication, SavedJob
+from ..models.models import Job, Candidate, Resume, JobApplication, SavedJob, User
+from ..utils.auth import STAFF_ROLES
 from ..services.service_registry import (
     provide_job_service,
     provide_llm_service,
@@ -114,6 +115,16 @@ from fastapi import HTTPException
 
 logger = logging.getLogger("backend.routers.jobs")
 
+
+def _team_link(db: Session, user_id: Optional[str], label: str) -> None:
+    """ATS Phase B: a job's manager or recruiter link must name someone on the team."""
+    if not user_id:
+        return
+    user = db.get(User, user_id)
+    if user is None or user.role not in STAFF_ROLES:
+        raise HTTPException(status_code=422, detail=f"The {label} must be someone on the team.")
+
+
 @router.post("/", response_model=JobResponse, status_code=201)
 def create_job(
     job: JobCreateUpdate,
@@ -126,6 +137,8 @@ def create_job(
     NOTE: Always POST to /jobs/ (with trailing slash) to avoid redirect issues.
     """
     logger = logging.getLogger("backend.routers.jobs")
+    _team_link(db, job.hiring_manager_id, "hiring manager")
+    _team_link(db, job.recruiter_id, "recruiter")
     try:
         # Log incoming job data
         logger.info(f"Received job creation request: {job.dict()}")
@@ -218,6 +231,8 @@ def update_job(
             status_code=404,
             detail=f"Job with ID {job_id} not found"
         )
+    _team_link(db, job_update.hiring_manager_id, "hiring manager")
+    _team_link(db, job_update.recruiter_id, "recruiter")
     
     # Update the fields that are provided
     update_data = job_update.dict(exclude_unset=True)

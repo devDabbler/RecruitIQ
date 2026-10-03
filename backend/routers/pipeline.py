@@ -1,15 +1,16 @@
 """Pipeline board and transitions (ATS Phase A, spec 2026-10-03 section 4).
 
 Plain `def` handlers: they do sync ORM work and must not run on the event loop
-(CLAUDE.md sharp edge). Writes are admin-only through the app-wide
-`enforce_read_only` gate; nothing here needs to re-check that.
+(CLAUDE.md sharp edge). Writes are gated app-wide by `enforce_read_only`,
+which grants them through the permission table (ATS Phase B: admin, hiring
+manager, hiring team); nothing here needs to re-check that.
 """
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session, joinedload
 
 from ..models.models import ApplicationStage, Candidate, Job, JobApplication, User
@@ -24,6 +25,7 @@ from ..models.pipeline import (
     TransitionRequest,
 )
 from ..services import pipeline_service as ps
+from ..services.access_service import request_user, visible_candidate_ids
 from ..utils.auth import get_optional_user
 from ..utils.database import get_db
 
@@ -85,7 +87,7 @@ def _detail(db: Session, application: JobApplication) -> ApplicationDetail:
     )
 
 
-def _board(db: Session, job: Job) -> JobPipelineResponse:
+def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipelineResponse:
     stages = ps.ensure_job_stages(db, job.id)
     applications = (
         db.query(JobApplication)
@@ -93,6 +95,8 @@ def _board(db: Session, job: Job) -> JobPipelineResponse:
         .filter(JobApplication.job_id == job.id)
         .all()
     )
+    if visible is not None:
+        applications = [a for a in applications if a.candidate_id in visible]
     for application in applications:
         ps.ensure_application_stages(db, application)
     db.commit()
@@ -146,9 +150,10 @@ def _board(db: Session, job: Job) -> JobPipelineResponse:
 
 
 @router.get("/jobs/{job_id}/pipeline", response_model=JobPipelineResponse)
-def get_job_pipeline(job_id: int, db: Session = Depends(get_db)) -> JobPipelineResponse:
-    """The job's stages and who is at each one."""
-    return _board(db, _job_or_404(db, job_id))
+def get_job_pipeline(job_id: int, request: Request, db: Session = Depends(get_db)) -> JobPipelineResponse:
+    """The job's stages and who is at each one (an interviewer sees only their candidates)."""
+    visible = visible_candidate_ids(db, request_user(request))
+    return _board(db, _job_or_404(db, job_id), visible)
 
 
 @router.put("/jobs/{job_id}/pipeline", response_model=JobPipelineResponse)

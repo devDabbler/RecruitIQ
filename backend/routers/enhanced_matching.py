@@ -3,7 +3,7 @@ Enhanced matching router for the Recruiter Dashboard.
 This module provides improved endpoints for job-candidate matching.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ import logging
 from backend.utils.database import get_db
 from backend.models.models import Job, Candidate
 from backend.services.agent_framework.agent_factory import AgentFactory
+from backend.services.access_service import SCORE_HIDDEN_DETAIL, can_see_score, request_user
 
 logger = logging.getLogger(__name__)
 
@@ -112,9 +113,13 @@ def _run_matching_agent(task: Dict[str, Any]) -> List[Dict[str, Any]]:
 @router.post("/match-jobs", response_model=MatchJobsResponse)
 def match_jobs_for_candidate(
     request: JobMatchRequest,
+    http_request: Request,
     db: Session = Depends(get_db)
 ):
     """Find jobs that match the given candidate using enhanced matching."""
+    # ATS Phase B: interviewers see scores only after giving feedback.
+    if not can_see_score(db, request_user(http_request), request.candidate_id):
+        raise HTTPException(status_code=403, detail=SCORE_HIDDEN_DETAIL)
     try:
         # Log the incoming request
         logger.info(f"Received enhanced match_jobs request: {request.dict()}")

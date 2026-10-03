@@ -7,6 +7,7 @@ change is the intended way to repair a half-populated database.
 
     poetry run python scripts/seed_demo.py
     poetry run python scripts/seed_demo.py --no-embeddings   # skip Ollama
+    poetry run python scripts/seed_demo.py --team-only       # team and interviews only
 
 Authored during Phase 3 rather than Phase 4 because a Dashboard or Matching
 screen cannot be built or verified against an empty database. Phase 4 loads this
@@ -27,6 +28,7 @@ import os
 import random
 import sys
 import zlib
+from datetime import datetime
 
 import backend.utils.win_compat  # noqa: F401  (must precede deps needing pwd)
 
@@ -34,9 +36,14 @@ from backend.models.models import (
     ApplicationStage,
     Candidate,
     CandidateSkill,
+    Feedback,
+    Interview,
     Job,
     JobApplication,
+    PipelineStage,
     SavedJob,
+    StageDefaultInterviewer,
+    User,
 )
 from backend.utils.auth import get_or_create_demo_user
 from backend.utils.database import SessionLocal
@@ -109,6 +116,33 @@ STATUS_TO_STAGE_INDEX = {
     "withdrawn": None,
 }
 
+# ATS Phase B. Synthetic people, no passwords: nobody can sign in as them until
+# someone runs scripts/create_admin.py --email ... --role ... with a password
+# from the environment.
+TEAM = [
+    ("Priya Raman", "priya.raman@team.recruitiq.dev", "hiring_manager"),
+    ("Daniel Okafor", "daniel.okafor@team.recruitiq.dev", "hiring_manager"),
+    ("Lena Fischer", "lena.fischer@team.recruitiq.dev", "hiring_team"),
+    ("Marcus Webb", "marcus.webb@team.recruitiq.dev", "interviewer"),
+    ("Sofia Alvarez", "sofia.alvarez@team.recruitiq.dev", "interviewer"),
+    ("Kenji Watanabe", "kenji.watanabe@team.recruitiq.dev", "interviewer"),
+]
+
+# Rounds the seed staffs: the job's hiring manager runs the review, the
+# interviewers run the conversations.
+INTERVIEW_ROUNDS = ("hm_review", "technical_interview", "problem_solving", "case_study")
+
+FEEDBACK_NOTES = {
+    "passed": [
+        "Strong fundamentals and clear communication.",
+        "Worked through the problem methodically and asked good questions.",
+        "Good depth in their primary area. Would be glad to work with them.",
+    ],
+    "failed": [
+        "Struggled to explain the reasoning behind past design decisions.",
+        "Not enough depth in the core skills for this level.",
+    ],
+}
 NEW_JOBS = [
     {
         "title": "Machine Learning Engineer",
@@ -619,6 +653,93 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
     db.commit()
 
 
+def seed_team(db) -> dict[str, list[User]]:
+    """The synthetic team, keyed by role. Additive: an existing person keeps
+    whatever role someone gave them on the Team page."""
+    by_role: dict[str, list[User]] = {}
+    for name, email, role in TEAM:
+        user = db.query(User).filter(User.email == email).first()
+        if user is None:
+            user = User(email=email, name=name, role=role, hashed_password=None)
+            db.add(user)
+        elif not user.name:
+            user.name = name
+        by_role.setdefault(user.role, []).append(user)
+    db.commit()
+    return by_role
+
+
+def _pick(people: list[User], key: str) -> User:
+    return people[stable_index(key, len(people))]
+
+
+def seed_interviews(db, team: dict[str, list[User]], jobs: list[Job]) -> None:
+    """Hiring managers on jobs, a default interviewer per job, and interview
+    history matching each application's stage rows.
+
+    Deterministic and additive: a stage row that already has an interview is
+    left alone, so a re-run never duplicates or rewrites anyone's feedback.
+    Rounds that are done get feedback; the round in progress is left waiting,
+    so the Interviews page has something outstanding to show.
+    """
+    from backend.services import pipeline_service as ps
+
+    managers = team.get("hiring_manager", [])
+    interviewers = team.get("interviewer", [])
+    if not managers or not interviewers:
+        return
+
+    for job in jobs:
+        if job.hiring_manager_id is None:
+            job.hiring_manager_id = _pick(managers, f"manager-{job.title}").id
+        stages = {s.key: s for s in ps.ensure_job_stages(db, job.id)}
+        technical = stages.get("technical_interview")
+        if technical is not None and not technical.default_interviewers:
+            technical.default_interviewers.append(
+                StageDefaultInterviewer(user_id=_pick(interviewers, f"default-{job.title}").id)
+            )
+    db.flush()
+
+    rows = (
+        db.query(ApplicationStage)
+        .join(PipelineStage, ApplicationStage.stage_id == PipelineStage.id)
+        .filter(
+            PipelineStage.key.in_(INTERVIEW_ROUNDS),
+            ApplicationStage.status.in_(("in_progress", "passed", "failed")),
+        )
+        .order_by(ApplicationStage.id)
+        .all()
+    )
+    for row in rows:
+        if row.interviews:
+            continue
+        job = row.application.job
+        if row.stage.key == "hm_review" and job.hiring_manager_id:
+            person = db.get(User, job.hiring_manager_id)
+        else:
+            person = _pick(interviewers, f"{row.application_id}-{row.stage.key}")
+        interview = Interview(
+            interviewer_id=person.id,
+            assignment_source="manual",
+            created_at=row.started_at or datetime.utcnow(),
+        )
+        row.interviews.append(interview)
+        if row.status in ("passed", "failed"):
+            passed = row.status == "passed"
+            notes = FEEDBACK_NOTES[row.status]
+            interview.feedback = Feedback(
+                rating=(4 + stable_index(f"rating-{row.id}", 2)) if passed else 2,
+                recommendation=(
+                    ("strong_hire" if stable_index(f"rec-{row.id}", 3) == 0 else "hire")
+                    if passed
+                    else "no_hire"
+                ),
+                notes=notes[stable_index(f"note-{row.id}", len(notes))],
+                submitted_at=row.completed_at or row.started_at or datetime.utcnow(),
+            )
+    db.commit()
+
+
 def embed(db, candidates: list[Candidate], jobs: list[Job], force: bool = False) -> None:
     from backend.services.ollama_embeddings import OllamaEmbeddingAdapter
     from backend.services.vector_search_service import VectorSearchService
@@ -653,15 +774,31 @@ def main() -> int:
             "otherwise existing rows keep stale vectors"
         ),
     )
+    parser.add_argument(
+        "--team-only",
+        action="store_true",
+        help=(
+            "only add the synthetic team and interview history (ATS Phase B). Never "
+            "changes a candidate, a candidate's status, or an application"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
 
+        if args.team_only:
+            jobs = db.query(Job).order_by(Job.id).all()
+            seed_interviews(db, seed_team(db), jobs)
+            print(f"  team: {db.query(User).filter(User.role != 'demo').count()}  "
+                  f"interviews: {db.query(Interview).count()}  feedback: {db.query(Feedback).count()}")
+            return 0
+
         jobs = seed_jobs(db)
         candidates = seed_candidates(db, random.Random(SEED_FIELDS))
         seed_pipeline(db, candidates, jobs)
+        seed_interviews(db, seed_team(db), jobs)
 
         if args.no_embeddings:
             print("  embeddings skipped (--no-embeddings)")
@@ -681,6 +818,8 @@ def main() -> int:
         print(f"  candidates: {len(candidates)}  jobs: {len(jobs)}")
         print(f"  applications: {db.query(JobApplication).count()}  "
               f"saved: {db.query(SavedJob).count()}")
+        print(f"  team: {db.query(User).filter(User.role != 'demo').count()}  "
+              f"interviews: {db.query(Interview).count()}  feedback: {db.query(Feedback).count()}")
         print(f"  funnel: {dict(sorted(funnel.items()))}")
         return 0
     finally:

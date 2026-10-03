@@ -1,7 +1,7 @@
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logging.debug("[candidates.py] Importing candidates router...")
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func, or_
@@ -24,6 +24,7 @@ from ..models.models import Candidate, CandidateSkill, Resume
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
+from ..services.access_service import request_user, visible_candidate_ids
 
 router = APIRouter(prefix="/candidates")
 
@@ -472,6 +473,7 @@ async def delete_candidate(
 
 @router.get("/", response_model=CandidateSearchResponse)
 def search_candidates(
+    http_request: Request,
     keyword: Optional[str] = None,
     status: Optional[CandidateStatus] = None,
     position: Optional[str] = None,
@@ -489,6 +491,10 @@ def search_candidates(
         
         # Start with a simpler query - just get candidates first
         query = db.query(Candidate)
+        # ATS Phase B: an interviewer sees only the candidates they interview.
+        visible = visible_candidate_ids(db, request_user(http_request))
+        if visible is not None:
+            query = query.filter(Candidate.id.in_(sorted(visible)))
         
         # Apply filters
         if keyword:

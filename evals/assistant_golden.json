@@ -725,6 +725,16 @@
           "unavailable": "Live salary data is not connected in this demo, so I can't give figures for a Data Engineer in Austin. Candidates, jobs, matching, and pipeline questions still work."
         }
       }
+    },
+    {
+      "id": "pending-feedback",
+      "question": "Who still owes interview feedback?",
+      "expected_tools": ["list_pending_feedback"],
+      "checks": {"numbers_from_results": true},
+      "replay": {
+        "calls": [{"tool": "list_pending_feedback", "arguments": {}}],
+        "reply": "{{value:pending_count}} interviews are waiting for feedback."
+      }
     }
   ]
 }
