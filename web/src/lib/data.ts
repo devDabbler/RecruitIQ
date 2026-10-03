@@ -14,12 +14,14 @@ import "server-only";
 import { apiFetch, apiFetchOptional } from "./api";
 import type {
   Application,
+  ApplicationDetail,
   Candidate,
   CandidateMatch,
   CandidateSearch,
   Job,
   JobList,
   JobMatch,
+  JobPipeline,
   MatchTrace,
   ResumeSummary,
   SavedJob,
@@ -157,6 +159,20 @@ export async function getCandidateSavedJobs(candidateId: string): Promise<SavedJ
       { token: await getToken() },
     )) ?? []
   );
+}
+
+/** The stages of one job and who is at each (ATS Phase A). */
+export async function getJobPipeline(jobId: number | string): Promise<JobPipeline | null> {
+  return apiFetchOptional<JobPipeline>(`/api/jobs/${jobId}/pipeline`, {
+    token: await getToken(),
+  });
+}
+
+/** One application with its full stage timeline. */
+export async function getApplication(id: number | string): Promise<ApplicationDetail | null> {
+  return apiFetchOptional<ApplicationDetail>(`/api/applications/${id}`, {
+    token: await getToken(),
+  });
 }
 
 // --- admin-only scoring transparency ---------------------------------------

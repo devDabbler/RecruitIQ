@@ -6,10 +6,11 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { DeleteJobButton } from "@/components/delete-job-button";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
+import { PipelineBoard } from "@/components/pipeline-board";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getJob, matchCandidatesForJob } from "@/lib/data";
+import { getJob, getJobPipeline, matchCandidatesForJob } from "@/lib/data";
 import { formatDate, formatSalary, humanize } from "@/lib/format";
 import { canWrite } from "@/lib/session";
 
@@ -50,6 +51,17 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Pipeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Suspense fallback={<Skeleton className="h-40 w-full rounded-lg" />}>
+                <Board jobId={job.id} />
+              </Suspense>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Overview</CardTitle>
@@ -129,6 +141,14 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
       </div>
     </>
   );
+}
+
+async function Board({ jobId }: { jobId: number }) {
+  const pipeline = await getJobPipeline(jobId).catch(() => null);
+  if (!pipeline) {
+    return <p className="text-sm text-slate-500">The pipeline could not be loaded.</p>;
+  }
+  return <PipelineBoard pipeline={pipeline} />;
 }
 
 async function Matches({ jobId }: { jobId: number }) {

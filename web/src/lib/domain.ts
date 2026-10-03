@@ -21,6 +21,13 @@ export type CandidateMatch = Schemas["CandidateMatchResult"];
 export type JobMatch = Schemas["JobMatchResult"];
 export type ResumeSummary = Schemas["CandidateResumeSummary"];
 
+/** ATS Phase A: the board on a job page and the timeline on a candidate page. */
+export type JobPipeline = Schemas["JobPipelineResponse"];
+export type BoardColumn = Schemas["BoardColumn"];
+export type ApplicationCard = Schemas["ApplicationCard"];
+export type ApplicationDetail = Schemas["ApplicationDetail"];
+export type ApplicationStage = Schemas["ApplicationStageOut"];
+
 /** Admin-only scoring transparency (`/api/transparency/*`). */
 export type ScoringPolicy = Schemas["ScoringPolicy"];
 export type MatchTrace = Schemas["MatchTraceResponse"];
