@@ -294,3 +294,47 @@ def test_demo_role_can_read_the_upload_policy(demo_client):
 def test_policy_text_has_no_em_dashes(demo_client):
     body = demo_client.get("/api/transparency/upload-policy").text
     assert "—" not in body
+
+
+def test_policy_publishes_matching_inputs_without_identity(demo_client):
+    policy = demo_client.get("/api/transparency/upload-policy").json()
+
+    assert policy["matching_reads"] == ["current_position", "skills"]
+    assert isinstance(policy["hosted_providers"], list)
+
+
+def _settings(**overrides):
+    from types import SimpleNamespace
+
+    base = dict(
+        ollama_chat_enabled=True,
+        openrouter_api_key="",
+        anthropic_api_key="",
+        llm_provider_order="ollama,openrouter,anthropic",
+        llm_provider_order_resume_parsing="openrouter:google/gemini-2.5-flash-lite,anthropic,ollama",
+    )
+    base.update(overrides)
+    return SimpleNamespace(**base)
+
+
+def test_hosted_providers_counts_only_providers_that_can_be_called():
+    from backend.routers.transparency import hosted_resume_providers
+
+    # Listed in both orders but no keys: every call resolves to Ollama, so
+    # nothing leaves the operator's hardware and the card says so.
+    assert hosted_resume_providers(_settings()) == []
+
+    with_key = _settings(openrouter_api_key="sk-or-test")
+    assert hosted_resume_providers(with_key) == ["openrouter"]
+
+
+def test_local_only_orders_keep_resume_prompts_in_house_even_with_keys():
+    from backend.routers.transparency import hosted_resume_providers
+
+    private = _settings(
+        openrouter_api_key="sk-or-test",
+        anthropic_api_key="sk-ant-test",
+        llm_provider_order="ollama",
+        llm_provider_order_resume_parsing="ollama",
+    )
+    assert hosted_resume_providers(private) == []

@@ -184,6 +184,26 @@ The first matching request takes a few seconds while embeddings and matcher
 caches warm; after that, requests are under 100 ms. (The infamous 27-second
 cold start died with the Nebius provider in Phase 2.)
 
+### Running it privately
+
+The public demo sends resume prompts to a hosted model (de-identified after
+the parse; see `/transparency`). A private install keeps everything on its own
+hardware with two settings and an Ollama it runs:
+
+```bash
+LLM_PROVIDER_ORDER=ollama
+LLM_PROVIDER_ORDER_RESUME_PARSING=ollama
+OLLAMA_BASE_URL=http://<your-ollama-host>:11434
+```
+
+Embeddings already run on Ollama. The transparency page reads this
+configuration and reports when no resume text leaves the server. The only
+other outbound calls are the market and salary web searches, which send a job
+title, a place or an employer name, never candidate data, and are off when no
+search key is set.
+The trade-off is parse accuracy: the local 8b model scored 86% of fields in
+the eval against 99% for the hosted winner (`evals/results.md`).
+
 ---
 
 ## Data

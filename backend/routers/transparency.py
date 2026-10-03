@@ -231,6 +231,30 @@ class UploadPrivacyPolicy(BaseModel):
     web_lookups: int
     parse_writes_nothing: bool
     stored_only_when_saved: str
+    # Hosted providers (outside the operator's own hardware) that the parse
+    # and post-parse chains can actually reach on this deployment. Empty when
+    # every chain resolves to Ollama, which is the private, self-hosted setup.
+    hosted_providers: List[str]
+    # Candidate fields the ranker reads once a parse is saved; the name and
+    # contact details are never among them (UNSCORED_CANDIDATE_FIELDS).
+    matching_reads: List[str]
+
+
+def hosted_resume_providers(settings) -> List[str]:
+    """Providers outside this server that can receive a resume prompt.
+
+    Resolved through build_chain, so a provider listed in an order but missing
+    its API key does not count: it is skipped at call time too. The parse uses
+    the resume_parsing chain; the post-parse calls use the default chain.
+    """
+    from backend.services.llm.chain import build_chain
+
+    names: List[str] = []
+    for order in (getattr(settings, "llm_provider_order_resume_parsing", "") or None, None):
+        for provider in build_chain(settings, order=order).providers:
+            if provider.name != "ollama" and provider.name not in names:
+                names.append(provider.name)
+    return names
 
 
 # --- endpoints --------------------------------------------------------------
@@ -243,7 +267,8 @@ def upload_privacy_policy() -> UploadPrivacyPolicy:
     from backend.services.resume_privacy import DROPPED_KEYS, IDENTIFYING_FIELDS, TEXT_PATTERNS_SCRUBBED
     from backend.utils.config import get_settings
 
-    order = get_settings().llm_provider_order_resume_parsing or ""
+    settings = get_settings()
+    order = settings.llm_provider_order_resume_parsing or ""
     return UploadPrivacyPolicy(
         parser_reads="the full resume text, once, to fill the contact, experience, education and skill fields",
         parser_providers=[p.strip() for p in order.split(",") if p.strip()],
@@ -257,6 +282,8 @@ def upload_privacy_policy() -> UploadPrivacyPolicy:
             "the full profile, contact details included, and only when an administrator "
             "chooses Save as candidate; a recruiter has to be able to reach the person"
         ),
+        hosted_providers=hosted_resume_providers(settings),
+        matching_reads=[f["field"] for f in SCORED_CANDIDATE_FIELDS],
     )
 
 

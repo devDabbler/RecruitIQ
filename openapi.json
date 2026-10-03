@@ -4170,11 +4170,25 @@
             "title": "Dropped Keys",
             "type": "array"
           },
+          "hosted_providers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Hosted Providers",
+            "type": "array"
+          },
           "identifying_fields_removed": {
             "items": {
               "type": "string"
             },
             "title": "Identifying Fields Removed",
+            "type": "array"
+          },
+          "matching_reads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Matching Reads",
             "type": "array"
           },
           "model_calls_after_parse": {
@@ -4224,7 +4238,9 @@
           "model_calls_after_parse",
           "web_lookups",
           "parse_writes_nothing",
-          "stored_only_when_saved"
+          "stored_only_when_saved",
+          "hosted_providers",
+          "matching_reads"
         ],
         "title": "UploadPrivacyPolicy",
         "type": "object"
