@@ -13,12 +13,13 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ..services.access_service import request_user
 from ..services.agent_framework.task_orchestrator import TaskOrchestrator, get_agent_orchestrator
 from ..services.assistant_answer import finalize_answer
 from ..services.assistant_tools import build_assistant_tools
@@ -241,6 +242,7 @@ async def get_task_status(
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_assistant(
+    request: Request,
     message: str = Body(..., embed=True),
     conversation_history: Optional[List[Dict[str, str]]] = Body(default=[], embed=True),
     conversation_context: Optional[Dict[str, Any]] = Body(default={}, embed=True),
@@ -280,7 +282,7 @@ async def chat_with_assistant(
             system=SYSTEM_PROMPT,
             message=message,
             history=conversation_history,
-            tools=build_assistant_tools(db),
+            tools=build_assistant_tools(db, request_user(request)),
         )
     except ToolLoopError as e:
         logger.error(f"Assistant tool loop failed: {e}")
@@ -321,6 +323,7 @@ def _sse(event: dict) -> str:
 
 @router.post("/chat/stream")
 async def chat_with_assistant_streaming(
+    request: Request,
     message: str = Body(..., embed=True),
     conversation_history: Optional[List[Dict[str, str]]] = Body(default=[], embed=True),
     conversation_context: Optional[Dict[str, Any]] = Body(default={}, embed=True),
@@ -375,7 +378,7 @@ async def chat_with_assistant_streaming(
                     system=SYSTEM_PROMPT,
                     message=message,
                     history=conversation_history,
-                    tools=build_assistant_tools(db),
+                    tools=build_assistant_tools(db, request_user(request)),
                     on_event=sink,
                 )
                 context["last_provider"] = result.provider

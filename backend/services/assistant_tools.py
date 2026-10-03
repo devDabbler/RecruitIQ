@@ -161,6 +161,18 @@ def partial_match_note(query: str) -> str:
         "exactly those points and nothing else."
     )
 
+
+def unknown_stage_note(stage: str) -> str:
+    return f"There is no stage called {stage!r} in this ATS. The stages it has are listed in stages."
+
+
+def nobody_at_stage_note(stage_names: List[str]) -> str:
+    return f"Nobody is at {' or '.join(stage_names)} right now."
+
+
+def more_at_stage_note(total: int, shown: int) -> str:
+    return f"{total} people are at this stage. The {shown} who have waited longest are listed."
+
 # ILIKE treats % and _ as wildcards. Before this, get_candidate("%") returned
 # the first candidate in the table and get_candidate("_") matched anyone with
 # a one-character name; a blank lookup matched everyone.
@@ -196,8 +208,13 @@ def clamp_limit(value: Any, default: int) -> int:
     return max(1, min(limit, MAX_TOOL_LIMIT))
 
 
-def build_assistant_tools(db: Session) -> List[Tool]:
-    """Build the tool set bound to this request's DB session."""
+def build_assistant_tools(db: Session, user=None) -> List[Tool]:
+    """Build the tool set bound to this request's DB session and viewer.
+
+    `user` is None for the golden replay and the hygiene checks; the chat
+    endpoints pass the signed-in user so the pipeline tools only count the
+    candidates that viewer may see.
+    """
     from backend.models.models import Candidate, Job, Resume
     from backend.services.service_registry import get_registry
 
@@ -536,6 +553,69 @@ def build_assistant_tools(db: Session) -> List[Tool]:
             )
         return {"pending_count": len(interviews), "pending": pending}
 
+    def _visible_ids():
+        if user is None:
+            return None
+        from backend.services.access_service import visible_candidate_ids
+
+        return visible_candidate_ids(db, user)
+
+    async def get_job_pipeline(job: str) -> dict:
+        from datetime import datetime
+
+        from backend.models.models import JobApplication
+        from backend.services import pipeline_service as ps
+        from backend.services import reports_service as rs
+
+        job_info = await get_job(job)
+        if "error" in job_info:
+            return job_info
+        # The same lazy repair the job page board does, so an application
+        # created by older code still appears. Flushed only: a read tool
+        # never commits.
+        for application in db.query(JobApplication).filter(JobApplication.job_id == job_info["id"]).all():
+            ps.ensure_application_stages(db, application)
+        state = rs.job_pipeline_state(db, job_info["id"], datetime.utcnow(), candidate_ids=_visible_ids())
+        out = {"job_id": job_info["id"], "job_title": job_info["title"], **state}
+        if job_info.get("matched_by") == "semantic":
+            out["requested_title"] = job_info["requested_title"]
+            out["note"] = job_info["note"]
+        elif state["count"] == 0 and not any(state["outcomes"].values()):
+            out["note"] = f"Nobody is in the pipeline for {job_info['title']} yet."
+        return out
+
+    async def find_candidates_at_stage(stage: str, job: Optional[str] = None, limit: int = 15) -> dict:
+        from datetime import datetime
+
+        from backend.services import reports_service as rs
+
+        limit = clamp_limit(limit, default=15)
+        job_id = job_title = None
+        if job:
+            job_info = await get_job(job)
+            if "error" in job_info:
+                return job_info
+            job_id, job_title = job_info["id"], job_info["title"]
+        keys, stages = rs.resolve_stage(db, stage, job_id=job_id)
+        if not keys:
+            return {
+                "error": f"No stage called {stage!r}",
+                "stages": list(stages.values()),
+                "note": unknown_stage_note(stage),
+            }
+        matched = [stages[key] for key in keys]
+        scope = rs.Scope.of(job_id=job_id, candidate_ids=_visible_ids())
+        people, total = rs.candidates_at_stage(db, keys, scope, datetime.utcnow(), limit=limit)
+        out = {"stage_query": stage, "stages_matched": matched, "count": total, "candidates": people}
+        if job_id is not None:
+            out["job_id"] = job_id
+            out["job_title"] = job_title
+        if total == 0:
+            out["note"] = nobody_at_stage_note(matched)
+        elif total > len(people):
+            out["note"] = more_at_stage_note(total, len(people))
+        return out
+
     return [        Tool(
             name="search_candidates",
             description=(
@@ -658,9 +738,53 @@ def build_assistant_tools(db: Session) -> List[Tool]:
         ),
         Tool(
             name="list_pipeline",
-            description="Summarize the recruiting pipeline: candidate counts by status, top applied-for positions, open job count. Call this for 'how many candidates/jobs', pipeline health, or breakdown questions.",
+            description=(
+                "Summarize the recruiting pipeline: candidate counts by status, top applied-for "
+                "positions, open job count. Call this for 'how many candidates/jobs', pipeline "
+                "health, or breakdown questions. For where candidates stand in one job's stages, "
+                "use get_job_pipeline; for who is at a named stage, use find_candidates_at_stage."
+            ),
             parameters={"type": "object", "properties": {}},
             run=list_pipeline,
+        ),
+        Tool(
+            name="get_job_pipeline",
+            description=(
+                "Show where every candidate for one job stands in the hiring process: how many "
+                "are at each stage with their names (longest waiting first), how many were hired, "
+                "rejected, declined, or withdrew, and how many have had no movement in 7+ days. "
+                "Call this for 'where is everyone for X', 'how is the X job going', or 'who is in "
+                "the pipeline for X'. An error result means the job was not found: say so and "
+                "offer the titles it lists."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "job": {"type": "string", "description": "Job id or title"},
+                },
+                "required": ["job"],
+            },
+            run=get_job_pipeline,
+        ),
+        Tool(
+            name="find_candidates_at_stage",
+            description=(
+                "List the candidates who are at a hiring stage right now, longest waiting first, "
+                "across every job or for one job. Call this for 'who is at the HR screen', 'who is "
+                "waiting on hiring manager review for X', or 'who is interviewing'. Pass the stage "
+                "in the user's own words; stages_matched names the stages it found. An error "
+                "result lists the real stage names in stages: offer those."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "stage": {"type": "string", "description": "The stage in the user's words, e.g. 'HR screen' or 'interviewing'"},
+                    "job": {"type": "string", "description": "Optional job id or title to limit the list to one job"},
+                    "limit": {"type": "integer", "description": "Max candidates (default 15)"},
+                },
+                "required": ["stage"],
+            },
+            run=find_candidates_at_stage,
         ),
         Tool(
             name="get_candidate_resume",

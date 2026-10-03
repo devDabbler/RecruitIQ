@@ -28,6 +28,17 @@ export type ApplicationCard = Schemas["ApplicationCard"];
 export type ApplicationDetail = Schemas["ApplicationDetail"];
 export type ApplicationStage = Schemas["ApplicationStageOut"];
 
+/** ATS Phase D: the dashboard's pipeline cards and the Reports page. */
+export type Dashboard = Schemas["DashboardResponse"];
+export type Report = Schemas["ReportsResponse"];
+export type FunnelRow = Schemas["FunnelRow"];
+export type StageTiming = Schemas["StageTiming"];
+export type WaitingApplication = Schemas["WaitingApplication"];
+export type PendingFeedbackRow = Schemas["PendingFeedbackRow"];
+export type ActivityEvent = Schemas["ActivityEvent"];
+export type SourceRow = Schemas["SourceRow"];
+export type QuarterOutcomes = Schemas["QuarterOutcomes"];
+
 /** ATS Phase B: the team, interviews, and feedback. */
 export type TeamMember = Schemas["TeamMember"];
 export type Profile = Schemas["ProfileResponse"];

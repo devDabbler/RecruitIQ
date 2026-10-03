@@ -19,6 +19,7 @@ import type {
   CandidateMatch,
   CandidateSearch,
   CandidateTags,
+  Dashboard,
   InterviewEntry,
   InterviewListItem,
   InterviewScope,
@@ -29,6 +30,7 @@ import type {
   MatchTrace,
   Note,
   Profile,
+  Report,
   ResumeSummary,
   SavedJob,
   ScoringPolicy,
@@ -63,28 +65,6 @@ export async function listCandidates({
 
 /** The API caps `page_size` at 100, and asking for more is a 422. */
 export const MAX_PAGE_SIZE = 100;
-
-/**
- * How many candidates sit at each funnel stage.
- *
- * One filtered query per stage, reading `total` rather than counting rows.
- * Counting a single fetched page instead would silently under-report the moment
- * the database outgrows one page — the funnel would look right in the demo and
- * be wrong in production, which is the worst combination.
- */
-export async function countByStage(stages: readonly string[]): Promise<Record<string, number>> {
-  const token = await getToken();
-  const counts = await Promise.all(
-    stages.map(async (status) => {
-      const page = await apiFetch<CandidateSearch>("/api/candidates/", {
-        token,
-        query: { status, page: 1, page_size: 1 },
-      });
-      return [status, page.total] as const;
-    }),
-  );
-  return Object.fromEntries(counts);
-}
 
 export async function getCandidate(id: string): Promise<Candidate | null> {
   return apiFetchOptional<Candidate>(`/api/candidates/${encodeURIComponent(id)}`, {
@@ -274,4 +254,20 @@ export async function getCandidateTags(candidateId: string): Promise<string[]> {
     { token: await getToken() },
   );
   return result?.tags ?? [];
+}
+
+/** The dashboard's pipeline cards (ATS Phase D): funnel, attention list, activity. */
+export async function getDashboard(): Promise<Dashboard> {
+  return apiFetch<Dashboard>("/api/reports/dashboard", { token: await getToken() });
+}
+
+/**
+ * Everything on the Reports page, for every job or one. Throws ApiError 403
+ * for an interviewer; the page checks the role before calling.
+ */
+export async function getReport(jobId?: number): Promise<Report> {
+  return apiFetch<Report>("/api/reports/summary", {
+    token: await getToken(),
+    query: { job_id: jobId },
+  });
 }

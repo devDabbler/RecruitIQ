@@ -1,14 +1,20 @@
 import Link from "next/link";
 import { Briefcase, TrendingUp, Users } from "lucide-react";
 
+import { ActivityFeed } from "@/components/activity-feed";
+import { AttentionList } from "@/components/attention-list";
 import { DashboardIntro } from "@/components/dashboard-intro";
 import { ErrorState } from "@/components/page-header";
 import { StageBadge } from "@/components/stage-badge";
+import { StageFunnel } from "@/components/stage-funnel";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
 import { redirectInterviewer } from "@/lib/guards";
-import { countByStage, getSkillsBreakdown, listCandidates, listJobs } from "@/lib/data";
-import { PIPELINE_STAGES, STAGE_LABELS, fullName } from "@/lib/domain";
+import { getDashboard, getSkillsBreakdown, listCandidates, listJobs } from "@/lib/data";
+import { fullName } from "@/lib/domain";
+import type { Dashboard } from "@/lib/domain";
+import { canViewReports } from "@/lib/reports";
+import { getUser } from "@/lib/session";
 
 // The dashboard reads live counts; nothing here is safe to prerender.
 export const dynamic = "force-dynamic";
@@ -44,17 +50,19 @@ export default async function DashboardPage() {
   let candidates;
   let jobs;
   let skills: Record<string, number>;
-  let stageCounts: Record<string, number>;
+  let dashboard: Dashboard;
+  let user;
 
   try {
     // In parallel: the dashboard is the first paint a visitor sees, and
     // serialising these is the difference between a snappy load and a
     // noticeable one.
-    [candidates, jobs, skills, stageCounts] = await Promise.all([
+    [candidates, jobs, skills, dashboard, user] = await Promise.all([
       listCandidates({ pageSize: 12 }),
       listJobs(),
       getSkillsBreakdown(),
-      countByStage(PIPELINE_STAGES),
+      getDashboard(),
+      getUser(),
     ]);
   } catch (error) {
     return (
@@ -67,12 +75,6 @@ export default async function DashboardPage() {
       </>
     );
   }
-
-  const funnel = PIPELINE_STAGES.map((stage) => ({
-    stage,
-    count: stageCounts[stage] ?? 0,
-  }));
-  const largestStage = Math.max(1, ...funnel.map((f) => f.count));
 
   const topSkills = Object.entries(skills)
     .sort(([, a], [, b]) => b - a)
@@ -92,7 +94,8 @@ export default async function DashboardPage() {
       <div className="mb-6">
         <h2 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Live counts from the seeded database. Every number below is a query, not a fixture.
+          Live counts from the database. Every number below is a query over candidates,
+          applications, and their stage history, not a fixture.
         </p>
       </div>
 
@@ -111,38 +114,48 @@ export default async function DashboardPage() {
         />
         <Stat
           label="In interview or later"
-          value={funnel
-            .filter((f) => ["interviewing", "offered", "hired"].includes(f.stage))
-            .reduce((sum, f) => sum + f.count, 0)}
+          value={dashboard.interviewing_or_later}
           icon={TrendingUp}
           tint="bg-violet-50 text-violet-600"
         />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-2">
-        <Card>
+        <Card className="min-w-0">
           <CardHeader>
             <CardTitle>Pipeline</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {funnel.map(({ stage, count }) => (
-              <div key={stage} className="flex items-center gap-3">
-                <span className="w-24 shrink-0 text-sm text-slate-600">
-                  {STAGE_LABELS[stage]}
-                </span>
-                <span className="h-2 flex-1 overflow-hidden rounded-full bg-slate-100">
-                  <span
-                    className="block h-full rounded-full bg-indigo-500"
-                    style={{ width: `${(count / largestStage) * 100}%` }}
-                  />
-                </span>
-                <span className="w-8 text-right text-sm font-medium tabular-nums">{count}</span>
-              </div>
-            ))}
+          <CardContent>
+            <StageFunnel rows={dashboard.funnel} />
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Needs attention</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AttentionList
+              waiting={dashboard.no_movement}
+              waitingTotal={dashboard.no_movement_total}
+              pending={dashboard.pending_feedback}
+              reportsHref={canViewReports(user?.role) ? "/reports" : undefined}
+            />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Recent activity</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ActivityFeed events={dashboard.activity} />
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
           <CardHeader>
             {/* This widget answered 404 for its entire existence before Phase 3a
                 moved the route above /{candidate_id}. */}

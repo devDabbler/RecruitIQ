@@ -32,8 +32,11 @@ from backend.services.assistant_tools import (
     build_assistant_tools,
     location_miss_note,
     context_match_note,
+    more_at_stage_note,
     no_match_note,
+    nobody_at_stage_note,
     partial_match_note,
+    unknown_stage_note,
 )
 from backend.services.market_research_service import MarketResearchService
 from backend.services.tool_loop import run_tool_loop
@@ -177,6 +180,9 @@ class TestPromptHygiene:
         no_match_note("Python engineers"),
         partial_match_note("Python engineers"),
         context_match_note("Python engineers"),
+        unknown_stage_note("astrology"),
+        nobody_at_stage_note(["Offer", "Offer accepted"]),
+        more_at_stage_note(40, 15),
     )
 
     def test_notes_read_as_sentences_to_a_visitor(self):
