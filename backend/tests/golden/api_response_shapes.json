@@ -155,6 +155,8 @@
     "shape": [
       {
         "applied_at": "str",
+        "current_stage": "str",
+        "current_stage_key": "str",
         "id": "int",
         "job_department": "str",
         "job_id": "int",

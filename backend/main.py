@@ -24,7 +24,7 @@ from backend.utils.database import Base, engine, verify_postgres_connection
 # Import routers
 from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
-from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache, transparency
+from backend.routers import auth, tasks, interviews, pitches, agent, performance, cache, transparency, pipeline
 from backend.api.routes import job_routes
 from backend.utils.auth import enforce_read_only
 
@@ -97,6 +97,7 @@ app.include_router(assistant.router, prefix="/api", tags=["assistant"])
 app.include_router(crawler.router, prefix="/api", tags=["crawler"])
 app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 app.include_router(interviews.router, prefix="/api", tags=["interviews"])
+app.include_router(pipeline.router, prefix="/api", tags=["pipeline"])  # ATS Phase A board and transitions
 app.include_router(pitches.router, prefix="/api", tags=["pitches"])
 app.include_router(agent.router, tags=["agent"]) # Agent router
 app.include_router(intelligence.router, prefix="/api", tags=["intelligence"])  # Mount under /api to match frontend

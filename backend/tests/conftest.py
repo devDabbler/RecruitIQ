@@ -210,7 +210,7 @@ def seed(db_session: Session):
     application = JobApplication(
         job_id=jobs[0].id,
         candidate_id=candidate_ids[0],
-        status="reviewing",
+        status="active",
         cover_letter="I would like to be considered.",
         applied_at=SEED_EPOCH,
         updated_at=SEED_EPOCH,
