@@ -11,7 +11,7 @@
  */
 import "server-only";
 
-import { apiFetch, apiFetchOptional } from "./api";
+import { ApiError, apiFetch, apiFetchOptional } from "./api";
 import type {
   Application,
   ApplicationDetail,
@@ -20,6 +20,8 @@ import type {
   CandidateSearch,
   CandidateTags,
   Dashboard,
+  EmailLogEntry,
+  EmailTemplates,
   InterviewEntry,
   InterviewListItem,
   InterviewScope,
@@ -30,12 +32,14 @@ import type {
   MatchTrace,
   Note,
   Profile,
+  PublicStatus,
   Report,
   ResumeSummary,
   SavedJob,
   ScoringPolicy,
   SearchTrace,
   SkillsBreakdown,
+  StatusLink,
   StageDefaults,
   TeamMember,
   UploadPolicy,
@@ -270,4 +274,48 @@ export async function getReport(jobId?: number): Promise<Report> {
     token: await getToken(),
     query: { job_id: jobId },
   });
+}
+
+// --- ATS Phase E: candidate-facing status and email --------------------------
+
+/**
+ * What a candidate sees at their status link.
+ *
+ * Deliberately sends no session token: this must render exactly what an
+ * anonymous browser gets, even when a staff member opens their own link.
+ */
+export async function getPublicStatus(token: string): Promise<PublicStatus | null> {
+  return apiFetchOptional<PublicStatus>(`/api/public/status/${encodeURIComponent(token)}`);
+}
+
+/** The same view, by application, for staff and the demo to preview. */
+export async function getCandidateView(applicationId: number | string): Promise<PublicStatus | null> {
+  return apiFetchOptional<PublicStatus>(`/api/applications/${applicationId}/candidate-view`, {
+    token: await getToken(),
+  });
+}
+
+/** The application's status link, or null for anyone not allowed to manage it. */
+export async function getStatusLink(applicationId: number | string): Promise<StatusLink | null> {
+  try {
+    return await apiFetchOptional<StatusLink>(`/api/applications/${applicationId}/status-link`, {
+      token: await getToken(),
+    });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 401 || error.status === 403)) return null;
+    throw error;
+  }
+}
+
+export async function getEmailTemplates(): Promise<EmailTemplates> {
+  return apiFetch<EmailTemplates>("/api/email-templates", { token: await getToken() });
+}
+
+/** Every email sent or copied for one application, newest first. */
+export async function getEmailLog(applicationId: number | string): Promise<EmailLogEntry[]> {
+  return (
+    (await apiFetchOptional<EmailLogEntry[]>(`/api/applications/${applicationId}/emails`, {
+      token: await getToken(),
+    })) ?? []
+  );
 }

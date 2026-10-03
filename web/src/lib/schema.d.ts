@@ -108,6 +108,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/applications/{application_id}/candidate-view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Candidate View
+         * @description The same page a status link shows, for staff and the demo to preview.
+         */
+        get: operations["get_candidate_view_api_applications__application_id__candidate_view_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{application_id}/emails": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Emails */
+        get: operations["list_emails_api_applications__application_id__emails_get"];
+        put?: never;
+        /**
+         * Send Email
+         * @description Send through SMTP, or log that the text was copied to send by hand.
+         */
+        post: operations["send_email_api_applications__application_id__emails_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{application_id}/emails/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Email */
+        get: operations["preview_email_api_applications__application_id__emails_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications/{application_id}/interviews": {
         parameters: {
             query?: never;
@@ -125,6 +183,28 @@ export interface paths {
         /** Assign Interviewer */
         post: operations["assign_interviewer_api_applications__application_id__interviews_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/applications/{application_id}/status-link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Status Link */
+        get: operations["get_status_link_api_applications__application_id__status_link_get"];
+        put?: never;
+        /**
+         * Create Status Link
+         * @description Create the link, or replace it (the old one stops working immediately).
+         */
+        post: operations["create_status_link_api_applications__application_id__status_link_post"];
+        /** Revoke Status Link */
+        delete: operations["revoke_status_link_api_applications__application_id__status_link_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -641,6 +721,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/email-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Templates */
+        get: operations["list_templates_api_email_templates_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/email-templates/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Template */
+        put: operations["update_template_api_email_templates__key__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/enhanced-matching/match-candidates": {
         parameters: {
             query?: never;
@@ -915,6 +1029,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/job-drafts/description": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Draft Job Description */
+        post: operations["draft_job_description_api_job_drafts_description_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/jobs": {
         parameters: {
             query?: never;
@@ -1164,7 +1295,13 @@ export interface paths {
         get: operations["get_job_pipeline_api_jobs__job_id__pipeline_get"];
         /**
          * Update Job Pipeline
-         * @description Enable, disable, or rename stages. Outcomes and the first round stay enabled.
+         * @description Edit a job's stages in one transaction.
+         *
+         *     Applied in a fixed order so one request can do everything the stage
+         *     editor offers: remove added stages, enable/disable/rename, reorder the
+         *     interview stages, then add new ones (placed by `after_key`, so they never
+         *     need to appear in `order`). Any refusal rolls the whole request back.
+         *     Outcomes and the first round stay enabled.
          */
         put: operations["update_job_pipeline_api_jobs__job_id__pipeline_put"];
         post?: never;
@@ -1350,6 +1487,26 @@ export interface paths {
          * @description Delete a saved pitch.
          */
         delete: operations["delete_pitch_api_pitches__pitch_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/public/status/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Public Status
+         * @description What a candidate sees at their status link. No authentication.
+         */
+        get: operations["get_public_status_api_public_status__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2657,6 +2814,90 @@ export interface components {
             /** Stages */
             stages: components["schemas"]["StageDefaults"][];
         };
+        /** EmailLogOut */
+        EmailLogOut: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: number;
+            /** Sent By Name */
+            sent_by_name?: string | null;
+            /** Status */
+            status: string;
+            /** Subject */
+            subject: string;
+            /** Template Key */
+            template_key?: string | null;
+            /** To Address */
+            to_address: string;
+        };
+        /** EmailPreview */
+        EmailPreview: {
+            /** Body */
+            body: string;
+            /** Missing */
+            missing: string[];
+            /** Subject */
+            subject: string;
+            /** Template Key */
+            template_key: string;
+            /** To Address */
+            to_address?: string | null;
+            /** Transport Configured */
+            transport_configured: boolean;
+        };
+        /** EmailSendRequest */
+        EmailSendRequest: {
+            /** Body */
+            body: string;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "send" | "copied";
+            /** Subject */
+            subject: string;
+            /** Template Key */
+            template_key?: string | null;
+        };
+        /** EmailTemplateOut */
+        EmailTemplateOut: {
+            /** Body */
+            body: string;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Subject */
+            subject: string;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** EmailTemplateUpdate */
+        EmailTemplateUpdate: {
+            /** Body */
+            body: string;
+            /** Name */
+            name: string;
+            /** Subject */
+            subject: string;
+        };
+        /** EmailTemplatesResponse */
+        EmailTemplatesResponse: {
+            /** Placeholders */
+            placeholders: string[];
+            /** Templates */
+            templates: components["schemas"]["EmailTemplateOut"][];
+            /** Transport Configured */
+            transport_configured: boolean;
+        };
         /**
          * ExperienceLevel
          * @enum {string}
@@ -2939,6 +3180,29 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** JobDescriptionDraft */
+        JobDescriptionDraft: {
+            /** Job Overview */
+            job_overview: string;
+            /** Required Qualifications */
+            required_qualifications: string;
+        };
+        /**
+         * JobDraftRequest
+         * @description Only the structured job fields. There is deliberately no free-text field.
+         */
+        JobDraftRequest: {
+            /** Department */
+            department?: string | null;
+            /** Experience Level */
+            experience_level?: string | null;
+            /** Location Type */
+            location_type?: string | null;
+            /** Skills */
+            skills?: string[];
+            /** Title */
+            title: string;
+        };
         /** JobMatchResult */
         JobMatchResult: {
             /** Department */
@@ -3141,6 +3405,15 @@ export interface components {
             /** Message */
             message: string;
         };
+        /** NewStage */
+        NewStage: {
+            /** After Key */
+            after_key?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+        };
         /** NoteCreate */
         NoteCreate: {
             /** Application Id */
@@ -3236,10 +3509,22 @@ export interface components {
             /** Stage Name */
             stage_name: string;
         };
-        /** PipelineUpdateRequest */
+        /**
+         * PipelineUpdateRequest
+         * @description Everything the stage editor can change, applied in one transaction.
+         *
+         *     Order of application: remove, then stages (enable, disable, rename), then
+         *     order (interview stage keys only), then add.
+         */
         PipelineUpdateRequest: {
+            /** Add */
+            add?: components["schemas"]["NewStage"][];
+            /** Order */
+            order?: string[] | null;
+            /** Remove */
+            remove?: string[];
             /** Stages */
-            stages: components["schemas"]["StageUpdate"][];
+            stages?: components["schemas"]["StageUpdate"][];
         };
         /** PostParseModelCall */
         PostParseModelCall: {
@@ -3293,6 +3578,28 @@ export interface components {
             name: string;
             /** Timezone */
             timezone?: string | null;
+        };
+        /** PublicStage */
+        PublicStage: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /** State */
+            state: string;
+        };
+        /** PublicStatus */
+        PublicStatus: {
+            /** Department */
+            department?: string | null;
+            /** First Name */
+            first_name?: string | null;
+            /** Job Title */
+            job_title: string;
+            /** Stages */
+            stages: components["schemas"]["PublicStage"][];
+            /** Status */
+            status: string;
         };
         /** QuarterOutcomes */
         QuarterOutcomes: {
@@ -3728,6 +4035,11 @@ export interface components {
         };
         /** StageOut */
         StageOut: {
+            /**
+             * Custom
+             * @default false
+             */
+            custom: boolean;
             /** Description */
             description?: string | null;
             /** Enabled */
@@ -3738,6 +4050,11 @@ export interface components {
             key: string;
             /** Kind */
             kind: string;
+            /**
+             * Movable
+             * @default false
+             */
+            movable: boolean;
             /** Name */
             name: string;
             /** Position */
@@ -3766,6 +4083,15 @@ export interface components {
             key: string;
             /** Name */
             name: string;
+        };
+        /** StatusLinkOut */
+        StatusLinkOut: {
+            /** Active */
+            active: boolean;
+            /** Created At */
+            created_at?: string | null;
+            /** Path */
+            path?: string | null;
         };
         /** TagCount */
         TagCount: {
@@ -4288,6 +4614,136 @@ export interface operations {
             };
         };
     };
+    get_candidate_view_api_applications__application_id__candidate_view_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_emails_api_applications__application_id__emails_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailLogOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_email_api_applications__application_id__emails_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailSendRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailLogOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_email_api_applications__application_id__emails_preview_get: {
+        parameters: {
+            query: {
+                template_key: string;
+            };
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_application_interviews_api_applications__application_id__interviews_get: {
         parameters: {
             query?: never;
@@ -4341,6 +4797,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_status_link_api_applications__application_id__status_link_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_status_link_api_applications__application_id__status_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusLinkOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_status_link_api_applications__application_id__status_link_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusLinkOut"];
                 };
             };
             /** @description Validation Error */
@@ -5246,6 +5795,61 @@ export interface operations {
             };
         };
     };
+    list_templates_api_email_templates_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplatesResponse"];
+                };
+            };
+        };
+    };
+    update_template_api_email_templates__key__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     match_candidates_for_jobs_api_enhanced_matching_match_candidates_post: {
         parameters: {
             query?: never;
@@ -5714,6 +6318,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InterviewOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draft_job_description_api_job_drafts_description_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JobDraftRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobDescriptionDraft"];
                 };
             };
             /** @description Validation Error */
@@ -6495,6 +7132,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_public_status_api_public_status__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicStatus"];
                 };
             };
             /** @description Validation Error */

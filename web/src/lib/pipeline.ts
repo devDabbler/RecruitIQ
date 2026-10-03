@@ -34,13 +34,17 @@ export const APPLICATION_STATUS_LABELS: Record<string, string> = {
 const DECLINABLE = new Set(["offer", "offer_accepted"]);
 
 /**
- * Skip needs an enabled round after the current one to land on. Outcomes are
- * not rounds, so on the last enabled round only Advance (which hires) remains.
+ * Skip needs an enabled, still-pending round after the current one to land
+ * on. Outcomes are not rounds, so on the last such round only Advance (which
+ * hires) remains. A round that already happened does not count: since ATS
+ * Phase E stages can be reordered, one can sit after the current round.
  */
 function hasLaterRound(application: ApplicationDetail, key: string): boolean {
   const index = application.stages.findIndex((s) => s.key === key);
   if (index === -1) return key !== "offer_accepted";
-  return application.stages.slice(index + 1).some((s) => s.kind === "round" && s.enabled);
+  return application.stages
+    .slice(index + 1)
+    .some((s) => s.kind === "round" && s.enabled && s.status === "pending");
 }
 
 export function availableActions(application: ApplicationDetail): StageAction[] {

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
 
+import { ApplicationOutreach } from "@/components/application-outreach";
 import { ApplicationTimeline } from "@/components/application-timeline";
 import { CandidateTags } from "@/components/candidate-tags";
 import { ConsiderForRole } from "@/components/consider-for-role";
@@ -23,6 +24,9 @@ import {
   getCandidateResumes,
   getCandidateSavedJobs,
   getCandidateTags,
+  getEmailLog,
+  getEmailTemplates,
+  getStatusLink,
   listJobs,
   listTeam,
   matchJobsForCandidate,
@@ -73,11 +77,22 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
       applicationId: detail.id,
       stageKey: detail.current_stage_key ?? null,
     }));
-  const interviews = new Map(
-    await Promise.all(
+  // Interviews and outreach (ATS Phase E: status link, templates, email
+  // history) are optional context per application: a failure in any of them
+  // must not take down the profile, so each falls back to empty.
+  const [interviewPairs, templates, statusLinks, emailLogs] = await Promise.all([
+    Promise.all(
       details.map(async (detail) => [detail.id, await getApplicationInterviews(detail.id)] as const),
     ),
-  );
+    details.length
+      ? getEmailTemplates().catch(() => null)
+      : Promise.resolve(null),
+    Promise.all(
+      details.map((d) => (writable ? getStatusLink(d.id).catch(() => null) : Promise.resolve(null))),
+    ),
+    Promise.all(details.map((d) => getEmailLog(d.id).catch(() => []))),
+  ]);
+  const interviews = new Map(interviewPairs);
 
   return (
     <>
@@ -192,7 +207,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
               </CardContent>
             </Card>
           ) : (
-            details.map((detail) => (
+            details.map((detail, index) => (
               <ApplicationTimeline key={detail.id} application={detail} writable={writable}>
                 <InterviewPanel
                   application={detail}
@@ -201,6 +216,16 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
                   viewerId={user?.id ?? null}
                   canAssign={writable}
                 />
+                {user?.role !== "interviewer" ? (
+                  <ApplicationOutreach
+                    applicationId={detail.id}
+                    statusLink={statusLinks[index]}
+                    templates={templates?.templates ?? []}
+                    transportConfigured={templates?.transport_configured ?? false}
+                    emailLog={emailLogs[index]}
+                    canSend={writable}
+                  />
+                ) : null}
               </ApplicationTimeline>
             ))
           )}

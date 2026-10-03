@@ -9,8 +9,9 @@ const all = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.label));
 describe("visibleGroups", () => {
   it("shows the demo every screen", () => {
     expect(labels("demo")).toEqual(all);
-    expect(all).toHaveLength(11);
+    expect(all).toHaveLength(12);
     expect(all).toContain("Reports");
+    expect(all).toContain("Email templates");
   });
 
   it("gives interviewers only what they can use", () => {

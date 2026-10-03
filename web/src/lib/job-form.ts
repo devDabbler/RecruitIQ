@@ -180,3 +180,46 @@ export function toJobPayload(values: JobFormValues): Record<string, unknown> {
     start_date: orNullDate(values.start_date),
   };
 }
+
+/**
+ * "Start from an existing job" (ATS Phase E): the same role, as a new draft.
+ * Dates are cleared because they almost never carry over.
+ */
+export function copyJobValues(job: Job): JobFormValues {
+  return { ...jobToFormValues(job), status: "draft", application_deadline: "", start_date: "" };
+}
+
+export interface DescriptionDraft {
+  job_overview: string;
+  required_qualifications: string;
+}
+
+/** The only fields sent for an AI draft. No free text, no candidate data. */
+export function draftRequestFrom(values: JobFormValues) {
+  return {
+    title: values.title.trim(),
+    department: values.department.trim() || null,
+    experience_level: values.experience_level || null,
+    location_type: values.location_type || null,
+    skills: values.skills
+      .split(",")
+      .map((skill) => skill.trim())
+      .filter(Boolean),
+  };
+}
+
+export function canRequestDraft(values: JobFormValues): boolean {
+  return values.title.trim().length > 0;
+}
+
+export function hasWrittenDescription(values: JobFormValues): boolean {
+  return Boolean(values.job_overview.trim() || values.required_qualifications.trim());
+}
+
+export function applyDraft(values: JobFormValues, draft: DescriptionDraft): JobFormValues {
+  return {
+    ...values,
+    job_overview: draft.job_overview,
+    required_qualifications: draft.required_qualifications,
+  };
+}

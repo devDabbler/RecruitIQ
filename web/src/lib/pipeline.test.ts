@@ -56,6 +56,20 @@ describe("availableActions", () => {
     ]);
   });
 
+  it("drops skip when the only later round already happened", () => {
+    const stages = [
+      stage("offer", "round"),
+      { ...stage("offer_accepted", "round"), status: "passed" },
+      stage("offer_declined", "outcome"),
+      stage("hired", "outcome"),
+    ];
+    expect(availableActions(detail({ current_stage_key: "offer", stages }))).toEqual([
+      "advance",
+      "reject",
+      "decline",
+    ]);
+  });
+
   it("offers nothing on a terminal application", () => {
     expect(availableActions(detail({ status: "hired", current_stage_key: null }))).toEqual([]);
     expect(availableActions(detail({ status: "rejected", current_stage_key: null }))).toEqual([]);

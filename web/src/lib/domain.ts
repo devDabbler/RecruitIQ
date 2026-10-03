@@ -52,6 +52,18 @@ export type Note = Schemas["NoteOut"];
 export type CandidateTags = Schemas["CandidateTagsResponse"];
 export type BulkTransitionResult = Schemas["BulkTransitionResponse"];
 
+/** ATS Phase E: candidate-facing status, email, drafts, and the stage editor. */
+export type PublicStatus = Schemas["PublicStatus"];
+export type PublicStage = Schemas["PublicStage"];
+export type StatusLink = Schemas["StatusLinkOut"];
+export type EmailTemplate = Schemas["EmailTemplateOut"];
+export type EmailTemplates = Schemas["EmailTemplatesResponse"];
+export type EmailPreview = Schemas["EmailPreview"];
+export type EmailLogEntry = Schemas["EmailLogOut"];
+export type JobDescriptionDraft = Schemas["JobDescriptionDraft"];
+export type StageOut = Schemas["StageOut"];
+export type PipelineUpdate = Schemas["PipelineUpdateRequest"];
+
 /** Admin-only scoring transparency (`/api/transparency/*`). */
 export type ScoringPolicy = Schemas["ScoringPolicy"];
 export type MatchTrace = Schemas["MatchTraceResponse"];
