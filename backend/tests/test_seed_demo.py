@@ -287,3 +287,76 @@ def test_seed_timelines_only_touches_seeded_applications(db_session, seed):
 
     db_session.delete(job)
     db_session.commit()
+
+
+def _times(app):
+    return [(r.stage_id, r.started_at, r.completed_at) for r in sorted(app.stages, key=lambda r: r.stage_id)]
+
+
+def test_reanchor_slides_an_untouched_timeline_forward(db_session, seed):
+    from backend.models.models import Feedback, Interview, User
+    from backend.services import pipeline_service as ps
+    from scripts.seed_demo import _reanchor_stage_timeline, _spread_stage_timeline
+
+    job = _test_job(db_session, "Seed Reanchor Role")
+    flat_at = datetime(2025, 3, 1, 9, 0, 0)
+    seeded = _flat_application(db_session, job, seed["candidate_ids"][1], flat_at)
+    rows = sorted(seeded.stages, key=lambda r: r.stage.position)
+    rows[0].status, rows[0].completed_at = "passed", flat_at
+    rows[1].status, rows[1].started_at = "in_progress", flat_at
+    moved = _flat_application(db_session, job, seed["candidate_ids"][2], flat_at)
+    person = User(email="reanchor@recruitiq-seed.example.com", role="interviewer", name="Reanchor Person")
+    db_session.add(person)
+    db_session.flush()
+    seeded_interview = Interview(application_stage_id=rows[0].id, interviewer_id=person.id, created_at=flat_at)
+    seeded_interview.feedback = Feedback(rating=4, recommendation="hire", submitted_at=flat_at)
+    db_session.add(seeded_interview)
+    db_session.flush()
+
+    day_one = datetime(2025, 6, 1, 12, 0, 0)
+    assert _spread_stage_timeline(db_session, seeded, day_one) is True
+    assert _spread_stage_timeline(db_session, moved, day_one) is True
+    db_session.flush()
+    by_hand_at = rows[1].started_at + timedelta(hours=2)
+    by_hand = Interview(application_stage_id=rows[1].id, interviewer_id=person.id, created_at=by_hand_at)
+    db_session.add(by_hand)
+    ps.advance(db_session, moved)  # a person moved this one after seeding
+    db_session.flush()
+    seeded_before, moved_before = _times(seeded), _times(moved)
+    applied_before = seeded.applied_at
+
+    later = day_one + timedelta(days=10, hours=3)
+    assert _reanchor_stage_timeline(db_session, seeded, later) is True
+    assert _reanchor_stage_timeline(db_session, moved, later) is False
+    db_session.flush()
+
+    shift = timedelta(days=10, hours=3)
+    assert seeded.applied_at == applied_before + shift
+    assert _times(seeded) == [
+        (stage_id, s and s + shift, c and c + shift) for stage_id, s, c in seeded_before
+    ]
+    assert _times(moved) == moved_before
+    assert seeded_interview.created_at == rows[0].started_at
+    assert seeded_interview.feedback.submitted_at == rows[0].completed_at
+    assert by_hand.created_at == by_hand_at  # written by a person: kept
+
+    # Already current, or less than a day on: nothing to do.
+    assert _reanchor_stage_timeline(db_session, seeded, later) is False
+    assert _reanchor_stage_timeline(db_session, seeded, later + timedelta(hours=20)) is False
+
+    db_session.delete(job)
+    db_session.delete(person)
+    db_session.commit()
+
+
+def test_reanchor_lays_out_a_flat_application(db_session, seed):
+    from scripts.seed_demo import _reanchor_stage_timeline
+
+    job = _test_job(db_session, "Seed Reanchor Flat Role")
+    flat_at = datetime(2025, 3, 1, 9, 0, 0)
+    app = _flat_application(db_session, job, seed["candidate_ids"][1], flat_at)
+    assert _reanchor_stage_timeline(db_session, app, datetime(2025, 6, 1, 12, 0, 0)) is True
+    assert app.applied_at != flat_at
+
+    db_session.delete(job)
+    db_session.commit()
