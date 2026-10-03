@@ -10,6 +10,7 @@ change is the intended way to repair a half-populated database.
     poetry run python scripts/seed_demo.py --team-only       # team and interviews only
     poetry run python scripts/seed_demo.py --notes-tags-only # notes and tags only
     poetry run python scripts/seed_demo.py --timelines-only  # stage timestamps only
+    poetry run python scripts/seed_demo.py --reanchor-timelines # slide them up to today
 
 Authored during Phase 3 rather than Phase 4 because a Dashboard or Matching
 screen cannot be built or verified against an empty database. Phase 4 loads this
@@ -763,17 +764,76 @@ def _spread_stage_timeline(db, application: JobApplication, now: datetime) -> bo
     return True
 
 
+def _reanchor_stage_timeline(db, application: JobApplication, now: datetime) -> bool:
+    """Slide one seeded application's timeline forward so it ends near `now`.
+
+    The demo ages: a timeline laid out on day one has every waiting candidate
+    past the 7-day line a week later. stage_timeline is a fixed set of offsets
+    from `now`, so an application nobody has touched since seeding matches
+    stage_timeline(..., now) exactly, shifted by one constant. Only such an
+    application is moved, by that constant, along with the seeded interviews
+    and feedback on it. Anything a person has moved no longer fits the pattern
+    and is left alone. A flat application is laid out the first time. A
+    timeline less than a day old is left as it is, so a re-run is a no-op.
+    """
+    if _spread_stage_timeline(db, application, now):
+        return True
+    if application.applied_at is None:
+        return False
+    rows = (
+        db.query(ApplicationStage, PipelineStage)
+        .join(PipelineStage, PipelineStage.id == ApplicationStage.stage_id)
+        .filter(ApplicationStage.application_id == application.id)
+        .order_by(PipelineStage.position)
+        .all()
+    )
+    applied_at, spans = stage_timeline(
+        f"{application.candidate_id}:{application.job_id}",
+        [(stage.key, stage.kind, row.status) for row, stage in rows],
+        now,
+    )
+    if applied_at is None:
+        return False
+    shift = applied_at - application.applied_at
+    # Less than a day old is current enough; never slide backwards.
+    if shift < timedelta(days=1):
+        return False
+
+    def back(value):
+        return None if value is None else value - shift
+
+    if any(
+        (row.started_at, row.completed_at) != (back(started), back(completed))
+        for (row, _stage), (started, completed) in zip(rows, spans)
+    ):
+        return False
+    for (row, _stage), (started, completed) in zip(rows, spans):
+        old_started, old_completed = row.started_at, row.completed_at
+        row.started_at = started
+        row.completed_at = completed
+        for interview in row.interviews:
+            if old_started is not None and interview.created_at == old_started:
+                interview.created_at = started
+            feedback = interview.feedback
+            if feedback is not None and feedback.submitted_at in (old_completed, old_started):
+                feedback.submitted_at = completed if feedback.submitted_at == old_completed else started
+    application.applied_at = applied_at
+    return True
+
+
 SEEDED_APPLICATION_NOTE = "Seeded demo application"
 
 
-def seed_timelines(db, now: datetime) -> int:
-    """Spread the stage timestamps of the applications this script created.
+def seed_timelines(db, now: datetime, reanchor: bool = False) -> int:
+    """Lay out the stage timestamps of the applications this script created.
 
     The `--timelines-only` path, for a database seeded before ATS Phase D
     (prod). seed_pipeline marks every application it writes with
     SEEDED_APPLICATION_NOTE, so this touches exactly those, and of those only
     the ones whose history is still flat; everything else is left alone.
-    Returns how many were laid out.
+    With `reanchor` (`--reanchor-timelines`), seeded timelines nobody has
+    touched also slide forward to end near `now`, so the demo does not age.
+    Returns how many were changed.
     """
     applications = (
         db.query(JobApplication)
@@ -781,9 +841,10 @@ def seed_timelines(db, now: datetime) -> int:
         .order_by(JobApplication.id)
         .all()
     )
-    spread = sum(_spread_stage_timeline(db, application, now) for application in applications)
+    lay_out = _reanchor_stage_timeline if reanchor else _spread_stage_timeline
+    changed = sum(lay_out(db, application, now) for application in applications)
     db.commit()
-    return spread
+    return changed
 
 
 def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
@@ -1031,11 +1092,25 @@ def main() -> int:
             "application a person has moved, a candidate, or a status"
         ),
     )
+    parser.add_argument(
+        "--reanchor-timelines",
+        action="store_true",
+        help=(
+            "slide the seeded stage timelines nobody has touched forward so they end "
+            "near today (the demo otherwise ages past the 7-day line). Also lays out "
+            "flat ones. Never changes an application a person has moved"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
+
+        if args.reanchor_timelines:
+            changed = seed_timelines(db, datetime.utcnow(), reanchor=True)
+            print(f"  stage timelines moved up to today: {changed}")
+            return 0
 
         if args.timelines_only:
             print(f"  stage timelines laid out: {seed_timelines(db, datetime.utcnow())}")
