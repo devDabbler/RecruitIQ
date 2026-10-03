@@ -418,6 +418,9 @@ class SaveCandidateResponse(BaseModel):
     success: bool = True
     candidate_id: Optional[str] = None
     resume_id: Optional[int] = None
+    # ATS Phase C: set when the save also put them on a job's pipeline.
+    application_id: Optional[int] = None
+    already_in_pipeline: bool = False
     message: str = "Candidate saved"
 
 
@@ -426,6 +429,7 @@ async def save_candidate_from_parse(
     file: UploadFile = File(...),
     parsed_data: str = Form(...),
     position_applied: Optional[str] = Form(None),
+    job_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service),
 ):
@@ -435,8 +439,12 @@ async def save_candidate_from_parse(
     save is a few hundred milliseconds rather than another LLM round trip.
 
     Deliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`
-    gate refuses anonymous callers (401) and the demo role (403) before this
-    handler runs, so only an administrator can reach it.
+    gate refuses anonymous callers (401), the demo role and interviewers (403)
+    before this handler runs, so only roles with candidates.add reach it.
+
+    With `job_id` (ATS Phase C) the candidate also lands at the first stage of
+    that job's pipeline; saving the same person to the same job again returns
+    the existing application instead of failing.
     """
     import tempfile
 
@@ -449,6 +457,13 @@ async def save_candidate_from_parse(
         resume_model = ResumeData.model_validate(data)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"parsed_data is not a valid parse payload: {e}")
+
+    # Checked before anything is stored, so a bad job id never leaves a
+    # half-saved candidate behind.
+    if job_id is not None and db.get(Job, job_id) is None:
+        raise HTTPException(
+            status_code=404, detail=f"No job with ID {job_id} exists to add this candidate to."
+        )
 
     _, extension = os.path.splitext(file.filename or "")
     file_type = extension.lstrip(".").lower()
@@ -506,12 +521,27 @@ async def save_candidate_from_parse(
             ),
             {"position": position_applied.strip(), "id": candidate_id},
         )
+
+    application_id = None
+    already_in_pipeline = False
+    if candidate_id and job_id is not None:
+        from backend.services import intake_service
+
+        application, created = intake_service.add_to_job(
+            db, candidate_id, job_id, source="resume_upload"
+        )
+        application_id = application.id
+        already_in_pipeline = not created
     db.commit()
 
     return SaveCandidateResponse(
         candidate_id=candidate_id,
         resume_id=resume_id,
-        message="Candidate saved to the pipeline",
+        application_id=application_id,
+        already_in_pipeline=already_in_pipeline,
+        message=(
+            "Candidate saved and added to the pipeline" if application_id else "Candidate saved"
+        ),
     )
 
 

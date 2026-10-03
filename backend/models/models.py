@@ -604,3 +604,56 @@ class StageDefaultInterviewer(Base):
 
     stage = relationship("PipelineStage", back_populates="default_interviewers")
     user = relationship("User")
+
+
+# ====================================================================
+# Notes and tags (ATS Phase C, spec 2026-10-03 section 3.1)
+# ====================================================================
+
+
+class Note(Base):
+    """One entry in a candidate's notes thread.
+
+    `application_id` and `stage_id` are both null for a note about the person,
+    and both set for a note about one stage of one application. `author_id` is
+    null only for text imported from the old `candidates.notes` column. The
+    three SET NULL foreign keys mean deleting a job or a user never deletes what
+    someone wrote about a candidate; the note just loses its label.
+    """
+    __tablename__ = "notes"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        String(36), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    application_id = Column(
+        Integer, ForeignKey("job_applications.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    stage_id = Column(Integer, ForeignKey("pipeline_stages.id", ondelete="SET NULL"), nullable=True)
+    author_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    author = relationship("User")
+    application = relationship("JobApplication")
+    stage = relationship("PipelineStage")
+
+    def __repr__(self):
+        return f"<Note(candidate_id={self.candidate_id}, application_id={self.application_id})>"
+
+
+class CandidateTag(Base):
+    """A lower-kebab-case label on a candidate. Normalized on write by `utils.tags`."""
+    __tablename__ = "candidate_tags"
+
+    id = Column(Integer, primary_key=True)
+    candidate_id = Column(
+        String(36), ForeignKey("candidates.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tag = Column(String(50), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (UniqueConstraint("candidate_id", "tag", name="uq_candidate_tag"),)
+
+    def __repr__(self):
+        return f"<CandidateTag(candidate_id={self.candidate_id}, tag='{self.tag}')>"

@@ -19,6 +19,9 @@ from ..models.pipeline import (
     ApplicationDetail,
     ApplicationStageOut,
     BoardColumn,
+    BulkItemResult,
+    BulkTransitionRequest,
+    BulkTransitionResponse,
     JobPipelineResponse,
     PipelineUpdateRequest,
     StageOut,
@@ -203,6 +206,74 @@ def get_application(application_id: int, db: Session = Depends(get_db)) -> Appli
     detail = _detail(db, application)
     db.commit()
     return detail
+
+
+BULK_ACTIONS = ("advance", "reject")
+
+
+@router.post("/applications/bulk/{action}", response_model=BulkTransitionResponse)
+def bulk_transition(
+    action: str,
+    payload: BulkTransitionRequest,
+    db: Session = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+) -> BulkTransitionResponse:
+    """Advance or reject many applications; each one succeeds or fails on its own.
+
+    Every application runs in its own savepoint, so one that a colleague
+    already rejected is reported by name instead of blocking the rest (ATS
+    Phase C decision). Declared above the single-application route on
+    purpose: that route's `{application_id}` would otherwise capture "bulk"
+    and answer 422.
+    """
+    if action not in BULK_ACTIONS:
+        raise HTTPException(status_code=404, detail=f"Bulk '{action}' is not available. Use advance or reject.")
+    fn = ps.ACTIONS[action]
+    note = (payload.note or "").strip() or None
+    actor_id = user.id if user is not None else None
+
+    results: list[BulkItemResult] = []
+    for application_id in dict.fromkeys(payload.application_ids):
+        application = (
+            db.query(JobApplication)
+            .options(joinedload(JobApplication.stages).joinedload(ApplicationStage.stage))
+            .filter(JobApplication.id == application_id)
+            .first()
+        )
+        if application is None:
+            results.append(BulkItemResult(application_id=application_id, ok=False, detail="Application not found."))
+            continue
+        candidate = db.get(Candidate, application.candidate_id)
+        name = _name(candidate) if candidate else "Unnamed candidate"
+
+        savepoint = db.begin_nested()
+        try:
+            ps.ensure_application_stages(db, application)
+            fn(db, application, actor_id=actor_id, note=note)
+            savepoint.commit()
+        except ps.PipelineError as exc:
+            savepoint.rollback()
+            results.append(
+                BulkItemResult(application_id=application_id, ok=False, candidate_name=name, detail=str(exc))
+            )
+            continue
+
+        current = ps.current_stage(application)
+        results.append(
+            BulkItemResult(
+                application_id=application_id,
+                ok=True,
+                candidate_name=name,
+                status=application.status,
+                current_stage_key=current.stage.key if current else None,
+            )
+        )
+
+    db.commit()
+    succeeded = sum(1 for r in results if r.ok)
+    return BulkTransitionResponse(
+        action=action, succeeded=succeeded, failed=len(results) - succeeded, results=results
+    )
 
 
 @router.post("/applications/{application_id}/{action}", response_model=ApplicationDetail)

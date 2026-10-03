@@ -1,11 +1,14 @@
 import logging
 logging.basicConfig(level=logging.DEBUG)
 logging.debug("[candidates.py] Importing candidates router...")
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, UploadFile, File
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc, func, or_
+from sqlalchemy import and_, desc, asc, func, or_
 from typing import List, Optional, Dict, Any
+from collections import defaultdict
+import csv
+import io
 import json
 import tempfile
 import os
@@ -20,7 +23,19 @@ from ..models.candidate import (
     CandidateSearchResponse,
     CandidateStatus
 )
-from ..models.models import Candidate, CandidateSkill, Resume
+from ..models.models import (
+    ApplicationStage,
+    Candidate,
+    CandidateSkill,
+    CandidateTag,
+    Job,
+    JobApplication,
+    Note,
+    PipelineStage,
+    Resume,
+    User,
+)
+from ..services import intake_service
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
@@ -146,25 +161,108 @@ def enhance_experience_with_bullet_points(experience_list):
     
     return enhanced_experience
 
-@router.post("/", response_model=CandidateResponse)
-async def create_candidate(
-    candidate: CandidateCreate,
-    db: Session = Depends(get_db),
-    resume_service = Depends(provide_resume_service)
+def _filtered_candidates(
+    db: Session,
+    user: Optional[User],
+    *,
+    keyword: Optional[str] = None,
+    status: Optional[str] = None,
+    position: Optional[str] = None,
+    skills: Optional[str] = None,
+    job_id: Optional[int] = None,
 ):
-    """Create a new candidate."""
-    # Check if candidate with the same email already exists
-    existing_candidate = db.query(Candidate).filter(
-        Candidate.email == candidate.email
-    ).first()
-    
+    """The candidate query behind both the list and the CSV export.
+
+    One function so the export can never contain a row the list would hide,
+    including the interviewer visibility rule (ATS Phase B and C).
+    """
+    query = db.query(Candidate)
+
+    # ATS Phase B: an interviewer sees only the candidates they interview.
+    visible = visible_candidate_ids(db, user)
+    if visible is not None:
+        query = query.filter(Candidate.id.in_(sorted(visible)))
+
+    if keyword:
+        # Name, email, *and* the fields a recruiter actually searches by.
+        # This used to cover first_name/last_name/email only, so the one
+        # query that matters most -- "who knows Python" -- returned nothing
+        # on a fully populated database while the UI offered to search by
+        # skill and position.
+        term = f"%{keyword}%"
+        # EXISTS rather than a join: joining candidate_skills multiplies a
+        # candidate by their skill count, which would both duplicate rows
+        # and inflate the `total` used for pagination.
+        has_skill = (
+            db.query(CandidateSkill)
+            .filter(
+                CandidateSkill.candidate_id == Candidate.id,
+                CandidateSkill.skill_name.ilike(term),
+            )
+            .exists()
+        )
+        query = query.filter(
+            or_(
+                Candidate.first_name.ilike(term),
+                Candidate.last_name.ilike(term),
+                Candidate.email.ilike(term),
+                Candidate.headline.ilike(term),
+                Candidate.position_applied.ilike(term),
+                Candidate.current_position.ilike(term),
+                Candidate.current_company.ilike(term),
+                Candidate.location.ilike(term),
+                has_skill,
+            )
+        )
+
+    if status:
+        query = query.filter(Candidate.status == status)
+
+    if position:
+        query = query.filter(Candidate.position_applied.ilike(f"%{position}%"))
+
+    if skills:
+        for skill in [s.strip() for s in skills.split(",")]:
+            query = query.filter(
+                Candidate.headline.ilike(f"%{skill}%") | Candidate.notes.ilike(f"%{skill}%")
+            )
+
+    if job_id is not None:
+        applied = (
+            db.query(JobApplication)
+            .filter(JobApplication.candidate_id == Candidate.id, JobApplication.job_id == job_id)
+            .exists()
+        )
+        query = query.filter(applied)
+
+    return query
+
+
+@router.post("/", response_model=CandidateResponse)
+def create_candidate(
+    candidate: CandidateCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Create a candidate.
+
+    With `job_id`, they start that job's pipeline in the same transaction
+    (ATS Phase C); an unknown job is a 404 and nothing is created. `notes`
+    becomes their first note rather than the read-only `candidates.notes`.
+    """
+    existing_candidate = db.query(Candidate).filter(Candidate.email == candidate.email).first()
     if existing_candidate:
         raise HTTPException(
             status_code=400,
             detail=f"Candidate with email {candidate.email} already exists"
         )
-    
-    # Create new candidate
+
+    job = None
+    if candidate.job_id is not None:
+        job = db.get(Job, candidate.job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail=f"No job with ID {candidate.job_id} exists.")
+
     db_candidate = Candidate(
         first_name=candidate.first_name,
         last_name=candidate.last_name,
@@ -176,13 +274,24 @@ async def create_candidate(
         status=candidate.status.value if isinstance(candidate.status, CandidateStatus) else candidate.status,
         position_applied=candidate.position_applied,
         job_id=candidate.job_id,
-        notes=candidate.notes
     )
-    
     db.add(db_candidate)
+    db.flush()
+
+    if candidate.notes and candidate.notes.strip():
+        author = request_user(request)
+        db.add(
+            Note(
+                candidate_id=db_candidate.id,
+                author_id=author.id if author is not None else None,
+                body=candidate.notes.strip(),
+            )
+        )
+    if job is not None:
+        intake_service.add_to_job(db, db_candidate.id, job.id, source=db_candidate.source or "direct")
+
     db.commit()
     db.refresh(db_candidate)
-    
     return db_candidate
 
 @router.get("/skills_breakdown", response_model=Dict[str, int])
@@ -201,6 +310,124 @@ def get_skills_breakdown(db: Session = Depends(get_db),
                 if skill.skill_name:
                     skill_counts[skill.skill_name] += 1
     return dict(skill_counts)
+
+
+EXPORT_HEADER = [
+    "First name", "Last name", "Email", "Phone", "Location", "Current role",
+    "Current company", "Source", "Status", "Tags", "Applications", "Added",
+]
+EXPORT_ROW_LIMIT = 5000
+_APPLICATION_LABELS = {
+    "active": "In progress",
+    "hired": "Hired",
+    "rejected": "Rejected",
+    "declined": "Offer declined",
+    "withdrawn": "Withdrawn",
+}
+
+
+def _csv_cell(value) -> str:
+    """A cell Excel and Sheets will show as text, never run as a formula."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + text
+    return text
+
+
+@router.get(
+    "/export.csv",
+    response_class=Response,
+    responses={200: {"content": {"text/csv": {}}, "description": "The filtered candidate list. No scores."}},
+)
+def export_candidates_csv(
+    request: Request,
+    keyword: Optional[str] = None,
+    status: Optional[CandidateStatus] = None,
+    job_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+) -> Response:
+    """The candidate list as CSV, with the same filters as the list (ATS Phase C).
+
+    Deliberately contains no match scores and no notes. Declared before
+    `/{candidate_id}`, which would otherwise read "export.csv" as an id.
+    """
+    candidates = (
+        _filtered_candidates(
+            db,
+            request_user(request),
+            keyword=keyword,
+            status=status.value if status else None,
+            job_id=job_id,
+        )
+        .order_by(Candidate.last_name, Candidate.first_name, Candidate.id)
+        .limit(EXPORT_ROW_LIMIT)
+        .all()
+    )
+    ids = [c.id for c in candidates]
+
+    tags_by: dict[str, list[str]] = defaultdict(list)
+    applications_by: dict[str, list[str]] = defaultdict(list)
+    if ids:
+        for candidate_id, tag in (
+            db.query(CandidateTag.candidate_id, CandidateTag.tag)
+            .filter(CandidateTag.candidate_id.in_(ids))
+            .order_by(CandidateTag.tag)
+        ):
+            tags_by[candidate_id].append(tag)
+        rows = (
+            db.query(JobApplication.candidate_id, Job.title, JobApplication.status, PipelineStage.name)
+            .join(Job, Job.id == JobApplication.job_id)
+            .outerjoin(
+                ApplicationStage,
+                and_(
+                    ApplicationStage.application_id == JobApplication.id,
+                    ApplicationStage.status == "in_progress",
+                ),
+            )
+            .outerjoin(PipelineStage, PipelineStage.id == ApplicationStage.stage_id)
+            .filter(JobApplication.candidate_id.in_(ids))
+            .order_by(Job.title)
+            .all()
+        )
+        for candidate_id, title, app_status, stage_name in rows:
+            where = (
+                stage_name
+                if app_status == "active" and stage_name
+                else _APPLICATION_LABELS.get(app_status, app_status)
+            )
+            applications_by[candidate_id].append(f"{title} ({where})")
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(EXPORT_HEADER)
+    for c in candidates:
+        writer.writerow(
+            [
+                _csv_cell(value)
+                for value in (
+                    c.first_name,
+                    c.last_name,
+                    c.email,
+                    c.phone,
+                    c.location,
+                    c.current_position,
+                    c.current_company,
+                    c.source,
+                    c.status,
+                    "; ".join(tags_by[c.id]),
+                    "; ".join(applications_by[c.id]),
+                    c.created_at.date().isoformat() if c.created_at else "",
+                )
+            ]
+        )
+
+    filename = f"candidates-{datetime.utcnow().date().isoformat()}.csv"
+    # The BOM makes Excel read the file as UTF-8, so accented names survive.
+    return Response(
+        content="\ufeff" + buffer.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # Must stay below every literal path in this router: FastAPI matches routes in
@@ -478,6 +705,7 @@ def search_candidates(
     status: Optional[CandidateStatus] = None,
     position: Optional[str] = None,
     skills: Optional[str] = None,
+    job_id: Optional[int] = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
     page: int = Query(1, ge=1),
@@ -489,60 +717,16 @@ def search_candidates(
     try:
         logging.info(f"Searching candidates with filters: keyword={keyword}, status={status}, position={position}, skills={skills}")
         
-        # Start with a simpler query - just get candidates first
-        query = db.query(Candidate)
-        # ATS Phase B: an interviewer sees only the candidates they interview.
-        visible = visible_candidate_ids(db, request_user(http_request))
-        if visible is not None:
-            query = query.filter(Candidate.id.in_(sorted(visible)))
-        
-        # Apply filters
-        if keyword:
-            # Name, email, *and* the fields a recruiter actually searches by.
-            # This used to cover first_name/last_name/email only, so the one
-            # query that matters most -- "who knows Python" -- returned nothing
-            # on a fully populated database while the UI offered to search by
-            # skill and position.
-            term = f"%{keyword}%"
-            # EXISTS rather than a join: joining candidate_skills multiplies a
-            # candidate by their skill count, which would both duplicate rows
-            # and inflate the `total` used for pagination.
-            has_skill = (
-                db.query(CandidateSkill)
-                .filter(
-                    CandidateSkill.candidate_id == Candidate.id,
-                    CandidateSkill.skill_name.ilike(term),
-                )
-                .exists()
-            )
-            query = query.filter(
-                or_(
-                    Candidate.first_name.ilike(term),
-                    Candidate.last_name.ilike(term),
-                    Candidate.email.ilike(term),
-                    Candidate.headline.ilike(term),
-                    Candidate.position_applied.ilike(term),
-                    Candidate.current_position.ilike(term),
-                    Candidate.current_company.ilike(term),
-                    Candidate.location.ilike(term),
-                    has_skill,
-                )
-            )
-        
-        if status:
-            query = query.filter(Candidate.status == status.value)
-        
-        if position:
-            query = query.filter(Candidate.position_applied.ilike(f"%{position}%"))
-        
-        if skills:
-            # This should be implemented to filter by skills when skills model is available
-            # For now, we'll just handle it as a keyword search in any text fields
-            skill_list = [s.strip() for s in skills.split(',')]
-            for skill in skill_list:
-                query = query.filter(Candidate.headline.ilike(f"%{skill}%") | 
-                                   Candidate.notes.ilike(f"%{skill}%"))
-        
+        query = _filtered_candidates(
+            db,
+            request_user(http_request),
+            keyword=keyword,
+            status=status.value if status else None,
+            position=position,
+            skills=skills,
+            job_id=job_id,
+        )
+
         # Apply sorting
         if hasattr(Candidate, sort_by):
             sort_column = getattr(Candidate, sort_by)

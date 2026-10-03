@@ -19,7 +19,7 @@ import { humanize } from "@/lib/format";
 import { privacySentence } from "@/lib/upload-privacy";
 import { cn } from "@/lib/utils";
 
-const ACCEPT = ".pdf,.docx,.doc,.txt,.jpg,.jpeg,.png";
+export const ACCEPT = ".pdf,.docx,.doc,.txt,.jpg,.jpeg,.png";
 
 /** The sentinel for "score against a role that is not in the database". */
 export const OTHER_ROLE = "__other__";
@@ -189,6 +189,8 @@ export function ResumeUploader({
       form.set("file", file);
       form.set("parsed_data", JSON.stringify(result.parsed_data ?? {}));
       if (roleLabel) form.set("position_applied", roleLabel);
+      // ATS Phase C: a real requisition means "add them to its pipeline".
+      if (selectedJob) form.set("job_id", String(selectedJob.id));
 
       const response = await fetch("/api/resume/save", { method: "POST", body: form });
       const payload = (await response.json().catch(() => null)) as {
@@ -353,7 +355,7 @@ export function ResumeUploader({
               ) : (
                 <>
                   <UserPlus className="mr-2 h-4 w-4" aria-hidden />
-                  Save as candidate
+                  {selectedJob ? `Save and add to ${selectedJob.title}` : "Save as candidate"}
                 </>
               )}
             </Button>
@@ -361,7 +363,9 @@ export function ResumeUploader({
 
           <p className="text-xs text-slate-500">
             {canWrite
-              ? "Parsing alone saves nothing. Save as candidate adds this person to the pipeline with the resume attached."
+              ? selectedJob
+                ? `Parsing alone saves nothing. Saving adds this person to ${selectedJob.title} at Resume submitted, with the resume attached.`
+                : "Parsing alone saves nothing. Pick a job above to also start their pipeline."
               : "Files are parsed in memory and discarded, never stored. Extraction uses a third-party AI service, so please use the sample rather than a real person's resume."}
           </p>
 

@@ -2,7 +2,7 @@
 
 nginx already enforces a per-minute rate (12r/m, burst 6) on /api/resume/;
 this bounds the *daily* total so a patient scraper cannot run up the
-OpenRouter bill a minute at a time. Admins are exempt. If Redis is down the
+OpenRouter bill a minute at a time. Roles that can add candidates are exempt. If Redis is down the
 cap degrades open: a missing counter must never take the demo's flagship
 feature down with it.
 """
@@ -11,8 +11,9 @@ from datetime import date, timedelta
 
 from fastapi import Depends, HTTPException, Request
 
-from backend.utils.auth import ROLE_ADMIN, get_optional_user
+from backend.utils.auth import get_optional_user
 from backend.utils.config import get_settings
+from backend.utils.permissions import CANDIDATES_ADD, can
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,9 @@ async def enforce_parse_quota(
     request: Request,
     current_user=Depends(get_optional_user),
 ) -> None:
-    if current_user is not None and current_user.role == ROLE_ADMIN:
+    # Staff who add candidates are exempt: a hiring team bulk upload would
+    # otherwise stop at the anonymous daily cap (ATS Phase C).
+    if current_user is not None and can(current_user.role, CANDIDATES_ADD):
         return
 
     settings = get_settings()

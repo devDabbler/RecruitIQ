@@ -83,6 +83,9 @@ class JobResponse(BaseModel):
     start_date: Optional[datetime] = None
     views: int = 0
     applications: int = 0
+    # ATS Phase C: applications still in progress, counted from the pipeline.
+    # `applications` stays the stored all-time counter.
+    active_applications: int = 0
     created_at: datetime
     updated_at: datetime
     job_metadata: Dict[str, Any] = Field(default_factory=dict)

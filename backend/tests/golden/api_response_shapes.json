@@ -193,6 +193,7 @@
   },
   "jobs.create": {
     "shape": {
+      "active_applications": "int",
       "application_deadline": "null",
       "applications": "int",
       "created_at": "str",
@@ -228,6 +229,7 @@
   },
   "jobs.detail": {
     "shape": {
+      "active_applications": "int",
       "application_deadline": "null",
       "applications": "int",
       "created_at": "str",
@@ -287,6 +289,7 @@
       "page_size": "int",
       "results": [
         {
+          "active_applications": "int",
           "application_deadline": "null",
           "applications": "int",
           "created_at": "str",
@@ -328,6 +331,7 @@
   },
   "jobs.update": {
     "shape": {
+      "active_applications": "int",
       "application_deadline": "null",
       "applications": "int",
       "created_at": "str",

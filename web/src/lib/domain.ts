@@ -36,6 +36,11 @@ export type InterviewListItem = Schemas["InterviewListItem"];
 export type StageDefaults = Schemas["StageDefaults"];
 export type InterviewScope = "mine" | "pending" | "all";
 
+/** ATS Phase C: notes, tags, and bulk moves. */
+export type Note = Schemas["NoteOut"];
+export type CandidateTags = Schemas["CandidateTagsResponse"];
+export type BulkTransitionResult = Schemas["BulkTransitionResponse"];
+
 /** Admin-only scoring transparency (`/api/transparency/*`). */
 export type ScoringPolicy = Schemas["ScoringPolicy"];
 export type MatchTrace = Schemas["MatchTraceResponse"];

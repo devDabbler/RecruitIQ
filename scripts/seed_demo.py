@@ -8,6 +8,7 @@ change is the intended way to repair a half-populated database.
     poetry run python scripts/seed_demo.py
     poetry run python scripts/seed_demo.py --no-embeddings   # skip Ollama
     poetry run python scripts/seed_demo.py --team-only       # team and interviews only
+    poetry run python scripts/seed_demo.py --notes-tags-only # notes and tags only
 
 Authored during Phase 3 rather than Phase 4 because a Dashboard or Matching
 screen cannot be built or verified against an empty database. Phase 4 loads this
@@ -36,10 +37,12 @@ from backend.models.models import (
     ApplicationStage,
     Candidate,
     CandidateSkill,
+    CandidateTag,
     Feedback,
     Interview,
     Job,
     JobApplication,
+    Note,
     PipelineStage,
     SavedJob,
     StageDefaultInterviewer,
@@ -115,6 +118,46 @@ STATUS_TO_STAGE_INDEX = {
     "rejected": None,
     "withdrawn": None,
 }
+
+# Synthetic tags and notes (ATS Phase C). Keyed on the candidate's email rather
+# than their id: ids are random per database, emails are fixed, so every fresh
+# database gets the same tags on the same people.
+SEED_TAGS = [
+    "referral",
+    "relocation-ok",
+    "remote-only",
+    "visa-sponsorship",
+    "returning-candidate",
+    "strong-sql",
+    "leadership",
+    "contract-to-hire",
+]
+
+SEED_NOTES = [
+    "Phone screen went well. Clear on why they want to move.",
+    "Open to two office days a week. Prefers mornings for interviews.",
+    "Strong portfolio. Ask about the data platform migration they led.",
+    "Prefers a start date after the end of the quarter.",
+    "Referred by a former colleague on the platform team.",
+]
+
+
+def seed_tags_for(email: str) -> list[str]:
+    """Zero to two tags, decided by the email alone."""
+    if stable_index(f"tags-{email}", 100) >= 60:
+        return []
+    picks = {
+        SEED_TAGS[stable_index(f"tag-a-{email}", len(SEED_TAGS))],
+        SEED_TAGS[stable_index(f"tag-b-{email}", len(SEED_TAGS))],
+    }
+    return sorted(picks)
+
+
+def seed_note_for(email: str):
+    """One note for about four in ten candidates, or None."""
+    if stable_index(f"note-{email}", 100) >= 40:
+        return None
+    return SEED_NOTES[stable_index(f"note-body-{email}", len(SEED_NOTES))]
 
 # ATS Phase B. Synthetic people, no passwords: nobody can sign in as them until
 # someone runs scripts/create_admin.py --email ... --role ... with a password
@@ -653,6 +696,43 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
     db.commit()
 
 
+def seed_notes_and_tags(db, candidates: list[Candidate]) -> None:
+    """Tags and a candidate-level note, added only where missing (idempotent).
+
+    Authored by the first hiring manager or hiring team user the Phase B seed
+    created, so the thread shows a name; null (shown as "Earlier note") if
+    there is none. Never edits or removes a note or tag someone added.
+    """
+    author = (
+        db.query(User)
+        .filter(User.role.in_(("hiring_manager", "hiring_team")))
+        .order_by(User.email)
+        .first()
+    )
+    for candidate in candidates:
+        email = candidate.email or candidate.id
+        for tag in seed_tags_for(email):
+            exists = (
+                db.query(CandidateTag)
+                .filter(CandidateTag.candidate_id == candidate.id, CandidateTag.tag == tag)
+                .first()
+            )
+            if exists is None:
+                db.add(CandidateTag(candidate_id=candidate.id, tag=tag))
+        body = seed_note_for(email)
+        if body is not None:
+            exists = (
+                db.query(Note)
+                .filter(Note.candidate_id == candidate.id, Note.body == body)
+                .first()
+            )
+            if exists is None:
+                db.add(
+                    Note(candidate_id=candidate.id, author_id=author.id if author else None, body=body)
+                )
+    db.commit()
+
+
 def seed_team(db) -> dict[str, list[User]]:
     """The synthetic team, keyed by role. Additive: an existing person keeps
     whatever role someone gave them on the Team page."""
@@ -782,11 +862,31 @@ def main() -> int:
             "changes a candidate, a candidate's status, or an application"
         ),
     )
+    parser.add_argument(
+        "--notes-tags-only",
+        action="store_true",
+        help=(
+            "only add the synthetic notes and tags (ATS Phase C) to the seeded "
+            "candidates. Additive: never changes a candidate or an existing note or tag"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
+
+        if args.notes_tags_only:
+            seeded = (
+                db.query(Candidate)
+                .filter(Candidate.email.like(f"%@{EMAIL_DOMAIN}"))
+                .order_by(Candidate.email)
+                .all()
+            )
+            seed_notes_and_tags(db, seeded)
+            print(f"  notes: {db.query(Note).count()}  tagged: "
+                  f"{db.query(CandidateTag.candidate_id).distinct().count()}")
+            return 0
 
         if args.team_only:
             jobs = db.query(Job).order_by(Job.id).all()
@@ -799,6 +899,7 @@ def main() -> int:
         candidates = seed_candidates(db, random.Random(SEED_FIELDS))
         seed_pipeline(db, candidates, jobs)
         seed_interviews(db, seed_team(db), jobs)
+        seed_notes_and_tags(db, candidates)
 
         if args.no_embeddings:
             print("  embeddings skipped (--no-embeddings)")
@@ -818,6 +919,8 @@ def main() -> int:
         print(f"  candidates: {len(candidates)}  jobs: {len(jobs)}")
         print(f"  applications: {db.query(JobApplication).count()}  "
               f"saved: {db.query(SavedJob).count()}")
+        print(f"  notes: {db.query(Note).count()}  tagged: "
+              f"{db.query(CandidateTag.candidate_id).distinct().count()}")
         print(f"  team: {db.query(User).filter(User.role != 'demo').count()}  "
               f"interviews: {db.query(Interview).count()}  feedback: {db.query(Feedback).count()}")
         print(f"  funnel: {dict(sorted(funnel.items()))}")

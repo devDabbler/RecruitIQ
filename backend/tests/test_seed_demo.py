@@ -8,7 +8,17 @@ import random
 import subprocess
 import sys
 
-from scripts.seed_demo import PIPELINE_WEIGHTS, SEED_FUNNEL, _weighted_statuses, stable_index
+from backend.utils.tags import normalize_tag
+from scripts.seed_demo import (
+    PIPELINE_WEIGHTS,
+    SEED_FUNNEL,
+    SEED_NOTES,
+    SEED_TAGS,
+    _weighted_statuses,
+    seed_note_for,
+    seed_tags_for,
+    stable_index,
+)
 
 
 def test_stable_index_survives_a_new_interpreter():
@@ -50,3 +60,21 @@ def test_weighted_statuses_is_reproducible():
 def test_weighted_statuses_handles_small_and_zero_n():
     assert _weighted_statuses(random.Random(SEED_FUNNEL), 0) == []
     assert len(_weighted_statuses(random.Random(SEED_FUNNEL), 3)) == 3
+
+
+def test_seed_tags_are_normalized_and_stable():
+    for tag in SEED_TAGS:
+        assert normalize_tag(tag) == tag
+    emails = [f"person{i}@demo.recruitiq.dev" for i in range(40)]
+    first = [seed_tags_for(e) for e in emails]
+    assert first == [seed_tags_for(e) for e in emails]
+    assert sum(1 for tags in first if tags) >= 15  # a believable share are tagged
+    assert all(len(tags) <= 2 for tags in first)
+
+
+def test_seed_notes_are_stable_and_from_the_fixed_list():
+    emails = [f"person{i}@demo.recruitiq.dev" for i in range(40)]
+    notes = [seed_note_for(e) for e in emails]
+    assert notes == [seed_note_for(e) for e in emails]
+    assert all(n is None or n in SEED_NOTES for n in notes)
+    assert sum(1 for n in notes if n) >= 8

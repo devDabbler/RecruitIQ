@@ -18,6 +18,7 @@ import type {
   Candidate,
   CandidateMatch,
   CandidateSearch,
+  CandidateTags,
   InterviewEntry,
   InterviewListItem,
   InterviewScope,
@@ -26,6 +27,7 @@ import type {
   JobMatch,
   JobPipeline,
   MatchTrace,
+  Note,
   Profile,
   ResumeSummary,
   SavedJob,
@@ -41,6 +43,7 @@ import { getToken } from "./session";
 export interface CandidateQuery {
   keyword?: string;
   status?: string;
+  jobId?: string;
   page?: number;
   pageSize?: number;
 }
@@ -48,12 +51,13 @@ export interface CandidateQuery {
 export async function listCandidates({
   keyword,
   status,
+  jobId,
   page = 1,
   pageSize = 25,
 }: CandidateQuery = {}): Promise<CandidateSearch> {
   return apiFetch<CandidateSearch>("/api/candidates/", {
     token: await getToken(),
-    query: { keyword, status, page, page_size: pageSize },
+    query: { keyword, status, job_id: jobId, page, page_size: pageSize },
   });
 }
 
@@ -252,4 +256,22 @@ export async function getDefaultInterviewers(jobId: number): Promise<StageDefaul
     { token: await getToken() },
   );
   return result?.stages ?? null;
+}
+
+/** A candidate's notes thread, newest first (ATS Phase C). */
+export async function getCandidateNotes(candidateId: string): Promise<Note[]> {
+  return (
+    (await apiFetchOptional<Note[]>(`/api/candidates/${encodeURIComponent(candidateId)}/notes`, {
+      token: await getToken(),
+    })) ?? []
+  );
+}
+
+/** A candidate's tags, alphabetical. */
+export async function getCandidateTags(candidateId: string): Promise<string[]> {
+  const result = await apiFetchOptional<CandidateTags>(
+    `/api/candidates/${encodeURIComponent(candidateId)}/tags`,
+    { token: await getToken() },
+  );
+  return result?.tags ?? [];
 }

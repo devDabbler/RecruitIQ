@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, asc
+from sqlalchemy import desc, asc, func
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from pydantic import BaseModel, Field
@@ -125,6 +125,19 @@ def _team_link(db: Session, user_id: Optional[str], label: str) -> None:
         raise HTTPException(status_code=422, detail=f"The {label} must be someone on the team.")
 
 
+def _active_counts(db: Session, job_ids: List[int]) -> Dict[int, int]:
+    """Applications still in progress per job, in one query."""
+    if not job_ids:
+        return {}
+    rows = (
+        db.query(JobApplication.job_id, func.count(JobApplication.id))
+        .filter(JobApplication.job_id.in_(job_ids), JobApplication.status == "active")
+        .group_by(JobApplication.job_id)
+        .all()
+    )
+    return {job_id: count for job_id, count in rows}
+
+
 @router.post("/", response_model=JobResponse, status_code=201)
 def create_job(
     job: JobCreateUpdate,
@@ -212,7 +225,8 @@ def get_job(
         job.skills = job.skills.split(",")
     else:
         job.skills = []
-    
+
+    job.active_applications = _active_counts(db, [job.id]).get(job.id, 0)
     return job
 
 @router.put("/{job_id}", response_model=JobResponse)
@@ -444,7 +458,10 @@ def search_jobs(
     
     # Execute query
     jobs = query.all()
-    
+    counts = _active_counts(db, [job.id for job in jobs])
+    for job in jobs:
+        job.active_applications = counts.get(job.id, 0)
+
     # Process skills for each job
     for job in jobs:
         if isinstance(job.skills, str) and job.skills:
@@ -524,59 +541,34 @@ def apply_to_job(
     application: JobApplicationCreate,
     db: Session = Depends(get_db)
 ):
-    """Apply to a job."""
+    """Apply to a job. One application per candidate per job (spec decision 2)."""
+    from ..services import intake_service
+
     logger = logging.getLogger("backend.routers.jobs")
-    
-    # Check if job exists
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    # Check if candidate exists
-    candidate = db.query(Candidate).filter(Candidate.id == application.candidate_id).first()
-    if not candidate:
-        raise HTTPException(status_code=404, detail="Candidate not found")
-    
-    # Check if already applied
-    existing_application = db.query(JobApplication).filter(
-        JobApplication.job_id == job_id,
-        JobApplication.candidate_id == application.candidate_id
-    ).first()
-    
-    if existing_application:
+    try:
+        db_application, created = intake_service.add_to_job(
+            db,
+            application.candidate_id,
+            job_id,
+            source=application.source or "direct",
+            cover_letter=application.cover_letter,
+        )
+    except intake_service.IntakeError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if not created:
         raise HTTPException(status_code=400, detail="Already applied to this job")
-    
-    # Create new application
-    db_application = JobApplication(
-        job_id=job_id,
-        candidate_id=application.candidate_id,
-        cover_letter=application.cover_letter,
-        source=application.source or "direct"
-    )
-    
-    db.add(db_application)
-
-    # Update job applications count
-    if job.applications is None:
-        job.applications = 0
-    job.applications += 1
-
-    db.flush()
-    # ATS Phase A: the application starts at the first enabled round.
-    from ..services import pipeline_service as ps
-    ps.start_application(db, db_application)
     db.commit()
     db.refresh(db_application)
-    
+
     logger.info(f"Application created: job_id={job_id}, candidate_id={application.candidate_id}")
-    
+
     return JobApplicationResponse(
         id=db_application.id,
         job_id=db_application.job_id,
         candidate_id=db_application.candidate_id,
         status=db_application.status,
         applied_at=db_application.applied_at.isoformat(),
-        source=db_application.source
+        source=db_application.source,
     )
 
 @router.post("/{job_id}/save", response_model=SavedJobResponse)

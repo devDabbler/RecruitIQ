@@ -92,7 +92,9 @@ INTERVIEWER_PATHS: list[tuple[re.Pattern[str], Optional[str]]] = [
         (r"/api/jobs/\d+", None),
         (r"/api/jobs/\d+/pipeline", None),  # the handler filters the cards
         (r"/api/candidates", None),  # the handler filters the list
-        (r"/api/candidates/(?P<id>[^/]+)(/resumes)?", "candidate"),
+        (r"/api/candidates/export\.csv", None),  # the handler filters by visible_candidate_ids
+        (r"/api/candidates/(?P<id>[^/]+)(/resumes|/notes|/tags)?", "candidate"),
+        (r"/api/tags", None),  # the handler counts only visible candidates
         (r"/api/jobs/(applications|saved)/(?P<id>[^/]+)", "candidate"),
         (r"/api/applications/(?P<id>\d+)(/interviews)?", "application"),
         (r"/api/resume/(?P<id>\d+)(/preview|/view)?", "resume"),

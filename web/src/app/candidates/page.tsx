@@ -1,20 +1,16 @@
 import Link from "next/link";
+import { Download } from "lucide-react";
 
+import { AddCandidatePanel } from "@/components/add-candidate-panel";
 import { CandidateFilters } from "@/components/candidate-filters";
+import { type BulkContext, CandidateTable } from "@/components/candidate-table";
 import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
-import { StageBadge } from "@/components/stage-badge";
-import { Card } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import { listCandidates } from "@/lib/data";
-import { type CandidateSearch, fullName, initials } from "@/lib/domain";
+import { getJobPipeline, listCandidates, listJobs } from "@/lib/data";
+import type { CandidateSearch } from "@/lib/domain";
+import { applicationsByCandidate, exportHref } from "@/lib/intake";
+import { canWrite } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -24,12 +20,33 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
   const params = await searchParams;
   const keyword = first(params.q);
   const status = first(params.status);
+  const jobId = first(params.job);
   // A hand-edited `?page=abc` should land on page 1, not send NaN to the API.
   const page = Math.max(1, Number(first(params.page)) || 1);
 
+  const [writable, jobList] = await Promise.all([canWrite(), listJobs().catch(() => null)]);
+  const jobs = (jobList?.results ?? [])
+    .map(({ id, title, department, status: jobStatus }) => ({
+      id,
+      title,
+      department,
+      status: jobStatus,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+  const exportLink = (
+    <a
+      href={exportHref({ keyword, status, jobId })}
+      className={buttonVariants({ variant: "outline" })}
+      download
+    >
+      <Download className="mr-1.5 h-4 w-4" aria-hidden />
+      Export CSV
+    </a>
+  );
+
   let data: CandidateSearch;
   try {
-    data = await listCandidates({ keyword, status, page, pageSize: PAGE_SIZE });
+    data = await listCandidates({ keyword, status, jobId, page, pageSize: PAGE_SIZE });
   } catch (error) {
     return (
       <>
@@ -40,6 +57,17 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
         />
       </>
     );
+  }
+
+  // Bulk moves need applications, and an application belongs to one job, so
+  // the checkboxes only appear once the list is filtered to a job.
+  let bulk: BulkContext | null = null;
+  if (writable && jobId) {
+    const pipeline = await getJobPipeline(jobId).catch(() => null);
+    const job = jobs.find((j) => String(j.id) === jobId);
+    if (pipeline && job) {
+      bulk = { jobTitle: job.title, applications: applicationsByCandidate(pipeline) };
+    }
   }
 
   const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
@@ -53,74 +81,31 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
         description={
           data.total === 1 ? "1 candidate" : `${data.total} candidates in the pipeline`
         }
+        actions={exportLink}
       />
 
-      <CandidateFilters initialKeyword={keyword ?? ""} initialStatus={status ?? ""} />
+      {writable ? <AddCandidatePanel jobs={jobs.filter((j) => j.status === "open")} /> : null}
+
+      <CandidateFilters
+        initialKeyword={keyword ?? ""}
+        initialStatus={status ?? ""}
+        initialJob={jobId ?? ""}
+        jobs={jobs}
+      />
 
       {data.results.length === 0 ? (
         <EmptyState
           title="No candidates match those filters"
-          detail="Clear the search box or pick a different stage."
+          detail="Clear the search box, pick a different stage, or choose All jobs."
         />
       ) : (
-        <Card className="overflow-hidden py-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Name</TableHead>
-                <TableHead className="hidden md:table-cell">Current role</TableHead>
-                <TableHead className="hidden lg:table-cell">Location</TableHead>
-                <TableHead className="hidden xl:table-cell">Skills</TableHead>
-                <TableHead className="text-right">Stage</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {data.results.map((candidate) => (
-                <TableRow key={candidate.id}>
-                  <TableCell>
-                    <Link
-                      href={`/candidates/${candidate.id}`}
-                      className="flex items-center gap-3 font-medium hover:underline"
-                    >
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-semibold text-indigo-700">
-                        {initials(candidate)}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="block truncate">{fullName(candidate)}</span>
-                        <span className="block truncate text-xs font-normal text-slate-500">
-                          {candidate.email ?? "No email"}
-                        </span>
-                      </span>
-                    </Link>
-                  </TableCell>
-                  <TableCell className="hidden max-w-56 truncate text-slate-600 md:table-cell">
-                    {candidate.current_position ?? candidate.position_applied ?? "Not listed"}
-                    {candidate.current_company ? (
-                      <span className="block text-xs text-slate-400">
-                        {candidate.current_company}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="hidden text-slate-600 lg:table-cell">
-                    {candidate.location ?? "Not listed"}
-                  </TableCell>
-                  <TableCell className="hidden xl:table-cell">
-                    <SkillChips skills={candidate.skills} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <StageBadge status={candidate.status} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+        <CandidateTable candidates={data.results} bulk={bulk} />
       )}
 
       {data.total > PAGE_SIZE ? (
         <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
           <span>
-            Showing {from}–{to} of {data.total}
+            Showing {from} to {to} of {data.total}
           </span>
           <span className="flex gap-2">
             <PageLink params={params} page={page - 1} disabled={page <= 1}>
@@ -139,25 +124,6 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
 /** Next hands repeated query params through as arrays; take the first. */
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
-}
-
-function SkillChips({ skills }: { skills: string[] | null | undefined }) {
-  if (!skills?.length) return <span className="text-xs text-slate-400">None listed</span>;
-  return (
-    <span className="flex flex-wrap gap-1">
-      {skills.slice(0, 3).map((skill) => (
-        <span
-          key={skill}
-          className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600"
-        >
-          {skill}
-        </span>
-      ))}
-      {skills.length > 3 ? (
-        <span className="px-1 py-0.5 text-xs text-slate-400">+{skills.length - 3}</span>
-      ) : null}
-    </span>
-  );
 }
 
 function PageLink({

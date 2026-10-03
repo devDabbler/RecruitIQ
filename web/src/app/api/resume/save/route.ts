@@ -38,6 +38,15 @@ export async function POST(request: NextRequest) {
   outgoing.set("parsed_data", parsed);
   const position = incoming.get("position_applied");
   if (typeof position === "string" && position) outgoing.set("position_applied", position);
+  // ATS Phase C: save straight onto a job's pipeline. Validated here so a
+  // malformed id is a readable 400, not a FastAPI 422.
+  const jobId = incoming.get("job_id");
+  if (typeof jobId === "string" && jobId) {
+    if (!/^\d+$/.test(jobId)) {
+      return NextResponse.json({ detail: "That is not a valid job id." }, { status: 400 });
+    }
+    outgoing.set("job_id", jobId);
+  }
 
   let upstream: Response;
   try {

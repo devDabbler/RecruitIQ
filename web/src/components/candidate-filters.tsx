@@ -18,9 +18,13 @@ import { cn } from "@/lib/utils";
 export function CandidateFilters({
   initialKeyword,
   initialStatus,
+  initialJob,
+  jobs,
 }: {
   initialKeyword: string;
   initialStatus: string;
+  initialJob: string;
+  jobs: { id: number; title: string }[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -53,17 +57,42 @@ export function CandidateFilters({
     startTransition(() => router.replace(`/candidates?${next}`, { scroll: false }));
   }
 
+  function setJob(job: string) {
+    const next = new URLSearchParams(params.toString());
+    if (job) next.set("job", job);
+    else next.delete("job");
+    next.delete("page");
+    startTransition(() => router.replace(`/candidates?${next}`, { scroll: false }));
+  }
+
   return (
     <div className="mb-4 space-y-3">
-      <div className="relative max-w-md">
-        <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden />
-        <Input
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="Search by name, skill, or position…"
-          aria-label="Search candidates"
-          className={cn("pl-9", pending && "opacity-70")}
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative w-full max-w-md">
+          <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" aria-hidden />
+          <Input
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="Search by name, skill, or position…"
+            aria-label="Search candidates"
+            className={cn("pl-9", pending && "opacity-70")}
+          />
+        </div>
+        {jobs.length ? (
+          <select
+            value={initialJob}
+            onChange={(e) => setJob(e.target.value)}
+            aria-label="Filter by job"
+            className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700"
+          >
+            <option value="">All jobs</option>
+            {jobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.title}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </div>
 
       <div className="flex flex-wrap gap-2">

@@ -100,7 +100,8 @@ export default async function JobsPage() {
                   </span>
                   <span className="flex items-center gap-1.5">
                     <Users className="h-3.5 w-3.5" aria-hidden />
-                    {job.applications} {job.applications === 1 ? "applicant" : "applicants"}
+                    {job.active_applications}{" "}
+                    {job.active_applications === 1 ? "candidate" : "candidates"} in progress
                   </span>
                   <span className="block font-medium text-slate-600">
                     {formatSalary(job.min_salary, job.max_salary)}

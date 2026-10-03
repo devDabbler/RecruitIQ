@@ -53,7 +53,8 @@ class CandidateUpdate(BaseModel):
     status: Optional[CandidateStatus] = None
     position_applied: Optional[str] = None
     job_id: Optional[int] = None
-    notes: Optional[str] = None
+    # No `notes`: candidates.notes is read-only since ATS Phase C. Notes live
+    # in the notes table (POST /api/candidates/{id}/notes).
 
 
 class CandidateSkill(BaseModel):

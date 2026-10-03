@@ -142,6 +142,11 @@ ROUTE_PERMISSIONS: list[tuple[str, re.Pattern[str], str]] = [
         ("DELETE", r"/api/team/users/[^/]+", DELETE_RECORDS),
         ("PUT", r"/api/team/me", PROFILE_EDIT),
         ("PUT", r"/api/team/me/password", PROFILE_EDIT),
+        # ATS Phase C: notes, tags, bulk moves. (Intake routes are covered above.)
+        ("POST", r"/api/candidates/[^/]+/notes", PIPELINE_MOVE),
+        ("POST", r"/api/candidates/[^/]+/tags", PIPELINE_MOVE),
+        ("DELETE", r"/api/candidates/[^/]+/tags/[^/]+", PIPELINE_MOVE),
+        ("POST", r"/api/applications/bulk/[a-z_]+", PIPELINE_MOVE),
     ]
 ]
 

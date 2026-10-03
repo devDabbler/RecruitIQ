@@ -62,6 +62,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/applications/bulk/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Transition
+         * @description Advance or reject many applications; each one succeeds or fails on its own.
+         *
+         *     Every application runs in its own savepoint, so one that a colleague
+         *     already rejected is reported by name instead of blocking the rest (ATS
+         *     Phase C decision). Declared above the single-application route on
+         *     purpose: that route's `{application_id}` would otherwise capture "bulk"
+         *     and answer 422.
+         */
+        post: operations["bulk_transition_api_applications_bulk__action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications/{application_id}": {
         parameters: {
             query?: never;
@@ -321,9 +347,36 @@ export interface paths {
         put?: never;
         /**
          * Create Candidate
-         * @description Create a new candidate.
+         * @description Create a candidate.
+         *
+         *     With `job_id`, they start that job's pipeline in the same transaction
+         *     (ATS Phase C); an unknown job is a 404 and nothing is created. `notes`
+         *     becomes their first note rather than the read-only `candidates.notes`.
          */
         post: operations["create_candidate_api_candidates__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Candidates Csv
+         * @description The candidate list as CSV, with the same filters as the list (ATS Phase C).
+         *
+         *     Deliberately contains no match scores and no notes. Declared before
+         *     `/{candidate_id}`, which would otherwise read "export.csv" as an id.
+         */
+        get: operations["export_candidates_csv_api_candidates_export_csv_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -379,6 +432,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/candidates/{candidate_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notes
+         * @description The candidate's notes thread, newest first.
+         */
+        get: operations["list_notes_api_candidates__candidate_id__notes_get"];
+        put?: never;
+        /**
+         * Add Note
+         * @description Add a note about the person, one of their applications, or one stage of it.
+         */
+        post: operations["add_note_api_candidates__candidate_id__notes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/candidates/{candidate_id}/parsed-resume": {
         parameters: {
             query?: never;
@@ -414,6 +491,47 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{candidate_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Candidate Tags */
+        get: operations["list_candidate_tags_api_candidates__candidate_id__tags_get"];
+        put?: never;
+        /**
+         * Add Candidate Tag
+         * @description Add one tag, normalized. Adding a tag the candidate already has is a no-op.
+         */
+        post: operations["add_candidate_tag_api_candidates__candidate_id__tags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{candidate_id}/tags/{tag}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove Candidate Tag
+         * @description Remove one tag. Idempotent: removing a tag that is not there is not an error.
+         */
+        delete: operations["remove_candidate_tag_api_candidates__candidate_id__tags__tag__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -966,7 +1084,7 @@ export interface paths {
         put?: never;
         /**
          * Apply To Job
-         * @description Apply to a job.
+         * @description Apply to a job. One application per candidate per job (spec decision 2).
          */
         post: operations["apply_to_job_api_jobs__job_id__apply_post"];
         delete?: never;
@@ -1320,8 +1438,12 @@ export interface paths {
          *     save is a few hundred milliseconds rather than another LLM round trip.
          *
          *     Deliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`
-         *     gate refuses anonymous callers (401) and the demo role (403) before this
-         *     handler runs, so only an administrator can reach it.
+         *     gate refuses anonymous callers (401), the demo role and interviewers (403)
+         *     before this handler runs, so only roles with candidates.add reach it.
+         *
+         *     With `job_id` (ATS Phase C) the candidate also lands at the first stage of
+         *     that job's pipeline; saving the same person to the same job again returns
+         *     the existing application instead of failing.
          */
         post: operations["save_candidate_from_parse_api_resume_save_candidate_post"];
         delete?: never;
@@ -1477,6 +1599,26 @@ export interface paths {
          * @description Generate a detailed match report between a job and candidate (Agentic Zero)
          */
         post: operations["generate_match_report_api_search_match_report_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tags
+         * @description Every tag in use with how many candidates carry it, most used first.
+         */
+        get: operations["list_tags_api_tags_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2042,6 +2184,8 @@ export interface components {
              * Format: binary
              */
             file: string;
+            /** Job Id */
+            job_id?: number | null;
             /** Parsed Data */
             parsed_data: string;
             /** Position Applied */
@@ -2071,6 +2215,39 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /** BulkItemResult */
+        BulkItemResult: {
+            /** Application Id */
+            application_id: number;
+            /** Candidate Name */
+            candidate_name?: string | null;
+            /** Current Stage Key */
+            current_stage_key?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Ok */
+            ok: boolean;
+            /** Status */
+            status?: string | null;
+        };
+        /** BulkTransitionRequest */
+        BulkTransitionRequest: {
+            /** Application Ids */
+            application_ids: number[];
+            /** Note */
+            note?: string | null;
+        };
+        /** BulkTransitionResponse */
+        BulkTransitionResponse: {
+            /** Action */
+            action: string;
+            /** Failed */
+            failed: number;
+            /** Results */
+            results: components["schemas"]["BulkItemResult"][];
+            /** Succeeded */
+            succeeded: number;
         };
         /**
          * CandidateApplicationSummary
@@ -2343,6 +2520,13 @@ export interface components {
          * @enum {string}
          */
         CandidateStatus: "active" | "screening" | "interviewing" | "offered" | "hired" | "rejected" | "withdrawn" | "on_hold";
+        /** CandidateTagsResponse */
+        CandidateTagsResponse: {
+            /** Candidate Id */
+            candidate_id: string;
+            /** Tags */
+            tags: string[];
+        };
         /**
          * CandidateUpdate
          * @description Schema for updating an existing candidate.
@@ -2360,8 +2544,6 @@ export interface components {
             last_name?: string | null;
             /** Location */
             location?: string | null;
-            /** Notes */
-            notes?: string | null;
             /** Phone */
             phone?: string | null;
             /** Position Applied */
@@ -2719,6 +2901,11 @@ export interface components {
          * @description Schema for job response with all details. 'skills' is a list of required skills for the job.
          */
         JobResponse: {
+            /**
+             * Active Applications
+             * @default 0
+             */
+            active_applications: number;
             /** Application Deadline */
             application_deadline?: string | null;
             /**
@@ -2854,6 +3041,37 @@ export interface components {
         MessageOut: {
             /** Message */
             message: string;
+        };
+        /** NoteCreate */
+        NoteCreate: {
+            /** Application Id */
+            application_id?: number | null;
+            /** Body */
+            body: string;
+            /** Stage Key */
+            stage_key?: string | null;
+        };
+        /** NoteOut */
+        NoteOut: {
+            /** Application Id */
+            application_id?: number | null;
+            /** Author Name */
+            author_name?: string | null;
+            /** Body */
+            body: string;
+            /** Candidate Id */
+            candidate_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: number;
+            /** Job Title */
+            job_title?: string | null;
+            /** Stage Name */
+            stage_name?: string | null;
         };
         /** PairTrace */
         PairTrace: {
@@ -3093,6 +3311,13 @@ export interface components {
          * @description API response model for saving a reviewed parse as a candidate.
          */
         SaveCandidateResponse: {
+            /**
+             * Already In Pipeline
+             * @default false
+             */
+            already_in_pipeline: boolean;
+            /** Application Id */
+            application_id?: number | null;
             /** Candidate Id */
             candidate_id?: string | null;
             /**
@@ -3352,6 +3577,18 @@ export interface components {
             key: string;
             /** Name */
             name: string;
+        };
+        /** TagCount */
+        TagCount: {
+            /** Count */
+            count: number;
+            /** Tag */
+            tag: string;
+        };
+        /** TagCreate */
+        TagCreate: {
+            /** Tag */
+            tag: string;
         };
         /** Task */
         Task: {
@@ -3772,6 +4009,41 @@ export interface operations {
             };
         };
     };
+    bulk_transition_api_applications_bulk__action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                action: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTransitionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTransitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_application_api_applications__application_id__get: {
         parameters: {
             query?: never;
@@ -4153,6 +4425,7 @@ export interface operations {
                 status?: components["schemas"]["CandidateStatus"] | null;
                 position?: string | null;
                 skills?: string | null;
+                job_id?: number | null;
                 sort_by?: string;
                 sort_order?: string;
                 page?: number;
@@ -4204,6 +4477,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CandidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_candidates_csv_api_candidates_export_csv_get: {
+        parameters: {
+            query?: {
+                keyword?: string | null;
+                status?: components["schemas"]["CandidateStatus"] | null;
+                job_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The filtered candidate list. No scores. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
                 };
             };
             /** @description Validation Error */
@@ -4336,6 +4642,72 @@ export interface operations {
             };
         };
     };
+    list_notes_api_candidates__candidate_id__notes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_note_api_candidates__candidate_id__notes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NoteCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NoteOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     save_parsed_resume_data_api_candidates__candidate_id__parsed_resume_post: {
         parameters: {
             query?: never;
@@ -4389,6 +4761,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CandidateResumesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_candidate_tags_api_candidates__candidate_id__tags_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateTagsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_candidate_tag_api_candidates__candidate_id__tags_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TagCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateTagsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_candidate_tag_api_candidates__candidate_id__tags__tag__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+                tag: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateTagsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -6199,6 +6669,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_tags_api_tags_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagCount"][];
                 };
             };
         };
