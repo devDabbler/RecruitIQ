@@ -43,6 +43,9 @@ PROFILE_EDIT = "profile.edit"
 # Pilot plan Track 1 #3: reading the audit log. Admin only, and never the
 # demo: the log names real staff accounts and real candidate ids.
 AUDIT_VIEW = "audit.view"
+# Pilot plan Track 1 #5: download everything held about one candidate (a data
+# access request). Admin only: it is the whole record in one file.
+DATA_EXPORT = "candidates.export_data"
 
 ALL_PERMISSIONS = (
     JOBS_WRITE,
@@ -57,6 +60,7 @@ ALL_PERMISSIONS = (
     TEMPLATES_MANAGE,
     PROFILE_EDIT,
     AUDIT_VIEW,
+    DATA_EXPORT,
 )
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {

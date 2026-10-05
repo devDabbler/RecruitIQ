@@ -11,12 +11,14 @@
     "reports.view",
     "templates.manage",
     "profile.edit",
-    "audit.view"
+    "audit.view",
+    "candidates.export_data"
   ],
   "roles": {
     "admin": [
       "audit.view",
       "candidates.add",
+      "candidates.export_data",
       "feedback.submit",
       "jobs.write",
       "pipeline.move",

@@ -6,6 +6,7 @@ import {
   applicationsByCandidate,
   bulkSummary,
   candidateNameFromParse,
+  dataExportHref,
   describeError,
   exportHref,
   normalizeTag,
@@ -58,6 +59,14 @@ describe("exportHref", () => {
     expect(exportHref({ keyword: "sql", jobId: "7" })).toBe(
       "/api/candidates/export?keyword=sql&job_id=7",
     );
+  });
+});
+
+describe("dataExportHref", () => {
+  it("points at the per-candidate download in either format", () => {
+    const id = "6f1c2d3e-0000-4000-8000-000000000001";
+    expect(dataExportHref(id, "json")).toBe(`/api/candidates/${id}/data-export`);
+    expect(dataExportHref(id, "text")).toBe(`/api/candidates/${id}/data-export?format=text`);
   });
 });
 

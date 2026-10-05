@@ -35,11 +35,12 @@ from ..models.models import (
     Resume,
     User,
 )
-from ..services import audit_service, erasure_service, intake_service
+from ..services import audit_service, data_export_service, erasure_service, intake_service
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
 from ..services.access_service import request_user, visible_candidate_ids
+from ..utils.permissions import DATA_EXPORT, require
 
 router = APIRouter(prefix="/candidates")
 
@@ -75,6 +76,45 @@ class ParsedResumeSaveResponse(BaseModel):
     resume_id: int
     candidate_id: str
     candidate_updated: bool
+
+
+class CandidateDataSection(BaseModel):
+    """Every row one table holds about the candidate, as stored."""
+    table: str
+    label: str
+    rows: List[Dict[str, Any]]
+
+
+class CandidateDataOmission(BaseModel):
+    table: str
+    column: str
+    reason: str
+
+
+class CandidateDataReferences(BaseModel):
+    """Names for the ids the rows refer to, keyed by id."""
+    jobs: Dict[str, str]
+    stages: Dict[str, str]
+    staff: Dict[str, str]
+
+
+class CandidateDataAccess(BaseModel):
+    """One audit log entry: when, which role, what kind of access."""
+    occurred_at: Optional[str] = None
+    actor_role: Optional[str] = None
+    action: str
+    subject_type: str
+    endpoint: str
+    status_code: Optional[int] = None
+
+
+class CandidateDataExport(BaseModel):
+    candidate_id: str
+    generated_at: datetime
+    sections: List[CandidateDataSection]
+    omitted: List[CandidateDataOmission]
+    references: CandidateDataReferences
+    access_history: List[CandidateDataAccess]
 
 def format_candidate_skills(candidate, parsed_data=None):
     """Format candidate skills safely, handling various data structures.
@@ -638,6 +678,61 @@ def delete_candidate(
         raise HTTPException(status_code=500, detail="Failed to delete candidate; nothing was removed.")
 
     return {"message": f"Candidate with ID {candidate_id} and all related data deleted successfully"}
+
+
+def _data_export(db: Session, candidate_id: str) -> data_export_service.CandidateExport:
+    try:
+        return data_export_service.export_candidate(db, candidate_id)
+    except erasure_service.CandidateNotFound:
+        raise HTTPException(status_code=404, detail=f"Candidate with ID {candidate_id} not found")
+
+
+def _attachment(filename: str) -> Dict[str, str]:
+    return {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+
+@router.get("/{candidate_id}/export", response_model=CandidateDataExport)
+def export_candidate_data(
+    candidate_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require(DATA_EXPORT)),
+):
+    """Everything held about one candidate, for a data access request (pilot plan Track 1 #5).
+
+    Covers every table a deletion would erase, plus the names those rows
+    refer to and the candidate's access history. Administrators only; each
+    download is recorded in the audit log as an export.
+    """
+    export = _data_export(db, candidate_id)
+    response.headers.update(_attachment(f"{data_export_service.filename_stem(export)}.json"))
+    return {
+        "candidate_id": export.candidate_id,
+        "generated_at": export.generated_at,
+        "sections": export.sections,
+        "omitted": export.omitted,
+        "references": export.references,
+        "access_history": export.access_history,
+    }
+
+
+@router.get(
+    "/{candidate_id}/export.txt",
+    response_class=Response,
+    responses={200: {"content": {"text/plain": {}}, "description": "The same export, as a readable document."}},
+)
+def export_candidate_data_text(
+    candidate_id: str,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require(DATA_EXPORT)),
+) -> Response:
+    """The candidate data export as plain text, for sending to the person."""
+    export = _data_export(db, candidate_id)
+    return Response(
+        content=data_export_service.render_text(export),
+        media_type="text/plain; charset=utf-8",
+        headers=_attachment(f"{data_export_service.filename_stem(export)}.txt"),
+    )
 
 
 @router.get("/", response_model=CandidateSearchResponse)

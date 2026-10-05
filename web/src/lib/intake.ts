@@ -56,6 +56,12 @@ export function exportHref({ keyword, status, jobId }: CandidateExportQuery): st
   return qs ? `/api/candidates/export?${qs}` : "/api/candidates/export";
 }
 
+/** The download link for everything held about one candidate (pilot plan Track 1 #5). */
+export function dataExportHref(candidateId: string, format: "json" | "text"): string {
+  const base = `/api/candidates/${encodeURIComponent(candidateId)}/data-export`;
+  return format === "text" ? `${base}?format=text` : base;
+}
+
 export interface ActiveApplication {
   applicationId: number;
   stageName: string;
