@@ -1,0 +1,11 @@
+[Unit]
+Description=Run RecruitIQ candidate retention daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+RandomizedDelaySec=15min
+# A run missed while the host was down happens at next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

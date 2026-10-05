@@ -122,6 +122,10 @@ class Settings(BaseSettings):
     # refused, and every route outside INTERNAL_ANONYMOUS_PATHS needs a staff
     # session. The web app reads the same variable for its copy and redirects.
     deployment_mode: str = Field(default=os.getenv("DEPLOYMENT_MODE", "public"))
+    # Candidate retention window in days (pilot plan Track 1 #6). 0 or unset
+    # means off. scripts/retention.py erases candidates inactive for longer,
+    # and only in internal mode; see backend/services/retention_service.py.
+    retention_days: int = Field(default=int(os.getenv("RETENTION_DAYS", "0") or 0))
 
     # Outbound email (ATS Phase E). No host or no from address means "no
     # transport": the composer offers the finished text to copy instead of

@@ -33,8 +33,17 @@ as_app "set -a; . $ENV_FILE; set +a; cd $APP/backend && $APP/.venv/bin/alembic u
 
 echo "==> install units + nginx config"
 install -d -o recruitiq -g recruitiq /opt/recruitiq/logs
-cp "$APP"/deploy/recruitiq-api.service "$APP"/deploy/recruitiq-web.service /etc/systemd/system/
+cp "$APP"/deploy/recruitiq-api.service "$APP"/deploy/recruitiq-web.service \
+   "$APP"/deploy/recruitiq-retention.service "$APP"/deploy/recruitiq-retention.timer /etc/systemd/system/
 systemctl daemon-reload
+# The retention timer runs only where a window is configured (Track 1 #6).
+if grep -Eq "^RETENTION_DAYS=[\"']?[1-9]" "$ENV_FILE"; then
+    systemctl enable --now recruitiq-retention.timer >/dev/null 2>&1
+    echo "    retention timer: on"
+else
+    systemctl disable --now recruitiq-retention.timer >/dev/null 2>&1 || true
+    echo "    retention timer: off (RETENTION_DAYS unset)"
+fi
 SITE=/etc/nginx/sites-available/recruitiq.io
 if [ ! -f "$SITE" ]; then
     cp "$APP"/deploy/nginx-recruitiq.conf "$SITE"

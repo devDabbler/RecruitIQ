@@ -211,6 +211,12 @@ sign-in, health, the OpenAPI pages and candidate status links needs a staff
 session, and the shell stops describing itself as a demo. The default,
 `public`, is what recruitiq.io runs.
 
+Set `RETENTION_DAYS` (at least 30) to erase candidates nobody has worked on
+for that long. A daily systemd timer runs `scripts/retention.py`, which uses
+the same complete erasure as an admin's delete and records each one in the
+audit log. Anyone with an application still in progress is held, never
+erased. It only erases in internal mode; `--dry-run` lists what would go.
+
 ---
 
 ## Data
