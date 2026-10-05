@@ -56,8 +56,18 @@ def demo_login(db: Session = Depends(get_db)) -> TokenResponse:
     """Issue a read-only token with no credentials.
 
     Safe to call from anywhere: the token's `demo` role is refused by
-    `enforce_read_only` on every mutating route.
+    `enforce_read_only` on every mutating route. Refused outright on an
+    internal install (DEPLOYMENT_MODE=internal), where there is no demo
+    account and every visitor signs in with staff credentials.
     """
+    if get_settings().is_internal:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Demo sign-in is disabled: this installation runs in internal mode. "
+                "Sign in with your staff account."
+            ),
+        )
     return _token_response(get_or_create_demo_user(db))
 
 

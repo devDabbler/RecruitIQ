@@ -2129,7 +2129,9 @@ export interface paths {
          * @description Issue a read-only token with no credentials.
          *
          *     Safe to call from anywhere: the token's `demo` role is refused by
-         *     `enforce_read_only` on every mutating route.
+         *     `enforce_read_only` on every mutating route. Refused outright on an
+         *     internal install (DEPLOYMENT_MODE=internal), where there is no demo
+         *     account and every visitor signs in with staff credentials.
          */
         post: operations["demo_login_auth_demo_post"];
         delete?: never;

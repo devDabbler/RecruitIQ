@@ -30,6 +30,7 @@ from backend.routers import emails, job_drafts, status_links
 from backend.api.routes import job_routes
 from backend.services.access_service import enforce_interviewer_scope
 from backend.utils.auth import enforce_read_only
+from backend.utils.config import get_settings
 
 # The read-only gate is an application-level dependency, not a per-route one, so
 # a route added later is refused for the demo role by default instead of being
@@ -131,7 +132,9 @@ def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok"}
+    # `deployment_mode` lets the deploy script and the web app confirm which
+    # mode an install runs in without a signed-in session.
+    return {"status": "ok", "deployment_mode": get_settings().deployment_mode}
 
 @app.get("/startup-performance")
 def get_startup_performance():

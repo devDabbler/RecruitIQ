@@ -59,6 +59,43 @@ READ_ONLY_POST_PATHS = frozenset(
     }
 )
 
+# Internal mode (DEPLOYMENT_MODE=internal, a company install holding real
+# candidates): every route needs a staff session except these. Health for the
+# deploy script, login so anyone can sign in, the demo route so it can refuse
+# with an explanation, the OpenAPI pages, and the candidate-facing status
+# page, which a tokenised link opens from an email with no account.
+INTERNAL_ANONYMOUS_PATHS = frozenset(
+    {
+        "/health",
+        "/auth/login",
+        "/auth/demo",
+        "/docs",
+        "/docs/oauth2-redirect",
+        "/redoc",
+        "/openapi.json",
+    }
+)
+INTERNAL_ANONYMOUS_PREFIXES = ("/api/public/",)
+
+
+def anonymous_allowed_in_internal_mode(path: str) -> bool:
+    normalized = path.rstrip("/") or "/"
+    return normalized in INTERNAL_ANONYMOUS_PATHS or normalized.startswith(
+        INTERNAL_ANONYMOUS_PREFIXES
+    )
+
+
+def _demo_disabled() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=(
+            "Demo access is disabled: this installation runs in internal mode. "
+            "Sign in with your staff account."
+        ),
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 # bcrypt silently ignores anything past 72 bytes; truncate explicitly so a long
 # password cannot be confused with a shorter prefix of itself.
 _BCRYPT_MAX_BYTES = 72
@@ -134,6 +171,8 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     claims = decode_access_token(token)
+    if claims.get("role") == ROLE_DEMO and get_settings().is_internal:
+        raise _demo_disabled()
     user = db.query(User).filter(User.id == claims.get("sub")).first()
     if not user:
         raise HTTPException(
@@ -196,7 +235,10 @@ def request_identity(request: Request, db: Session) -> tuple[Optional[str], Opti
             claims = None
         if claims is not None:
             if claims.get("role") == ROLE_DEMO:
-                identity = (ROLE_DEMO, None)
+                # A demo token minted before an install switched to internal
+                # mode must stop working on the next request, not at expiry.
+                if not get_settings().is_internal:
+                    identity = (ROLE_DEMO, None)
             else:
                 user = db.query(User).filter(User.id == claims.get("sub")).first()
                 if user is not None:
@@ -220,9 +262,18 @@ def enforce_read_only(request: Request, db: Session = Depends(get_db)) -> None:
     only where `ROUTE_PERMISSIONS` grants them; a route missing from that
     table is admin-only, so a forgotten route is denied rather than exposed.
     """
+    path = request.url.path.rstrip("/") or "/"
+    if get_settings().is_internal and not anonymous_allowed_in_internal_mode(path):
+        # Internal mode: reads are not public either. The demo dataset is
+        # synthetic, a company's candidates are not (see INTERNAL_ANONYMOUS_PATHS).
+        if request_identity(request, db)[0] is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Sign in required. This installation runs in internal mode.",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     if request.method not in MUTATING_METHODS:
         return
-    path = request.url.path.rstrip("/") or "/"
     if path in READ_ONLY_POST_PATHS:
         return
 

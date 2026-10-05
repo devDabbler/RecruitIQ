@@ -10,6 +10,10 @@ Group=recruitiq
 WorkingDirectory=/opt/recruitiq/app/web
 Environment=NODE_ENV=production
 Environment=API_BASE_URL=http://127.0.0.1:8020
+# Optional, secret-free settings the web process needs, e.g.
+# DEPLOYMENT_MODE=internal on a company install (must match the API's value
+# in /etc/recruitiq/env). Absent on the public demo.
+EnvironmentFile=-/etc/recruitiq/web.env
 ExecStart=/usr/bin/node scripts/start-standalone.mjs 3001
 Restart=on-failure
 RestartSec=3

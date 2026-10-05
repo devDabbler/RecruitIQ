@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-import { INTRO_DATA_NOTE, INTRO_SUMMARY, INTRO_TITLE, TOUR_STEPS } from "@/lib/dashboard-intro";
+import { DEPLOYMENT_MODE } from "@/lib/config";
+import { INTRO_SUMMARY, INTRO_TITLE, TOUR_STEPS } from "@/lib/dashboard-intro";
+import { dashboardDataNote } from "@/lib/deployment";
 
 /**
  * What RecruitIQ is and where to start, above the live numbers. Rendered on
@@ -21,7 +23,7 @@ export function DashboardIntro() {
         {INTRO_TITLE}
       </h1>
       <p className="mt-2 max-w-3xl text-base text-slate-700">{INTRO_SUMMARY}</p>
-      <p className="mt-2 text-sm text-slate-500">{INTRO_DATA_NOTE}</p>
+      <p className="mt-2 text-sm text-slate-500">{dashboardDataNote(DEPLOYMENT_MODE)}</p>
 
       <h2 className="mt-6 mb-3 text-xs font-semibold tracking-wide text-slate-500 uppercase">
         Quick tour

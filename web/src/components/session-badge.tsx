@@ -2,6 +2,8 @@ import Link from "next/link";
 import { Eye, ShieldCheck } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
+import { DEPLOYMENT_MODE, IS_INTERNAL } from "@/lib/config";
+import { signedOutLabel } from "@/lib/deployment";
 import { roleLabel } from "@/lib/permissions";
 import { getUser } from "@/lib/session";
 
@@ -25,7 +27,8 @@ export function SessionBadgeFallback() {
  * Says which account the visitor is on and, for the demo role, that writes will
  * be refused. Honest labelling: the gate is `enforce_read_only` in the backend,
  * so the banner describes a real restriction rather than implying the UI is
- * enforcing one (spec §2).
+ * enforcing one (spec §2). On an internal install there is no demo account, so
+ * a missing session is simply "signed out" (seen on the sign-in page itself).
  */
 export async function SessionBadge() {
   const user = await getUser();
@@ -35,10 +38,14 @@ export async function SessionBadge() {
       <span className="flex items-center gap-3 whitespace-nowrap">
         <span
           className="flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
-          title="Read-only demo account. The API refuses writes for this role."
+          title={
+            IS_INTERNAL
+              ? "No session. Sign in with your staff account."
+              : "Read-only demo account. The API refuses writes for this role."
+          }
         >
           <Eye className="h-3.5 w-3.5" aria-hidden />
-          Read-only demo
+          {signedOutLabel(DEPLOYMENT_MODE)}
         </span>
         <Link
           href="/login"

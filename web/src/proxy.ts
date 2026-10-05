@@ -11,8 +11,8 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 
-import { API_BASE_URL, COOKIE_SECURE, SESSION_COOKIE } from "./lib/config";
-import { isPublicPath } from "./lib/public-paths";
+import { API_BASE_URL, COOKIE_SECURE, DEPLOYMENT_MODE, SESSION_COOKIE } from "./lib/config";
+import { anonymousAction, loginPath } from "./lib/deployment";
 
 interface DemoTokenResponse {
   access_token: string;
@@ -28,15 +28,20 @@ export const config = {
 };
 
 export async function proxy(request: NextRequest) {
-  // A candidate opening their status link must never be handed a session:
-  // the page reads nothing private, and a demo token minted for someone
-  // outside the company would be the wrong default (ATS Phase E).
-  if (isPublicPath(request.nextUrl.pathname)) {
+  if (request.cookies.has(SESSION_COOKIE)) {
     return NextResponse.next();
   }
 
-  if (request.cookies.has(SESSION_COOKIE)) {
-    return NextResponse.next();
+  // A candidate opening their status link must never be handed a session:
+  // the page reads nothing private, and a demo token minted for someone
+  // outside the company would be the wrong default (ATS Phase E). On an
+  // internal install (DEPLOYMENT_MODE=internal) nobody is signed in silently:
+  // a cookie-less visitor goes to the sign-in page instead.
+  const { pathname, search } = request.nextUrl;
+  const action = anonymousAction(pathname, DEPLOYMENT_MODE);
+  if (action === "pass") return NextResponse.next();
+  if (action === "login") {
+    return NextResponse.redirect(new URL(loginPath(pathname, search), request.url));
   }
 
   let token: string | null = null;
@@ -58,6 +63,11 @@ export async function proxy(request: NextRequest) {
       // browser drops it exactly when the API would start rejecting it, so the
       // next request mints a fresh one instead of sending a dead token.
       maxAge = data.expires_in ?? maxAge;
+    } else if (response.status === 403) {
+      // The API runs in internal mode but this process was not told. The API
+      // is the gate, so follow it: sign-in page, not a shell full of 401s.
+      if (anonymousAction(pathname, "internal") === "pass") return NextResponse.next();
+      return NextResponse.redirect(new URL(loginPath(pathname, search), request.url));
     }
   } catch {
     // The API being down is not a reason to refuse to render. Pages handle a
