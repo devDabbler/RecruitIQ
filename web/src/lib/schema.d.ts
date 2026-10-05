@@ -504,7 +504,10 @@ export interface paths {
         post?: never;
         /**
          * Delete Candidate
-         * @description Delete a candidate and all related records avoiding problematic ORM relationships.
+         * @description Erase a candidate completely: every related row, stored resume file and cache entry.
+         *
+         *     See backend/services/erasure_service.py for the full list. The database
+         *     part is all or nothing.
          */
         delete: operations["delete_candidate_api_candidates__candidate_id__delete"];
         options?: never;

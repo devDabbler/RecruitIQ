@@ -7858,7 +7858,7 @@
     },
     "/api/candidates/{candidate_id}": {
       "delete": {
-        "description": "Delete a candidate and all related records avoiding problematic ORM relationships.",
+        "description": "Erase a candidate completely: every related row, stored resume file and cache entry.\n\nSee backend/services/erasure_service.py for the full list. The database\npart is all or nothing.",
         "operationId": "delete_candidate_api_candidates__candidate_id__delete",
         "parameters": [
           {

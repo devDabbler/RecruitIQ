@@ -35,7 +35,7 @@ from ..models.models import (
     Resume,
     User,
 )
-from ..services import intake_service
+from ..services import erasure_service, intake_service
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
@@ -611,91 +611,30 @@ async def update_candidate(
     return db_candidate
 
 @router.delete("/{candidate_id}", response_model=MessageResponse)
-async def delete_candidate(
+def delete_candidate(
     candidate_id: str,
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service)
 ):
-    """Delete a candidate and all related records avoiding problematic ORM relationships."""
-    from sqlalchemy.exc import SQLAlchemyError
-    from sqlalchemy import text
-    
+    """Erase a candidate completely: every related row, stored resume file and cache entry.
+
+    See backend/services/erasure_service.py for the full list. The database
+    part is all or nothing.
+    """
     try:
-        # Check candidate exists using raw SQL to avoid loading relationships
-        result = db.execute(text("SELECT id FROM candidates WHERE id = :candidate_id"), 
-                          {"candidate_id": candidate_id})
-        if not result.fetchone():
-            raise HTTPException(
-                status_code=404,
-                detail=f"Candidate with ID {candidate_id} not found"
-            )
-
-        logging.info(f"Starting deletion of candidate {candidate_id}")
-
-        # Delete essential records with individual error handling to prevent transaction abort
-        essential_operations = [
-            ("DELETE FROM resumes WHERE candidate_id = :candidate_id", "resumes"),
-            ("DELETE FROM candidate_skills WHERE candidate_id = :candidate_id", "skills"),
-            ("DELETE FROM candidates WHERE id = :candidate_id", "candidate")
-        ]
-        
-        for sql, description in essential_operations:
-            try:
-                result = db.execute(text(sql), {"candidate_id": candidate_id})
-                logging.info(f"Deleted {result.rowcount} {description} for candidate {candidate_id}")
-            except Exception as e:
-                logging.warning(f"Failed to delete {description}: {str(e)}")
-                # If any essential operation fails, rollback and restart transaction
-                db.rollback()
-                logging.info(f"Restarting transaction after {description} failure...")
-                
-                # Re-run successful operations in new transaction
-                for retry_sql, retry_desc in essential_operations:
-                    if retry_desc == description:
-                        break  # Skip the one that failed and continue with remaining
-                    try:
-                        result = db.execute(text(retry_sql), {"candidate_id": candidate_id})
-                        logging.info(f"Re-deleted {result.rowcount} {retry_desc} for candidate {candidate_id}")
-                    except Exception as retry_e:
-                        logging.warning(f"Retry failed for {retry_desc}: {str(retry_e)}")
-                
-                # Try the failed operation again (might work in new transaction)
-                try:
-                    result = db.execute(text(sql), {"candidate_id": candidate_id})
-                    logging.info(f"Deleted {result.rowcount} {description} for candidate {candidate_id} (retry)")
-                except Exception as retry_e:
-                    logging.error(f"{description} deletion failed again: {str(retry_e)}")
-                    if description == "candidate":  # Critical failure
-                        raise HTTPException(status_code=500, detail=f"Failed to delete candidate: {str(retry_e)}")
-        
-        try:
-            db.commit()
-            logging.info(f"Successfully deleted candidate {candidate_id} (main transaction)")
-        except Exception as e:
-            db.rollback()
-            raise HTTPException(status_code=500, detail=f"Failed to commit deletion: {str(e)}")
-        
-        # Optional cleanup in separate transaction (won't affect main deletion)
-        try:
-            result = db.execute(text("DELETE FROM candidate_pitches WHERE candidate_id = :candidate_id"),
-                              {"candidate_id": candidate_id})
-            db.commit()
-            logging.info(f"Cleaned up {result.rowcount} pitches for candidate {candidate_id}")
-        except Exception as e:
-            db.rollback()
-            logging.info(f"Pitch cleanup failed (table may not exist): {str(e)}")
-        
-        return {"message": f"Candidate with ID {candidate_id} and all related data deleted successfully"}
-            
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except SQLAlchemyError as e:
-        logging.error(f"Database error during deletion of candidate {candidate_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error during deletion: {str(e)}")
+        erasure_service.erase_candidate(
+            db, candidate_id, storage=getattr(resume_service, "storage_service", None)
+        )
+    except erasure_service.CandidateNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Candidate with ID {candidate_id} not found"
+        )
     except Exception as e:
-        logging.error(f"Unexpected error during deletion of candidate {candidate_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+        logging.error(f"Erasure of candidate {candidate_id} failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete candidate; nothing was removed.")
+
+    return {"message": f"Candidate with ID {candidate_id} and all related data deleted successfully"}
 
 
 @router.get("/", response_model=CandidateSearchResponse)

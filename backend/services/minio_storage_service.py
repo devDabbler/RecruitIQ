@@ -310,6 +310,31 @@ class MinioStorageService:
             logger.error(f"Error generating pre-signed URL for file {file_id}: {e}")
             return ""
 
+    def delete_document(self, file_id: str) -> bool:
+        """Remove every object stored under a file id. False if none existed."""
+        from backend.services.erasure_service import is_safe_file_id
+
+        if not is_safe_file_id(file_id):
+            raise ValueError(f"Refusing to delete non-UUID file id {file_id!r}")
+        if not self._initialized:
+            self._initialize_client()
+        names = [
+            obj.object_name
+            for obj in self.client.list_objects(self.bucket_name, prefix=f"{file_id}/", recursive=True)
+        ]
+        # upload_file() stores a bare file_id with no folder.
+        names.extend(
+            obj.object_name
+            for obj in self.client.list_objects(self.bucket_name, prefix=file_id)
+            if obj.object_name == file_id
+        )
+        for name in names:
+            self.client.remove_object(self.bucket_name, name)
+        if names:
+            logger.info(f"Deleted {len(names)} MinIO object(s) for {file_id}")
+        return bool(names)
+
+
 def get_minio_storage_service() -> MinioStorageService:
     """Factory function to get a MinioStorageService instance."""
     return MinioStorageService()
