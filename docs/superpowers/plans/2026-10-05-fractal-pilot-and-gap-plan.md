@@ -35,6 +35,7 @@ self-contained).
 ## Track 2 - Product gaps from the Slate review
 
 Ordered by demo value and by what makes the Fractal pitch stronger.
+Phased execution plan: `2026-10-05-track-2-product-gaps.md` (one /st session per phase).
 Numbers reference the gap table in the audit.
 
 **Wave 1 (the headline features):**
