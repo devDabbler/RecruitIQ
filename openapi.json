@@ -1121,6 +1121,193 @@
         "title": "CandidateCreate",
         "type": "object"
       },
+      "CandidateDataAccess": {
+        "description": "One audit log entry: when, which role, what kind of access.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Role"
+          },
+          "endpoint": {
+            "title": "Endpoint",
+            "type": "string"
+          },
+          "occurred_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Occurred At"
+          },
+          "status_code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Code"
+          },
+          "subject_type": {
+            "title": "Subject Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "subject_type",
+          "endpoint"
+        ],
+        "title": "CandidateDataAccess",
+        "type": "object"
+      },
+      "CandidateDataExport": {
+        "properties": {
+          "access_history": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateDataAccess"
+            },
+            "title": "Access History",
+            "type": "array"
+          },
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "omitted": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateDataOmission"
+            },
+            "title": "Omitted",
+            "type": "array"
+          },
+          "references": {
+            "$ref": "#/components/schemas/CandidateDataReferences"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateDataSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "generated_at",
+          "sections",
+          "omitted",
+          "references",
+          "access_history"
+        ],
+        "title": "CandidateDataExport",
+        "type": "object"
+      },
+      "CandidateDataOmission": {
+        "properties": {
+          "column": {
+            "title": "Column",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "column",
+          "reason"
+        ],
+        "title": "CandidateDataOmission",
+        "type": "object"
+      },
+      "CandidateDataReferences": {
+        "description": "Names for the ids the rows refer to, keyed by id.",
+        "properties": {
+          "jobs": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Jobs",
+            "type": "object"
+          },
+          "staff": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Staff",
+            "type": "object"
+          },
+          "stages": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Stages",
+            "type": "object"
+          }
+        },
+        "required": [
+          "jobs",
+          "stages",
+          "staff"
+        ],
+        "title": "CandidateDataReferences",
+        "type": "object"
+      },
+      "CandidateDataSection": {
+        "description": "Every row one table holds about the candidate, as stored.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "type": "object"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "table": {
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "label",
+          "rows"
+        ],
+        "title": "CandidateDataSection",
+        "type": "object"
+      },
       "CandidateInteraction": {
         "description": "Schema for tracking interactions with a candidate.",
         "properties": {
@@ -8272,6 +8459,88 @@
           }
         },
         "summary": "Update Candidate",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/api/candidates/{candidate_id}/export": {
+      "get": {
+        "description": "Everything held about one candidate, for a data access request (pilot plan Track 1 #5).\n\nCovers every table a deletion would erase, plus the names those rows\nrefer to and the candidate's access history. Administrators only; each\ndownload is recorded in the audit log as an export.",
+        "operationId": "export_candidate_data_api_candidates__candidate_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandidateDataExport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Candidate Data",
+        "tags": [
+          "candidates"
+        ]
+      }
+    },
+    "/api/candidates/{candidate_id}/export.txt": {
+      "get": {
+        "description": "The candidate data export as plain text, for sending to the person.",
+        "operationId": "export_candidate_data_text_api_candidates__candidate_id__export_txt_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "candidate_id",
+            "required": true,
+            "schema": {
+              "title": "Candidate Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {}
+            },
+            "description": "The same export, as a readable document."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Export Candidate Data Text",
         "tags": [
           "candidates"
         ]

@@ -4,6 +4,7 @@ import table from "./role-permissions.json";
 import {
   AUDIT_VIEW,
   CANDIDATES_ADD,
+  DATA_EXPORT,
   DELETE_RECORDS,
   FEEDBACK_SUBMIT,
   JOBS_WRITE,
@@ -31,6 +32,9 @@ describe("can", () => {
     expect(can("admin", DELETE_RECORDS)).toBe(true);
     expect(can("demo", CANDIDATES_ADD)).toBe(false);
     expect(can("demo", SCORE_BEFORE_FEEDBACK)).toBe(true);
+    expect(can("admin", DATA_EXPORT)).toBe(true);
+    expect(can("hiring_manager", DATA_EXPORT)).toBe(false);
+    expect(can("demo", DATA_EXPORT)).toBe(false);
   });
 
   it("grants nothing to a missing or unknown role", () => {
@@ -53,6 +57,7 @@ describe("can", () => {
       TEMPLATES_MANAGE,
       PROFILE_EDIT,
       AUDIT_VIEW,
+      DATA_EXPORT,
     ];
     expect([...declared].sort()).toEqual([...table.permissions].sort());
   });

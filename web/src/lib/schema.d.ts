@@ -532,6 +532,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/candidates/{candidate_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Candidate Data
+         * @description Everything held about one candidate, for a data access request (pilot plan Track 1 #5).
+         *
+         *     Covers every table a deletion would erase, plus the names those rows
+         *     refer to and the candidate's access history. Administrators only; each
+         *     download is recorded in the audit log as an export.
+         */
+        get: operations["export_candidate_data_api_candidates__candidate_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{candidate_id}/export.txt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Candidate Data Text
+         * @description The candidate data export as plain text, for sending to the person.
+         */
+        get: operations["export_candidate_data_text_api_candidates__candidate_id__export_txt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/candidates/{candidate_id}/notes": {
         parameters: {
             query?: never;
@@ -2587,6 +2631,80 @@ export interface components {
              * @default active
              */
             status: components["schemas"]["CandidateStatus"] | string;
+        };
+        /**
+         * CandidateDataAccess
+         * @description One audit log entry: when, which role, what kind of access.
+         */
+        CandidateDataAccess: {
+            /** Action */
+            action: string;
+            /** Actor Role */
+            actor_role?: string | null;
+            /** Endpoint */
+            endpoint: string;
+            /** Occurred At */
+            occurred_at?: string | null;
+            /** Status Code */
+            status_code?: number | null;
+            /** Subject Type */
+            subject_type: string;
+        };
+        /** CandidateDataExport */
+        CandidateDataExport: {
+            /** Access History */
+            access_history: components["schemas"]["CandidateDataAccess"][];
+            /** Candidate Id */
+            candidate_id: string;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Omitted */
+            omitted: components["schemas"]["CandidateDataOmission"][];
+            references: components["schemas"]["CandidateDataReferences"];
+            /** Sections */
+            sections: components["schemas"]["CandidateDataSection"][];
+        };
+        /** CandidateDataOmission */
+        CandidateDataOmission: {
+            /** Column */
+            column: string;
+            /** Reason */
+            reason: string;
+            /** Table */
+            table: string;
+        };
+        /**
+         * CandidateDataReferences
+         * @description Names for the ids the rows refer to, keyed by id.
+         */
+        CandidateDataReferences: {
+            /** Jobs */
+            jobs: {
+                [key: string]: string;
+            };
+            /** Staff */
+            staff: {
+                [key: string]: string;
+            };
+            /** Stages */
+            stages: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * CandidateDataSection
+         * @description Every row one table holds about the candidate, as stored.
+         */
+        CandidateDataSection: {
+            /** Label */
+            label: string;
+            /** Rows */
+            rows: Record<string, never>[];
+            /** Table */
+            table: string;
         };
         /**
          * CandidateInteraction
@@ -5490,6 +5608,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["backend__routers__candidates__MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_candidate_data_api_candidates__candidate_id__export_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CandidateDataExport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_candidate_data_text_api_candidates__candidate_id__export_txt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                candidate_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The same export, as a readable document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": unknown;
                 };
             };
             /** @description Validation Error */

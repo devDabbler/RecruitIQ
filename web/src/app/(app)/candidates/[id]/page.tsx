@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { ArrowLeft, FileText, Mail, MapPin, Phone } from "lucide-react";
+import { ArrowLeft, Download, FileText, Mail, MapPin, Phone } from "lucide-react";
 
 import { ApplicationOutreach } from "@/components/application-outreach";
 import { ApplicationTimeline } from "@/components/application-timeline";
@@ -33,6 +33,8 @@ import {
 } from "@/lib/data";
 import { fullName, initials } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
+import { dataExportHref } from "@/lib/intake";
+import { can, DATA_EXPORT } from "@/lib/permissions";
 import { canWrite, getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -190,6 +192,37 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
               )}
             </CardContent>
           </Card>
+
+          {can(user?.role, DATA_EXPORT) ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <Download className="h-4 w-4" aria-hidden />
+                  Personal data
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-slate-500">
+                  Everything held about this person, for a data access request. Each download is
+                  recorded in the audit log.
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <a
+                    href={dataExportHref(id, "text")}
+                    className="font-medium text-indigo-600 hover:underline"
+                  >
+                    Readable text
+                  </a>
+                  <a
+                    href={dataExportHref(id, "json")}
+                    className="font-medium text-indigo-600 hover:underline"
+                  >
+                    JSON
+                  </a>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         <div className="space-y-6 lg:col-span-2">
