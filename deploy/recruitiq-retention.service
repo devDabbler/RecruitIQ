@@ -1,0 +1,18 @@
+[Unit]
+Description=RecruitIQ candidate retention (erases candidates inactive past RETENTION_DAYS)
+After=network-online.target postgresql.service
+
+[Service]
+Type=oneshot
+User=recruitiq
+Group=recruitiq
+WorkingDirectory=/opt/recruitiq/app
+EnvironmentFile=/etc/recruitiq/env
+ExecStart=/opt/recruitiq/app/.venv/bin/python scripts/retention.py
+
+# Shared host with a latency-sensitive trading system: a nightly batch job
+# yields CPU and IO and is capped well below the API's own limit.
+Nice=15
+IOSchedulingClass=idle
+MemoryMax=512M
+NoNewPrivileges=true
