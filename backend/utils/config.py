@@ -1,13 +1,16 @@
 import os
 import secrets
 from typing import Optional, ClassVar
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict, DotEnvSettingsSource
 from dotenv import find_dotenv
 import logging
 
 # Load .env from the root directory
 # load_dotenv(find_dotenv()) # REMOVED - Rely on Pydantic model_config
+
+DEPLOYMENT_MODES = frozenset({"public", "internal"})
+
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables using pydantic-settings."""
@@ -113,6 +116,12 @@ class Settings(BaseSettings):
     jwt_algorithm: str = Field(default=os.getenv("JWT_ALGORITHM", "HS256"))
     jwt_expiry_hours: int = Field(default=int(os.getenv("JWT_EXPIRY_HOURS", "24")))
     demo_user_email: str = Field(default=os.getenv("DEMO_USER_EMAIL", "demo@recruitiq.local"))
+    # `public` (default) is the portfolio demo: a visitor is signed in as the
+    # read-only demo account and every read answers anonymously. `internal` is
+    # a company install holding real candidates: no demo login, demo tokens are
+    # refused, and every route outside INTERNAL_ANONYMOUS_PATHS needs a staff
+    # session. The web app reads the same variable for its copy and redirects.
+    deployment_mode: str = Field(default=os.getenv("DEPLOYMENT_MODE", "public"))
 
     # Outbound email (ATS Phase E). No host or no from address means "no
     # transport": the composer offers the finished text to copy instead of
@@ -144,6 +153,20 @@ class Settings(BaseSettings):
         env_file_encoding='utf-8',
         extra='ignore'  # Ignore extra fields from .env
     )
+
+    @field_validator("deployment_mode")
+    @classmethod
+    def _check_deployment_mode(cls, value: str) -> str:
+        mode = (value or "public").strip().lower()
+        if mode not in DEPLOYMENT_MODES:
+            raise ValueError(
+                f"DEPLOYMENT_MODE must be one of {sorted(DEPLOYMENT_MODES)}, got {value!r}"
+            )
+        return mode
+
+    @property
+    def is_internal(self) -> bool:
+        return self.deployment_mode == "internal"
 
 
 # Singleton instance of settings

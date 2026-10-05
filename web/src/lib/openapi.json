@@ -12328,7 +12328,7 @@
     },
     "/auth/demo": {
       "post": {
-        "description": "Issue a read-only token with no credentials.\n\nSafe to call from anywhere: the token's `demo` role is refused by\n`enforce_read_only` on every mutating route.",
+        "description": "Issue a read-only token with no credentials.\n\nSafe to call from anywhere: the token's `demo` role is refused by\n`enforce_read_only` on every mutating route. Refused outright on an\ninternal install (DEPLOYMENT_MODE=internal), where there is no demo\naccount and every visitor signs in with staff credentials.",
         "operationId": "demo_login_auth_demo_post",
         "responses": {
           "200": {

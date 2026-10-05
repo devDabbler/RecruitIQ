@@ -147,6 +147,7 @@
   },
   "health": {
     "shape": {
+      "deployment_mode": "str",
       "status": "str"
     },
     "status": 200

@@ -204,6 +204,13 @@ search key is set.
 The trade-off is parse accuracy: the local 8b model scored 86% of fields in
 the eval against 99% for the hosted winner (`evals/results.md`).
 
+An install that holds real candidates also sets `DEPLOYMENT_MODE=internal`
+for both the API and the web process. That turns off the credential-less
+demo sign-in and anonymous reads: every page and every API route except
+sign-in, health, the OpenAPI pages and candidate status links needs a staff
+session, and the shell stops describing itself as a demo. The default,
+`public`, is what recruitiq.io runs.
+
 ---
 
 ## Data

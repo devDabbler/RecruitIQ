@@ -1,5 +1,7 @@
 import { LoginForm } from "@/components/login-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DEPLOYMENT_MODE } from "@/lib/config";
+import { loginIntro, loginTitle } from "@/lib/deployment";
 
 export const metadata = { title: "Sign in · RecruitIQ" };
 
@@ -10,9 +12,10 @@ function safeNext(raw: string | string[] | undefined): string {
 }
 
 /**
- * Administrator sign-in. Visitors never need this page: the proxy signs them in
- * as the read-only demo user automatically. Signing in here unlocks writes,
- * like saving a parsed resume as a candidate, and the admin-only screens.
+ * Staff sign-in. On the public demo visitors never need this page: the proxy
+ * signs them in as the read-only demo user automatically, and signing in here
+ * unlocks writes and the admin-only screens. On an internal install this is
+ * the front door: the proxy sends every signed-out visitor here.
  */
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const next = safeNext((await searchParams).next);
@@ -21,13 +24,10 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
     <div className="mx-auto max-w-sm pt-12">
       <Card>
         <CardHeader>
-          <CardTitle>Administrator sign-in</CardTitle>
+          <CardTitle>{loginTitle(DEPLOYMENT_MODE)}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-slate-500">
-            Visitors browse as the read-only demo automatically. Sign in to save
-            candidates and change data.
-          </p>
+          <p className="text-sm text-slate-500">{loginIntro(DEPLOYMENT_MODE)}</p>
           <LoginForm next={next} />
         </CardContent>
       </Card>

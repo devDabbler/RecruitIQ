@@ -12,7 +12,7 @@ import {
 } from "@/lib/api-reference";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "API reference Â· RecruitIQ" };
+export const metadata = { title: "API reference · RecruitIQ" };
 
 const groups = buildGroups(committedSpec as unknown as OpenApiSpec);
 const endpointCount = groups.reduce((n, group) => n + group.endpoints.length, 0);

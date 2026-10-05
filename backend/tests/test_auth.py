@@ -322,3 +322,71 @@ def test_a_role_change_takes_effect_on_the_next_request(db_session, staff_users,
     db_session.delete(user)
     db_session.commit()
     assert client.put("/api/jobs/999999", json={}, headers=headers).status_code == 401
+
+
+# --- internal deployment mode (Fractal pilot, Track 1 #1) ---------------------
+#
+# DEPLOYMENT_MODE=internal is a company install holding real candidates. The
+# public demo's conveniences (credential-less demo tokens, anonymous reads) are
+# exactly what must not exist there. These tests flip the live settings object
+# per test; the default suite runs in public mode, so everything above still
+# describes recruitiq.io.
+
+
+@pytest.fixture
+def internal_mode(monkeypatch):
+    monkeypatch.setattr(get_settings(), "deployment_mode", "internal")
+
+
+def test_default_mode_is_public():
+    assert get_settings().deployment_mode == "public"
+    assert get_settings().is_internal is False
+
+
+def test_health_reports_deployment_mode(client, internal_mode):
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["deployment_mode"] == "internal"
+
+
+def test_internal_mode_refuses_demo_login(client, internal_mode):
+    response = client.post("/auth/demo")
+    assert response.status_code == 403
+    assert "internal mode" in response.json()["detail"]
+
+
+def test_internal_mode_refuses_tokens_minted_before_the_switch(demo_client, internal_mode):
+    """A demo token issued in public mode dies on the next request, not at expiry."""
+    assert demo_client.get("/auth/me").status_code == 401
+    assert demo_client.get("/api/candidates").status_code == 401
+    assert demo_client.get("/api/transparency/policy").status_code == 401
+
+
+def test_internal_mode_refuses_anonymous_reads(client, internal_mode):
+    for path in ("/api/candidates", "/api/jobs", "/api/transparency/policy"):
+        response = client.get(path)
+        assert response.status_code == 401, (path, response.status_code)
+        assert "internal mode" in response.json()["detail"]
+
+
+def test_internal_mode_keeps_sign_in_health_and_candidate_status_open(client, admin_user, internal_mode):
+    assert client.get("/health").status_code == 200
+    login = client.post(
+        "/auth/login", json={"email": admin_user.email, "password": ADMIN_PASSWORD}
+    )
+    assert login.status_code == 200
+    # A candidate's tokenised status page needs no account. An unknown token
+    # is a 404 from the handler, which proves the gate let the request through.
+    assert client.get("/api/public/status/not-a-real-token").status_code == 404
+    assert client.get("/openapi.json").status_code == 200
+
+
+def test_internal_mode_staff_sessions_work_normally(admin_client, internal_mode):
+    assert admin_client.get("/auth/me").status_code == 200
+    assert admin_client.get("/api/candidates").status_code == 200
+
+
+def test_public_mode_is_unchanged_after_an_internal_test(client):
+    """The fixture restores the mode; the public demo contract still holds."""
+    assert client.post("/auth/demo").status_code == 200
+    assert client.get("/api/candidates").status_code == 200
