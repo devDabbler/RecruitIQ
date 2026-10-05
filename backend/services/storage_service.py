@@ -110,3 +110,18 @@ class StorageService:
         async with aiofiles.open(metadata_path, 'r') as f:
             content = await f.read()
             return json.loads(content)
+
+    def delete_document(self, file_id: str) -> bool:
+        """Remove a stored document and its metadata. False if it was not there."""
+        from backend.services.erasure_service import is_safe_file_id
+
+        if not is_safe_file_id(file_id):
+            raise ValueError(f"Refusing to delete non-UUID file id {file_id!r}")
+        doc_dir = os.path.join(self.storage_dir, file_id)
+        if not os.path.isdir(doc_dir):
+            return False
+        import shutil
+
+        shutil.rmtree(doc_dir)
+        logger.info(f"Deleted stored document {file_id}")
+        return True
