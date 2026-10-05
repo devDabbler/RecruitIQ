@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index, Boolean, SmallInteger, CheckConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Table, UniqueConstraint, event, Float, Index, Boolean, SmallInteger, CheckConstraint, BigInteger, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from backend.utils.database import Base
@@ -698,3 +699,27 @@ class EmailLog(Base):
     error = Column(Text, nullable=True)
     sent_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
+class AuditEvent(Base):
+    """One staff request against candidate data (pilot plan Track 1 #3).
+
+    Written by backend/services/audit_service.py, never by handlers directly.
+    Identifiers and field names only, never values. Append-only: a trigger
+    from migration a9c3e5f7b8d2 refuses UPDATE and DELETE. No foreign keys,
+    so an event outlives the candidate and the account it names.
+    """
+    __tablename__ = "audit_events"
+
+    id = Column(BigInteger, primary_key=True)
+    occurred_at = Column(DateTime, nullable=False, server_default=func.now())
+    actor_id = Column(String(36), nullable=True)
+    actor_role = Column(String(20), nullable=True)
+    action = Column(String(16), nullable=False)  # view, create, update, delete, export, process
+    subject_type = Column(String(32), nullable=False)
+    subject_id = Column(String(64), nullable=True)
+    candidate_id = Column(String(36), nullable=True)
+    endpoint = Column(String(200), nullable=False)  # "METHOD /route/{template}", never the raw URL
+    detail = Column(String(64), nullable=True)
+    fields = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)  # SQLite in two legacy tests
+    status_code = Column(SmallInteger, nullable=False)

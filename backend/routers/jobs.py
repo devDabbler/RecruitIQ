@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import desc, asc, func
 from typing import Optional, List, Dict, Any
@@ -539,10 +539,13 @@ async def track_job_view(
 def apply_to_job(
     job_id: int,
     application: JobApplicationCreate,
+    http_request: Request,
     db: Session = Depends(get_db)
 ):
     """Apply to a job. One application per candidate per job (spec decision 2)."""
-    from ..services import intake_service
+    from ..services import audit_service, intake_service
+
+    audit_service.note(http_request, candidate_ids=[application.candidate_id])
 
     logger = logging.getLogger("backend.routers.jobs")
     try:
@@ -575,9 +578,13 @@ def apply_to_job(
 async def save_job(
     job_id: int,
     saved_job: SavedJobCreate,
+    http_request: Request,
     db: Session = Depends(get_db)
 ):
     """Save a job for later."""
+    from ..services import audit_service
+
+    audit_service.note(http_request, candidate_ids=[saved_job.candidate_id])
     logger = logging.getLogger("backend.routers.jobs")
     
     # Check if job exists

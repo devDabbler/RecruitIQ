@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import table from "./role-permissions.json";
 import {
+  AUDIT_VIEW,
   CANDIDATES_ADD,
   DELETE_RECORDS,
   FEEDBACK_SUBMIT,
@@ -51,6 +52,7 @@ describe("can", () => {
       REPORTS_VIEW,
       TEMPLATES_MANAGE,
       PROFILE_EDIT,
+      AUDIT_VIEW,
     ];
     expect([...declared].sort()).toEqual([...table.permissions].sort());
   });

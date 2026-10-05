@@ -10,10 +10,12 @@
     "score.before_feedback",
     "reports.view",
     "templates.manage",
-    "profile.edit"
+    "profile.edit",
+    "audit.view"
   ],
   "roles": {
     "admin": [
+      "audit.view",
       "candidates.add",
       "feedback.submit",
       "jobs.write",

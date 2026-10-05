@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Request
 from sqlalchemy.orm import Session
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 import logging
 
+from ..services import audit_service
 from ..utils.database import get_db
 from ..models.models import CandidatePitch, Candidate, Job
 
@@ -12,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 @router.post("/save")
 async def save_candidate_pitch(
+    request: Request,
     title: str = Body(...),
     content: str = Body(...),
     user_id: str = Body(...),
@@ -24,6 +26,7 @@ async def save_candidate_pitch(
     """
     Save a candidate pitch to the user's saved pitches.
     """
+    audit_service.note(request, candidate_ids=[candidate_id] if candidate_id else None)
     try:
         # Create new pitch
         new_pitch = CandidatePitch(

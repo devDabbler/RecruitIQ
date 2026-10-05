@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from ..services.service_registry import provide_storage_service, provide_minio_storage_service, provide_resume_service
 from backend.services.agent_framework.agent_factory import AgentFactory
+from backend.services import audit_service
 from ..utils.resume_parsing import ResumeData
 from backend.utils.auth import get_optional_user
 from backend.utils.permissions import CANDIDATES_ADD, can
@@ -426,6 +427,7 @@ class SaveCandidateResponse(BaseModel):
 
 @router.post("/save-candidate", response_model=SaveCandidateResponse)
 async def save_candidate_from_parse(
+    http_request: Request,
     file: UploadFile = File(...),
     parsed_data: str = Form(...),
     position_applied: Optional[str] = Form(None),
@@ -533,6 +535,7 @@ async def save_candidate_from_parse(
         application_id = application.id
         already_in_pipeline = not created
     db.commit()
+    audit_service.note(http_request, candidate_ids=[candidate_id])
 
     return SaveCandidateResponse(
         candidate_id=candidate_id,

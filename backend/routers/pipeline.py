@@ -27,6 +27,7 @@ from ..models.pipeline import (
     StageOut,
     TransitionRequest,
 )
+from ..services import audit_service
 from ..services import pipeline_service as ps
 from ..services.access_service import request_user, visible_candidate_ids
 from ..utils.auth import get_optional_user
@@ -245,6 +246,7 @@ BULK_ACTIONS = ("advance", "reject")
 def bulk_transition(
     action: str,
     payload: BulkTransitionRequest,
+    request: Request,
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> BulkTransitionResponse:
@@ -261,6 +263,7 @@ def bulk_transition(
     fn = ps.ACTIONS[action]
     note = (payload.note or "").strip() or None
     actor_id = user.id if user is not None else None
+    audit_service.note(request, subject_ids=dict.fromkeys(payload.application_ids))
 
     results: list[BulkItemResult] = []
     for application_id in dict.fromkeys(payload.application_ids):

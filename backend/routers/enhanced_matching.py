@@ -13,6 +13,7 @@ import logging
 from backend.utils.database import get_db
 from backend.models.models import Job, Candidate
 from backend.services.agent_framework.agent_factory import AgentFactory
+from backend.services import audit_service
 from backend.services.access_service import SCORE_HIDDEN_DETAIL, can_see_score, request_user
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ def match_jobs_for_candidate(
     db: Session = Depends(get_db)
 ):
     """Find jobs that match the given candidate using enhanced matching."""
+    audit_service.note(http_request, candidate_ids=[request.candidate_id])
     # ATS Phase B: interviewers see scores only after giving feedback.
     if not can_see_score(db, request_user(http_request), request.candidate_id):
         raise HTTPException(status_code=403, detail=SCORE_HIDDEN_DETAIL)

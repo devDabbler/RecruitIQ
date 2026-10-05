@@ -309,6 +309,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Audit Events */
+        get: operations["list_audit_events_api_audit_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cache/clear": {
         parameters: {
             query?: never;
@@ -2309,6 +2326,47 @@ export interface components {
             interviewer_id: string;
             /** Stage Key */
             stage_key: string;
+        };
+        /** AuditEventOut */
+        AuditEventOut: {
+            /** Action */
+            action: string;
+            /** Actor Email */
+            actor_email?: string | null;
+            /** Actor Id */
+            actor_id?: string | null;
+            /** Actor Name */
+            actor_name?: string | null;
+            /** Actor Role */
+            actor_role?: string | null;
+            /** Candidate Id */
+            candidate_id?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Endpoint */
+            endpoint: string;
+            /** Fields */
+            fields?: string[] | null;
+            /** Id */
+            id: number;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Status Code */
+            status_code: number;
+            /** Subject Id */
+            subject_id?: string | null;
+            /** Subject Type */
+            subject_type: string;
+        };
+        /** AuditEventPage */
+        AuditEventPage: {
+            /** Events */
+            events: components["schemas"]["AuditEventOut"][];
+            /** Next Before Id */
+            next_before_id?: number | null;
         };
         /** BoardColumn */
         BoardColumn: {
@@ -5061,6 +5119,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_audit_events_api_audit_events_get: {
+        parameters: {
+            query?: {
+                candidate_id?: string | null;
+                actor_id?: string | null;
+                action?: string | null;
+                subject_type?: string | null;
+                before_id?: number | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
                 };
             };
             /** @description Validation Error */

@@ -35,7 +35,7 @@ from ..models.models import (
     Resume,
     User,
 )
-from ..services import erasure_service, intake_service
+from ..services import audit_service, erasure_service, intake_service
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
@@ -292,6 +292,7 @@ def create_candidate(
 
     db.commit()
     db.refresh(db_candidate)
+    audit_service.note(request, candidate_ids=[db_candidate.id])
     return db_candidate
 
 @router.get("/skills_breakdown", response_model=Dict[str, int])
@@ -580,6 +581,7 @@ async def get_candidate_by_id(
 async def update_candidate(
     candidate_id: str,
     candidate_update: CandidateUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service)
 ):
@@ -594,6 +596,7 @@ async def update_candidate(
     
     # Update the fields that are provided
     update_data = candidate_update.dict(exclude_unset=True)
+    audit_service.note(request, fields=update_data.keys())
     
     # Convert Enum to string value if present
     if "status" in update_data and update_data["status"]:
