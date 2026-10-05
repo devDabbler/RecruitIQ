@@ -32,6 +32,7 @@ MATRIX = [
     (p.REPORTS_VIEW, {ADMIN, HM, TEAM, DEMO}),
     (p.TEMPLATES_MANAGE, {ADMIN, HM}),
     (p.PROFILE_EDIT, {ADMIN, HM, TEAM, INT}),
+    (p.AUDIT_VIEW, {ADMIN}),
 ]
 
 

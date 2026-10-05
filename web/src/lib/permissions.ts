@@ -21,6 +21,7 @@ export const SCORE_BEFORE_FEEDBACK = "score.before_feedback";
 export const REPORTS_VIEW = "reports.view";
 export const TEMPLATES_MANAGE = "templates.manage";
 export const PROFILE_EDIT = "profile.edit";
+export const AUDIT_VIEW = "audit.view";
 
 export type Permission =
   | typeof JOBS_WRITE
@@ -33,7 +34,8 @@ export type Permission =
   | typeof SCORE_BEFORE_FEEDBACK
   | typeof REPORTS_VIEW
   | typeof TEMPLATES_MANAGE
-  | typeof PROFILE_EDIT;
+  | typeof PROFILE_EDIT
+  | typeof AUDIT_VIEW;
 
 export type Role = "admin" | "hiring_manager" | "hiring_team" | "interviewer" | "demo";
 

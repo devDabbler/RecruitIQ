@@ -28,17 +28,26 @@ from backend.routers import auth, tasks, pitches, agent, performance, cache, tra
 from backend.routers import notes, reports, tags
 from backend.routers import emails, job_drafts, status_links
 from backend.api.routes import job_routes
+from backend.routers import audit
 from backend.services.access_service import enforce_interviewer_scope
+from backend.services.audit_service import audit_request
 from backend.utils.auth import enforce_read_only
 from backend.utils.config import get_settings
 
 # The read-only gate is an application-level dependency, not a per-route one, so
 # a route added later is refused for the demo role by default instead of being
 # quietly exposed. See backend/utils/auth.py for the read-only-POST allowlist.
-# Order matters: the write gate first (401/403 for writes), then the
-# interviewer scope (default-deny reads for that role). Both share one
-# identity lookup through request.state.
-app = FastAPI(dependencies=[Depends(enforce_read_only), Depends(enforce_interviewer_scope)])
+# Order matters: the audit log first, so it also records attempts the gates
+# refuse; then the write gate (401/403 for writes); then the interviewer
+# scope (default-deny reads for that role). All three share one identity
+# lookup through request.state.
+app = FastAPI(
+    dependencies=[
+        Depends(audit_request),
+        Depends(enforce_read_only),
+        Depends(enforce_interviewer_scope),
+    ]
+)
 
 # Import service registry and agent framework - this will handle all service initialization
 from backend.services.service_registry import provide_llm_service
@@ -123,6 +132,7 @@ app.include_router(intelligence.router, prefix="/api", tags=["intelligence"])  #
 app.include_router(performance.router, prefix="/api", tags=["performance"])
 app.include_router(cache.router, tags=["cache"]) # Cache management router
 app.include_router(transparency.router)  # Admin-only scoring transparency
+app.include_router(audit.router, prefix="/api", tags=["audit"])  # Pilot Track 1 #3, admin-only read
 
 # You can add more routers here if needed
 

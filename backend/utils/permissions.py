@@ -40,6 +40,9 @@ SCORE_BEFORE_FEEDBACK = "score.before_feedback"
 REPORTS_VIEW = "reports.view"
 TEMPLATES_MANAGE = "templates.manage"
 PROFILE_EDIT = "profile.edit"
+# Pilot plan Track 1 #3: reading the audit log. Admin only, and never the
+# demo: the log names real staff accounts and real candidate ids.
+AUDIT_VIEW = "audit.view"
 
 ALL_PERMISSIONS = (
     JOBS_WRITE,
@@ -53,6 +56,7 @@ ALL_PERMISSIONS = (
     REPORTS_VIEW,
     TEMPLATES_MANAGE,
     PROFILE_EDIT,
+    AUDIT_VIEW,
 )
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
