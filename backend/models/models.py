@@ -125,7 +125,7 @@ class Job(Base):
     skills = Column(String, nullable=True)
     # Track 2 Phase 1: must-have / nice-to-have skills, years range, minimum
     # education. Shape and limits live in services/job_requirements.py.
-    requirements = Column(JSONB, nullable=True)
+    requirements = Column(JSON().with_variant(JSONB(), "postgresql"), nullable=True)  # SQLite in two legacy tests
     views = Column(Integer, default=0, nullable=True)
     applications = Column(Integer, default=0, nullable=True)
     embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over title+overview+quals+skills
