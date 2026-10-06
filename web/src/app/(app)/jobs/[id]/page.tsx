@@ -19,8 +19,10 @@ import {
   matchCandidatesForJob,
 } from "@/lib/data";
 import { formatDate, formatSalary, humanize } from "@/lib/format";
+import { educationLabel, yearsLabel } from "@/lib/job-form";
 import { memberName } from "@/lib/interviews";
 import { DELETE_RECORDS, JOBS_WRITE, SCORE_BEFORE_FEEDBACK, can } from "@/lib/permissions";
+import type { Job } from "@/lib/domain";
 import { getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -176,6 +178,8 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
             </Card>
           ) : null}
 
+          {job.requirements ? <Requirements requirements={job.requirements} /> : null}
+
           {deletable ? <DeleteJobButton jobId={job.id} title={job.title} variant="full" /> : null}
         </div>
       </div>
@@ -263,6 +267,63 @@ function MatchesSkeleton() {
         <Skeleton key={i} className="h-28 w-full rounded-lg" />
       ))}
     </>
+  );
+}
+
+function Requirements({ requirements }: { requirements: NonNullable<Job["requirements"]> }) {
+  const years = yearsLabel(requirements.min_years, requirements.max_years);
+  const education = educationLabel(requirements.min_education);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Requirements</CardTitle>
+        <p className="text-xs text-slate-500">
+          Missing one must-have caps a match score at 70, two or more at 50. Flagged, never
+          rejected.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm">
+        <SkillGroup label="Must have" skills={requirements.must_have_skills} strong />
+        <SkillGroup label="Nice to have" skills={requirements.nice_to_have_skills} />
+        {years || education ? (
+          <dl className="space-y-3">
+            {years ? <Detail label="Experience" value={years} /> : null}
+            {education ? <Detail label="Education" value={education} /> : null}
+          </dl>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function SkillGroup({
+  label,
+  skills,
+  strong = false,
+}: {
+  label: string;
+  skills?: string[];
+  strong?: boolean;
+}) {
+  if (!skills?.length) return null;
+  return (
+    <div>
+      <p className="mb-1.5 text-xs font-medium text-slate-500">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
+        {skills.map((skill) => (
+          <span
+            key={skill}
+            className={
+              strong
+                ? "rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-800"
+                : "rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+            }
+          >
+            {skill}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

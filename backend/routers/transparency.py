@@ -44,6 +44,18 @@ from backend.services.vector_search_service import (
     location_filter_patterns,
 )
 from backend.services.feedback_service import FEEDBACK_NEVER_USED_FOR, FEEDBACK_USED_FOR
+from backend.services.job_requirements import (
+    NICE_TO_HAVE_MAX_BONUS,
+    REQUIREMENT_CAPS,
+    YEARS_OVER_MAX_PENALTY,
+    YEARS_OVER_PENALTY_PER_YEAR,
+    YEARS_SHORT_COUNTS_AS_MISSING,
+    YEARS_SHORT_MAX_PENALTY,
+    YEARS_SHORT_PENALTY_PER_YEAR,
+    JobRequirements,
+    load_profiles,
+    parse_requirements,
+)
 from backend.utils.auth import get_current_user
 from backend.utils.database import get_db
 
@@ -86,6 +98,23 @@ class UnscoredField(BaseModel):
     reason: str
 
 
+class RequirementCap(BaseModel):
+    condition: str
+    min_missing: int
+    limit: float
+
+
+class RequirementRules(BaseModel):
+    """Track 2 Phase 1: what a job's structured requirements do to a score."""
+    caps: List[RequirementCap]
+    nice_to_have_max_bonus: float
+    years_short_penalty_per_year: float
+    years_short_max_penalty: float
+    years_over_penalty_per_year: float
+    years_over_max_penalty: float
+    years_short_counts_as_missing: float
+
+
 class FeedbackPolicy(BaseModel):
     used_for: List[str]
     never_used_for: List[str]
@@ -105,6 +134,7 @@ class ScoringPolicy(BaseModel):
     search_relevance_bands: Dict[str, float]
     search_embedded_fields: List[str]
     feedback_policy: FeedbackPolicy
+    requirement_rules: RequirementRules
 
 
 class SkillStep(BaseModel):
@@ -116,6 +146,9 @@ class SkillStep(BaseModel):
     coverage_bonus: bool
     no_data: bool
     raw_score: float
+    # Points the job's nice-to-have skills added before the cross-domain
+    # discount (0 when the job lists none).
+    nice_to_have_bonus: float = 0.0
     penalty_applied: bool
     penalty_factor: float
     job_category: Optional[str] = None
@@ -144,7 +177,50 @@ class ExperienceStep(BaseModel):
     years_diff: int
     years_match: float
     adjustment: float
+    # Points taken off for recorded years outside the job's range.
+    years_range_penalty: float = 0.0
     score: float
+
+
+class SkillCheck(BaseModel):
+    skills: List[str]
+    present: List[str]
+    missing: List[str]
+
+
+class YearsCheck(BaseModel):
+    min_years: Optional[int] = None
+    max_years: Optional[int] = None
+    candidate_years: Optional[float] = None
+    short_by: float
+    over_by: float
+    penalty: float
+    counts_as_missing: bool
+
+
+class EducationCheck(BaseModel):
+    min_education: str
+    candidate_education: Optional[str] = None
+    meets: Optional[bool] = None
+    counts_as_missing: bool
+
+
+class RequirementCapStep(BaseModel):
+    missing: List[str]
+    missing_count: int
+    limit: Optional[float] = None
+    applied: bool
+    score_before: float
+
+
+class RequirementsStep(BaseModel):
+    """How the job's requirements treated this candidate. Absent when the job
+    sets none, in which case the score is built exactly as before."""
+    must_have: Optional[SkillCheck] = None
+    nice_to_have: Optional[SkillCheck] = None
+    years: Optional[YearsCheck] = None
+    education: Optional[EducationCheck] = None
+    cap: RequirementCapStep
 
 
 class PairTrace(BaseModel):
@@ -160,6 +236,7 @@ class PairTrace(BaseModel):
     tier: WeightTier
     final_penalty_applied: bool
     final_penalty_multiplier: float
+    requirements: Optional[RequirementsStep] = None
     explanation: str
 
 
@@ -170,6 +247,7 @@ class JobRef(BaseModel):
     skills: List[str]
     level: str
     years: int
+    requirements: Optional[JobRequirements] = None
 
 
 class MatchTraceResponse(BaseModel):
@@ -320,6 +398,15 @@ def scoring_policy() -> ScoringPolicy:
             used_for=list(FEEDBACK_USED_FOR),
             never_used_for=list(FEEDBACK_NEVER_USED_FOR),
         ),
+        requirement_rules=RequirementRules(
+            caps=[RequirementCap(**cap) for cap in REQUIREMENT_CAPS],
+            nice_to_have_max_bonus=NICE_TO_HAVE_MAX_BONUS,
+            years_short_penalty_per_year=YEARS_SHORT_PENALTY_PER_YEAR,
+            years_short_max_penalty=YEARS_SHORT_MAX_PENALTY,
+            years_over_penalty_per_year=YEARS_OVER_PENALTY_PER_YEAR,
+            years_over_max_penalty=YEARS_OVER_MAX_PENALTY,
+            years_short_counts_as_missing=YEARS_SHORT_COUNTS_AS_MISSING,
+        ),
     )
 
 
@@ -346,10 +433,16 @@ def match_trace(
 
     integrator = get_registry().matching_integrator
     candidates = db.query(Candidate).all()
+    requirements = parse_requirements(job.requirements)
+    profiles = (
+        load_profiles(db, [c.id for c in candidates])
+        if requirements is not None and requirements.needs_profile()
+        else {}
+    )
 
     scored = []
     for candidate in candidates:
-        trace = integrator.score_pair(job, candidate)
+        trace = integrator.score_pair(job, candidate, profiles.get(candidate.id))
         scored.append((candidate, trace))
     scored.sort(key=lambda item: item[1]["match_score"], reverse=True)
 
@@ -377,6 +470,7 @@ def match_trace(
             skills=scored[0][1]["job_skills"] if scored else [],
             level=job_level,
             years=job_years,
+            requirements=requirements,
         ),
         threshold=threshold,
         candidates_scored=len(scored),
@@ -479,6 +573,7 @@ def _pair_trace(rank: int, candidate, job, trace: Dict[str, Any], threshold: flo
             coverage_bonus=skills["coverage_bonus"],
             no_data=skills["no_data"],
             raw_score=skills["score"],
+            nice_to_have_bonus=trace["nice_to_have"]["bonus"] if trace["nice_to_have"] else 0.0,
             penalty_applied=penalty["applied"],
             penalty_factor=penalty["factor"],
             job_category=penalty["job_category"],
@@ -505,12 +600,37 @@ def _pair_trace(rank: int, candidate, job, trace: Dict[str, Any], threshold: flo
             years_diff=experience["years_diff"],
             years_match=experience["years_match"],
             adjustment=experience["adjustment"],
+            years_range_penalty=trace["years"]["penalty"] if trace["years"] else 0.0,
             score=trace["experience_match_score"],
         ),
         tier=_tier_model(trace["tier"]),
         final_penalty_applied=trace["final_penalty_applied"],
         final_penalty_multiplier=trace["final_penalty_multiplier"],
+        requirements=_requirements_step(trace),
         explanation=trace["match_explanation"],
+    )
+
+
+def _requirements_step(trace: Dict[str, Any]) -> Optional[RequirementsStep]:
+    if trace["requirements"] is None:
+        return None
+    must, nice, cap = trace["must_have"], trace["nice_to_have"], trace["requirement_cap"]
+    return RequirementsStep(
+        must_have=SkillCheck(skills=must["skills"], present=must["present"], missing=must["missing"]) if must else None,
+        nice_to_have=(
+            SkillCheck(skills=nice["skills"], present=nice["exact"] + nice["partial"], missing=nice["missing"])
+            if nice
+            else None
+        ),
+        years=YearsCheck(**trace["years"]) if trace["years"] else None,
+        education=EducationCheck(**trace["education"]) if trace["education"] else None,
+        cap=RequirementCapStep(
+            missing=cap["missing"],
+            missing_count=cap["missing_count"],
+            limit=cap["limit"],
+            applied=cap["applied"],
+            score_before=cap["score_before"],
+        ),
     )
 
 

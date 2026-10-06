@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from enum import Enum
 
+from backend.services.job_requirements import JobRequirements
+
 
 class JobStatus(str, Enum):
     DRAFT = "draft"
@@ -58,6 +60,8 @@ class JobCreateUpdate(BaseModel):
     start_date: Optional[datetime] = None
     job_metadata: Dict[str, Any] = Field(default_factory=dict)
     skills: List[str] = Field(default_factory=list)
+    # Track 2 Phase 1: must-haves cap the score, nice-to-haves add to it.
+    requirements: Optional[JobRequirements] = None
 
 
 class JobResponse(BaseModel):
@@ -90,6 +94,8 @@ class JobResponse(BaseModel):
     updated_at: datetime
     job_metadata: Dict[str, Any] = Field(default_factory=dict)
     skills: List[str] = Field(default_factory=list)
+    # Track 2 Phase 1: must-haves cap the score, nice-to-haves add to it.
+    requirements: Optional[JobRequirements] = None
 
     # jobs.job_metadata, .views and .applications are all nullable columns, but
     # a field default only applies when the key is *absent* — an explicit None

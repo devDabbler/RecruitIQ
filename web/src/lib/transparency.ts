@@ -54,6 +54,17 @@ export function scoreLadder(trace: PairTrace): LadderStep[] {
       : `${skills.exact.length} exact (${list(skills.exact)}), ${skills.partial.length} partial (${list(skills.partial)}), ${skills.missing.length} missing (${list(skills.missing)})${skills.coverage_bonus ? ". Coverage bonus of 10% applied" : ""}`,
   });
 
+  const requirements = trace.requirements ?? null;
+  const nice = requirements?.nice_to_have ?? null;
+  if (nice) {
+    steps.push({
+      kind: "component",
+      label: "Nice-to-have skills",
+      value: Math.min(skills.raw_score + skills.nice_to_have_bonus, 100),
+      detail: `${nice.present.length} of ${nice.skills.length} (${list(nice.present)}), adding ${skills.nice_to_have_bonus.toFixed(1)} points to the skill score${nice.missing.length ? `. Not listed: ${list(nice.missing)}` : ""}`,
+    });
+  }
+
   if (skills.penalty_applied) {
     steps.push({
       kind: "penalty",
@@ -70,12 +81,23 @@ export function scoreLadder(trace: PairTrace): LadderStep[] {
     detail: `Title similarity ${similarity(role.semantic_similarity)}${role.semantic_similarity === null || role.semantic_similarity === undefined ? " (embedding unavailable, default 30)" : ""}; ${RELATIONSHIP_WORDS[role.relationship] ?? role.relationship}`,
   });
 
+  const yearsPenalty = experience.years_range_penalty;
   steps.push({
     kind: "component",
     label: "Seniority",
-    value: experience.score,
+    value: experience.score + yearsPenalty,
     detail: `Job reads as ${experience.job_level} (${experience.job_years} yrs), candidate as ${experience.candidate_level} (${experience.candidate_years} yrs). Level match ${pct(experience.level_match)}, years match ${pct(experience.years_match)}${experience.adjustment ? `, adjustment ${experience.adjustment}` : ""}`,
   });
+
+  const years = requirements?.years ?? null;
+  if (years) {
+    steps.push({
+      kind: yearsPenalty ? "penalty" : "component",
+      label: "Years of experience",
+      value: experience.score,
+      detail: yearsDetail(years, yearsPenalty),
+    });
+  }
 
   steps.push({
     kind: "blend",
@@ -93,6 +115,15 @@ export function scoreLadder(trace: PairTrace): LadderStep[] {
     });
   }
 
+  if (requirements) {
+    steps.push({
+      kind: requirements.cap.applied ? "penalty" : "component",
+      label: "Requirements",
+      value: trace.match_score,
+      detail: requirementsDetail(requirements),
+    });
+  }
+
   steps.push({
     kind: "final",
     label: "Final score",
@@ -103,6 +134,62 @@ export function scoreLadder(trace: PairTrace): LadderStep[] {
   });
 
   return steps;
+}
+
+type Requirements = NonNullable<PairTrace["requirements"]>;
+
+const EDUCATION_WORDS: Record<string, string> = {
+  none: "no degree",
+  bachelor: "a bachelor's degree",
+  master: "a master's degree",
+  phd: "a PhD",
+};
+
+function yearsDetail(years: NonNullable<Requirements["years"]>, penalty: number): string {
+  const range =
+    years.min_years != null && years.max_years != null
+      ? `${years.min_years} to ${years.max_years} years`
+      : years.min_years != null
+        ? `at least ${years.min_years} years`
+        : `up to ${years.max_years} years`;
+  if (years.candidate_years == null) {
+    return `The job asks for ${range}. No dated experience on file, so this was not applied`;
+  }
+  const recorded = `About ${years.candidate_years} years recorded against ${range}`;
+  if (!penalty) return `${recorded}, so no change`;
+  const counted = years.counts_as_missing ? ". Two or more years short counts as a missing must-have" : "";
+  return `${recorded}, so seniority loses ${penalty.toFixed(0)} points${counted}`;
+}
+
+function requirementsDetail(requirements: Requirements): string {
+  const parts: string[] = [];
+  const must = requirements.must_have;
+  if (must) {
+    parts.push(
+      must.missing.length
+        ? `Must-haves missing: ${list(must.missing)}${must.present.length ? ` (has ${list(must.present)})` : ""}`
+        : `Has every must-have (${list(must.present)})`,
+    );
+  }
+  const education = requirements.education;
+  if (education) {
+    const wanted = EDUCATION_WORDS[education.min_education] ?? education.min_education;
+    parts.push(
+      education.candidate_education
+        ? `Education: ${EDUCATION_WORDS[education.candidate_education] ?? education.candidate_education} on file, ${wanted} asked for`
+        : `Education: no recognised degree on file, so ${wanted} was not checked`,
+    );
+  }
+  const cap = requirements.cap;
+  if (cap.limit == null) {
+    parts.push("Nothing missing, so no cap");
+  } else if (cap.applied) {
+    const what = cap.missing_count === 1 ? "1 requirement" : `${cap.missing_count} requirements`;
+    parts.push(`${what} missing, so the score is capped at ${cap.limit} (was ${cap.score_before.toFixed(1)}). Flagged, not rejected`);
+  } else {
+    parts.push(`The cap of ${cap.limit} is above this score, so nothing changed`);
+  }
+  return parts.join(". ");
 }
 
 function words(category: string | null | undefined): string {

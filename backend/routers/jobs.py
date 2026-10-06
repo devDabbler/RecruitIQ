@@ -18,6 +18,7 @@ from ..models.job import (
 )
 from ..models.models import Job, Candidate, Resume, JobApplication, SavedJob, User
 from ..utils.auth import STAFF_ROLES
+from ..services.job_requirements import requirements_for_storage
 from ..services.service_registry import (
     provide_job_service,
     provide_llm_service,
@@ -170,8 +171,8 @@ def create_job(
 
         # Remove any legacy fields that may be present
         job_data.pop("description", None)
-        job_data.pop("requirements", None)
         job_data.pop("responsibilities", None)
+        job_data["requirements"] = requirements_for_storage(job.requirements)
 
         # Create job in database
         db_job = Job(**job_data)
@@ -267,6 +268,9 @@ def update_job(
     # Handle skills list
     if "skills" in update_data and update_data["skills"]:
         update_data["skills"] = ",".join(update_data["skills"])
+
+    if "requirements" in update_data:
+        update_data["requirements"] = requirements_for_storage(job_update.requirements)
     
     for key, value in update_data.items():
         setattr(db_job, key, value)

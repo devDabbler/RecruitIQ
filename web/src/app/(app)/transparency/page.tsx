@@ -215,8 +215,8 @@ function UploadPrivacy({ policy }: { policy: UploadPolicy }) {
               : null}
             What is stored is {policy.stored_only_when_saved}. Matching covers saved candidates
             only, and the ranker reads{" "}
-            {policy.matching_reads.map((f) => f.replace(/_/g, " ")).join(" and ")}, never the
-            name or contact details.
+            {joinWords(policy.matching_reads.map((f) => f.replace(/_/g, " ")))}, never the name or
+            contact details.
           </Step>
         </ol>
 
@@ -383,7 +383,8 @@ function HowAScoreIsBuilt({ policy }: { policy: ScoringPolicy }) {
       <CardHeader>
         <CardTitle>How a score is built</CardTitle>
         <p className="text-sm text-slate-500">
-          Three components, one weighted blend, two penalties, one threshold.
+          Three components, one weighted blend, two penalties, the job&apos;s requirements, one
+          threshold.
           The numbers below are read from the ranking code, not typed into this page.
         </p>
       </CardHeader>
@@ -417,6 +418,22 @@ function HowAScoreIsBuilt({ policy }: { policy: ScoringPolicy }) {
             are both weak ({policy.final_penalty.condition}) the result is scaled by{" "}
             {policy.final_penalty.multiplier}. Anything under{" "}
             {policy.default_match_threshold} is left off the Matching screen.
+          </Step>
+          <Step n={6} title="Requirements">
+            Only for a job that lists them. Each nice-to-have skill a candidate has adds to the
+            skill score, up to {policy.requirement_rules.nice_to_have_max_bonus} points. Recorded
+            years outside the job&apos;s range take{" "}
+            {policy.requirement_rules.years_short_penalty_per_year} points a year off seniority
+            when short (at most {policy.requirement_rules.years_short_max_penalty}) and{" "}
+            {policy.requirement_rules.years_over_penalty_per_year} a year when over (at most{" "}
+            {policy.requirement_rules.years_over_max_penalty}). A missing must-have skill, being{" "}
+            {policy.requirement_rules.years_short_counts_as_missing} or more years short, or a
+            degree below the minimum each count as a missed requirement, and{" "}
+            {policy.requirement_rules.caps
+              .map((cap) => `${cap.condition} caps the score at ${cap.limit}`)
+              .join(", ")}
+            . A capped candidate is flagged, never rejected. Unknown years or an unrecognised
+            degree never count against anyone.
           </Step>
         </ol>
 
@@ -462,6 +479,11 @@ function HowAScoreIsBuilt({ policy }: { policy: ScoringPolicy }) {
   );
 }
 
+function joinWords(items: string[]): string {
+  if (items.length <= 2) return items.join(" and ");
+  return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
+}
+
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
@@ -499,6 +521,9 @@ async function RankingTrace({ jobId, candidateId }: { jobId: number; candidateId
         <span className="font-medium text-slate-900">{trace.job.title}</span> reads as{" "}
         {trace.job.level} level, {trace.job.years} years, asking for{" "}
         {trace.job.skills.length ? trace.job.skills.join(", ") : "no listed skills"}.{" "}
+        {trace.job.requirements?.must_have_skills?.length ? (
+          <>Must-haves: {trace.job.requirements.must_have_skills.join(", ")}. </>
+        ) : null}
         {trace.candidates_scored} candidates scored, {trace.candidates_above_threshold} at or
         above the threshold of {trace.threshold}.
         {candidateId ? (
@@ -758,8 +783,10 @@ function Principles() {
           </Principle>
           <Principle title="No protected characteristics, by construction.">
             The ranker reads two things about a person: their current title and their
-            skills. The list of fields it never reads is enforced by a test, and the
-            characteristics that matter most are never collected at all.
+            skills. Only when a job sets a years range or a minimum education does it also
+            read how many years of experience and which degrees are on file. The list of
+            fields it never reads is enforced by a test, and the characteristics that matter
+            most are never collected at all.
           </Principle>
           <Principle title="No language model ranks anyone.">
             Ranking is deterministic arithmetic over titles and skills plus one cosine
@@ -818,6 +845,13 @@ function KnownLimits() {
             <span className="font-medium">Seniority is inferred from titles.</span> A title with
             no level keyword and no years defaults to mid-level, so a &ldquo;Data
             Engineer&rdquo; with fifteen years reads as mid until the parser fills in more.
+            A job&apos;s years range uses the dated experience on file instead, and only when
+            there is some.
+          </li>
+          <li>
+            <span className="font-medium">A must-have is only as good as the skill list.</span>{" "}
+            A candidate who has a skill but whose resume did not name it reads as missing it
+            and is capped. That is why a cap flags a person rather than rejecting them.
           </li>
           <li>
             <span className="font-medium">Role families are a fixed keyword list.</span> A title

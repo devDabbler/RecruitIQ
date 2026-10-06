@@ -2267,6 +2267,46 @@
         "title": "DefaultInterviewersResponse",
         "type": "object"
       },
+      "EducationCheck": {
+        "properties": {
+          "candidate_education": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Education"
+          },
+          "counts_as_missing": {
+            "title": "Counts As Missing",
+            "type": "boolean"
+          },
+          "meets": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meets"
+          },
+          "min_education": {
+            "title": "Min Education",
+            "type": "string"
+          }
+        },
+        "required": [
+          "min_education",
+          "counts_as_missing"
+        ],
+        "title": "EducationCheck",
+        "type": "object"
+      },
       "EmailLogOut": {
         "properties": {
           "body": {
@@ -2578,6 +2618,11 @@
           },
           "years_match": {
             "title": "Years Match",
+            "type": "number"
+          },
+          "years_range_penalty": {
+            "default": 0.0,
+            "title": "Years Range Penalty",
             "type": "number"
           }
         },
@@ -3266,6 +3311,16 @@
             "title": "Required Qualifications",
             "type": "string"
           },
+          "requirements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRequirements"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "skills": {
             "items": {
               "type": "string"
@@ -3541,6 +3596,16 @@
             "title": "Level",
             "type": "string"
           },
+          "requirements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRequirements"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "skills": {
             "items": {
               "type": "string"
@@ -3565,6 +3630,70 @@
           "years"
         ],
         "title": "JobRef",
+        "type": "object"
+      },
+      "JobRequirements": {
+        "description": "What `jobs.requirements` holds. Every field is optional.",
+        "properties": {
+          "max_years": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Years"
+          },
+          "min_education": {
+            "anyOf": [
+              {
+                "enum": [
+                  "none",
+                  "bachelor",
+                  "master",
+                  "phd"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Education"
+          },
+          "min_years": {
+            "anyOf": [
+              {
+                "maximum": 50.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Years"
+          },
+          "must_have_skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Must Have Skills",
+            "type": "array"
+          },
+          "nice_to_have_skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Nice To Have Skills",
+            "type": "array"
+          }
+        },
+        "title": "JobRequirements",
         "type": "object"
       },
       "JobResponse": {
@@ -3705,6 +3834,16 @@
           "required_qualifications": {
             "title": "Required Qualifications",
             "type": "string"
+          },
+          "requirements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRequirements"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "skills": {
             "items": {
@@ -4138,6 +4277,16 @@
           "rank": {
             "title": "Rank",
             "type": "integer"
+          },
+          "requirements": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RequirementsStep"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "role": {
             "$ref": "#/components/schemas/RoleStep"
@@ -4663,6 +4812,171 @@
           "quarters"
         ],
         "title": "ReportsResponse",
+        "type": "object"
+      },
+      "RequirementCap": {
+        "properties": {
+          "condition": {
+            "title": "Condition",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "number"
+          },
+          "min_missing": {
+            "title": "Min Missing",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "condition",
+          "min_missing",
+          "limit"
+        ],
+        "title": "RequirementCap",
+        "type": "object"
+      },
+      "RequirementCapStep": {
+        "properties": {
+          "applied": {
+            "title": "Applied",
+            "type": "boolean"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limit"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "missing_count": {
+            "title": "Missing Count",
+            "type": "integer"
+          },
+          "score_before": {
+            "title": "Score Before",
+            "type": "number"
+          }
+        },
+        "required": [
+          "missing",
+          "missing_count",
+          "applied",
+          "score_before"
+        ],
+        "title": "RequirementCapStep",
+        "type": "object"
+      },
+      "RequirementRules": {
+        "description": "Track 2 Phase 1: what a job's structured requirements do to a score.",
+        "properties": {
+          "caps": {
+            "items": {
+              "$ref": "#/components/schemas/RequirementCap"
+            },
+            "title": "Caps",
+            "type": "array"
+          },
+          "nice_to_have_max_bonus": {
+            "title": "Nice To Have Max Bonus",
+            "type": "number"
+          },
+          "years_over_max_penalty": {
+            "title": "Years Over Max Penalty",
+            "type": "number"
+          },
+          "years_over_penalty_per_year": {
+            "title": "Years Over Penalty Per Year",
+            "type": "number"
+          },
+          "years_short_counts_as_missing": {
+            "title": "Years Short Counts As Missing",
+            "type": "number"
+          },
+          "years_short_max_penalty": {
+            "title": "Years Short Max Penalty",
+            "type": "number"
+          },
+          "years_short_penalty_per_year": {
+            "title": "Years Short Penalty Per Year",
+            "type": "number"
+          }
+        },
+        "required": [
+          "caps",
+          "nice_to_have_max_bonus",
+          "years_short_penalty_per_year",
+          "years_short_max_penalty",
+          "years_over_penalty_per_year",
+          "years_over_max_penalty",
+          "years_short_counts_as_missing"
+        ],
+        "title": "RequirementRules",
+        "type": "object"
+      },
+      "RequirementsStep": {
+        "description": "How the job's requirements treated this candidate. Absent when the job\nsets none, in which case the score is built exactly as before.",
+        "properties": {
+          "cap": {
+            "$ref": "#/components/schemas/RequirementCapStep"
+          },
+          "education": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EducationCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "must_have": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nice_to_have": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SkillCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "years": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/YearsCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "cap"
+        ],
+        "title": "RequirementsStep",
         "type": "object"
       },
       "ResumeConfirmRequest": {
@@ -5335,6 +5649,9 @@
             "title": "Job Fields Scored",
             "type": "array"
           },
+          "requirement_rules": {
+            "$ref": "#/components/schemas/RequirementRules"
+          },
           "role_score_caps": {
             "additionalProperties": {
               "type": "number"
@@ -5381,7 +5698,8 @@
           "search_relevance_floor",
           "search_relevance_bands",
           "search_embedded_fields",
-          "feedback_policy"
+          "feedback_policy",
+          "requirement_rules"
         ],
         "title": "ScoringPolicy",
         "type": "object"
@@ -5702,6 +6020,38 @@
         "title": "SimilarJobsResponse",
         "type": "object"
       },
+      "SkillCheck": {
+        "properties": {
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "present": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Present",
+            "type": "array"
+          },
+          "skills": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skills",
+            "type": "array"
+          }
+        },
+        "required": [
+          "skills",
+          "present",
+          "missing"
+        ],
+        "title": "SkillCheck",
+        "type": "object"
+      },
       "SkillStep": {
         "properties": {
           "candidate_category": {
@@ -5757,6 +6107,11 @@
             },
             "title": "Missing",
             "type": "array"
+          },
+          "nice_to_have_bonus": {
+            "default": 0.0,
+            "title": "Nice To Have Bonus",
+            "type": "number"
           },
           "no_data": {
             "title": "No Data",
@@ -6828,6 +7183,67 @@
           "multiplier"
         ],
         "title": "WeightTier",
+        "type": "object"
+      },
+      "YearsCheck": {
+        "properties": {
+          "candidate_years": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Years"
+          },
+          "counts_as_missing": {
+            "title": "Counts As Missing",
+            "type": "boolean"
+          },
+          "max_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Years"
+          },
+          "min_years": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Years"
+          },
+          "over_by": {
+            "title": "Over By",
+            "type": "number"
+          },
+          "penalty": {
+            "title": "Penalty",
+            "type": "number"
+          },
+          "short_by": {
+            "title": "Short By",
+            "type": "number"
+          }
+        },
+        "required": [
+          "short_by",
+          "over_by",
+          "penalty",
+          "counts_as_missing"
+        ],
+        "title": "YearsCheck",
         "type": "object"
       },
       "backend__routers__candidates__MessageResponse": {
