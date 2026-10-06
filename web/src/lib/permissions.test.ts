@@ -6,6 +6,7 @@ import {
   CANDIDATES_ADD,
   DATA_EXPORT,
   DELETE_RECORDS,
+  DEPARTMENTS_MANAGE,
   FEEDBACK_SUBMIT,
   JOBS_WRITE,
   PIPELINE_MOVE,
@@ -35,6 +36,8 @@ describe("can", () => {
     expect(can("admin", DATA_EXPORT)).toBe(true);
     expect(can("hiring_manager", DATA_EXPORT)).toBe(false);
     expect(can("demo", DATA_EXPORT)).toBe(false);
+    expect(can("admin", DEPARTMENTS_MANAGE)).toBe(true);
+    expect(can("hiring_manager", DEPARTMENTS_MANAGE)).toBe(false);
   });
 
   it("grants nothing to a missing or unknown role", () => {
@@ -58,6 +61,7 @@ describe("can", () => {
       PROFILE_EDIT,
       AUDIT_VIEW,
       DATA_EXPORT,
+      DEPARTMENTS_MANAGE,
     ];
     expect([...declared].sort()).toEqual([...table.permissions].sort());
   });

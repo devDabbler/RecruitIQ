@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { MapPin, Pencil, Plus, Users } from "lucide-react";
+import { Hash, MapPin, Pencil, Plus, Search, Users } from "lucide-react";
 
 import { DeleteJobButton } from "@/components/delete-job-button";
 import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { listJobs } from "@/lib/data";
 import type { JobList } from "@/lib/domain";
@@ -24,7 +25,10 @@ const STATUS_CLASSES: Record<string, string> = {
   cancelled: "bg-rose-50 text-rose-700 border-rose-200",
 };
 
-export default async function JobsPage() {
+export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
+  const { q } = await searchParams;
+  // Track 2 Phase 3: search by title or requisition number.
+  const query = (Array.isArray(q) ? q[0] : q)?.trim() || "";
   // Resolved before the fetch so the "New job" button is still offered on the
   // error path, where creating a role is a plausible next move.
   const user = await getUser();
@@ -33,7 +37,7 @@ export default async function JobsPage() {
 
   let jobs: JobList;
   try {
-    jobs = await listJobs();
+    jobs = await listJobs(1, 50, query);
   } catch (error) {
     return (
       <>
@@ -61,7 +65,38 @@ export default async function JobsPage() {
         actions={writable ? <NewJobButton /> : null}
       />
 
-      {sorted.length === 0 ? (
+      <form
+        method="get"
+        action="/jobs"
+        role="search"
+        className="mb-4 flex max-w-md items-center gap-2"
+      >
+        <div className="relative flex-1">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-slate-400"
+            aria-hidden
+          />
+          <Input
+            name="q"
+            defaultValue={query}
+            placeholder="Search by title or requisition number"
+            aria-label="Search jobs"
+            className="bg-white pl-8"
+          />
+        </div>
+        {query ? (
+          <Link href="/jobs" className="text-sm text-indigo-600 hover:underline">
+            Clear
+          </Link>
+        ) : null}
+      </form>
+
+      {sorted.length === 0 && query ? (
+        <EmptyState
+          title={`No jobs match "${query}"`}
+          detail="Try part of the title, or the requisition number from your HR system."
+        />
+      ) : sorted.length === 0 ? (
         <EmptyState
           title="No jobs yet"
           detail={
@@ -89,7 +124,16 @@ export default async function JobsPage() {
                   </span>
                 </div>
 
-                <p className="text-sm text-slate-500">{job.department}</p>
+                <p className="flex flex-wrap items-center gap-x-2 text-sm text-slate-500">
+                  <span>{job.department}</span>
+                  {job.requisition_number ? (
+                    <span className="inline-flex items-center gap-0.5 font-mono text-xs text-slate-500">
+                      <Hash className="h-3 w-3" aria-hidden />
+                      <span className="sr-only">Requisition </span>
+                      {job.requisition_number}
+                    </span>
+                  ) : null}
+                </p>
 
                 <p className="line-clamp-3 text-sm text-slate-600">{job.job_overview}</p>
 

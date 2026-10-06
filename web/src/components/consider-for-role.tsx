@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Plus } from "lucide-react";
 
+import { SourceSelect } from "@/components/source-select";
 import { Button } from "@/components/ui/button";
 import { describeError } from "@/lib/intake";
 
@@ -23,6 +24,8 @@ export function ConsiderForRole({
 }) {
   const router = useRouter();
   const [jobId, setJobId] = useState("");
+  // Usually an internal move; a recruiter can say a referral or agency sent them.
+  const [source, setSource] = useState("internal");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -35,7 +38,7 @@ export function ConsiderForRole({
       const response = await fetch(`/api/jobs/${jobId}/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ candidate_id: candidateId, source: "internal" }),
+        body: JSON.stringify({ candidate_id: candidateId, source }),
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { detail?: unknown } | null;
@@ -73,6 +76,7 @@ export function ConsiderForRole({
           </option>
         ))}
       </select>
+      <SourceSelect value={source} onChange={setSource} className="py-1.5" />
       <Button type="submit" size="sm" disabled={!jobId || busy}>
         {busy ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />

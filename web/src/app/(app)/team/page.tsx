@@ -1,13 +1,21 @@
+import { DepartmentsManager } from "@/components/departments-manager";
 import { ErrorState, PageHeader } from "@/components/page-header";
 import { TeamInviteForm } from "@/components/team-invite-form";
 import { TeamMemberActions } from "@/components/team-member-actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ApiError } from "@/lib/api";
-import { listTeam } from "@/lib/data";
+import { listDepartments, listTeam } from "@/lib/data";
 import { formatDate } from "@/lib/format";
 import { redirectInterviewer } from "@/lib/guards";
 import { memberName } from "@/lib/interviews";
-import { DELETE_RECORDS, USERS_CHANGE_ROLE, USERS_INVITE, can, roleLabel } from "@/lib/permissions";
+import {
+  DELETE_RECORDS,
+  DEPARTMENTS_MANAGE,
+  USERS_CHANGE_ROLE,
+  USERS_INVITE,
+  can,
+  roleLabel,
+} from "@/lib/permissions";
 import { getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +34,13 @@ export default async function TeamPage() {
   const user = await getUser();
 
   let members;
+  let departments;
   try {
-    members = await listTeam();
+    [members, departments] = await Promise.all([
+      listTeam(),
+      // Track 2 Phase 3. Turned-off ones too: an admin turns them back on here.
+      listDepartments(true),
+    ]);
   } catch (error) {
     return (
       <>
@@ -44,10 +57,14 @@ export default async function TeamPage() {
   const canInvite = can(role, USERS_INVITE);
   const canChangeRole = can(role, USERS_CHANGE_ROLE);
   const canRemove = can(role, DELETE_RECORDS);
+  const canManageDepartments = can(role, DEPARTMENTS_MANAGE);
 
   return (
     <>
-      <PageHeader title="Team" description="Who can sign in, and what each role can do." />
+      <PageHeader
+        title="Team"
+        description="Who can sign in, what each role can do, and the department list jobs use."
+      />
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -102,6 +119,7 @@ export default async function TeamPage() {
               </CardContent>
             </Card>
           )}
+          <DepartmentsManager departments={departments} canManage={canManageDepartments} />
           <Card>
             <CardHeader>
               <CardTitle className="text-base">What each role can do</CardTitle>

@@ -237,7 +237,7 @@ def write_captures(admin_client, seed, db_session) -> dict:
         "jobs.apply",
         "POST",
         f"/api/jobs/{seed['job_id']}/apply",
-        json={"candidate_id": seed["candidate_ids"][1], "source": "direct"},
+        json={"candidate_id": seed["candidate_ids"][1], "source": "direct_application"},
     )
     cap(
         "jobs.save",

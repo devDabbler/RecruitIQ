@@ -25,6 +25,7 @@ import {
   addSkills,
   applyDraft,
   canRequestDraft,
+  departmentChoices,
   draftRequestFrom,
   hasWrittenDescription,
   toJobPayload,
@@ -47,11 +48,14 @@ export function JobForm({
   initial,
   jobId,
   canDraft = false,
+  departments,
 }: {
   initial?: JobFormValues;
   jobId?: number;
   /** Show "Draft with AI" (ATS Phase E). Only for job writers. */
   canDraft?: boolean;
+  /** Track 2 Phase 3: active department names, from GET /api/departments. */
+  departments: string[];
 }) {
   const router = useRouter();
   const editing = jobId != null;
@@ -64,6 +68,9 @@ export function JobForm({
   const [draftError, setDraftError] = useState<string | null>(null);
   const [pendingDraft, setPendingDraft] = useState<DescriptionDraft | null>(null);
   const [drafted, setDrafted] = useState(false);
+  const departmentOptions = departmentChoices(departments, initial?.department ?? "").map(
+    (name) => ({ value: name, label: name }),
+  );
 
   /** Ask for an AI draft; never overwrite typed text without asking first. */
   async function requestDraft() {
@@ -177,14 +184,39 @@ export function JobForm({
             />
           </Field>
 
-          <Field label="Department" error={errors.department} required>
-            <Input
-              value={values.department}
-              onChange={(e) => set("department", e.target.value)}
-              placeholder="Engineering"
-              aria-invalid={!!errors.department}
-            />
-          </Field>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <Field
+              label="Department"
+              error={errors.department}
+              hint={
+                departmentOptions.length === 0
+                  ? "No departments yet. An admin adds them on the Team page."
+                  : undefined
+              }
+              required
+            >
+              <Choice
+                value={values.department}
+                onChange={(v) => set("department", v)}
+                options={departmentOptions}
+                label="Department"
+              />
+            </Field>
+
+            <Field
+              label="Requisition number"
+              error={errors.requisition_number}
+              hint="From your HR system, so this job lines up with it. Must be unique."
+            >
+              <Input
+                value={values.requisition_number}
+                onChange={(e) => set("requisition_number", e.target.value)}
+                placeholder="REQ-2026-0141"
+                maxLength={40}
+                aria-invalid={!!errors.requisition_number}
+              />
+            </Field>
+          </div>
 
           {canDraft ? (
             <div className="space-y-2 rounded-md border border-indigo-100 bg-indigo-50/50 p-3 text-sm">

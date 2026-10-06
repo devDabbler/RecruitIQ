@@ -38,6 +38,7 @@ from backend.models.models import (
     User,
 )
 from backend.services import pipeline_service as ps
+from backend.services import sources
 from backend.utils.auth import ROLE_INTERVIEWER
 
 NO_MOVEMENT_DAYS = 7
@@ -126,7 +127,7 @@ def event_kind(stage_kind: str, stage_key: str, status: str) -> Optional[str]:
     if stage_kind == ps.OUTCOME:
         if status != ps.PASSED:
             return None
-        return {"hired": "hired", "offer_declined": "declined"}.get(stage_key, "passed")
+        return {"hired": "hired", "offer_declined": "declined", "withdrawn": "withdrew"}.get(stage_key, "passed")
     return {ps.PASSED: "passed", ps.FAILED: "rejected", ps.SKIPPED: "skipped"}.get(status)
 
 
@@ -373,8 +374,34 @@ def source_mix(db: Session, scope: Scope) -> list[dict]:
     hired = func.count(case((JobApplication.status == ps.APP_HIRED, JobApplication.id)))
     query = db.query(source, applications, hired).group_by(source).order_by(applications.desc(), source)
     return [
-        {"source": name, "applications": count, "hired": hires}
+        {"source": name, "label": sources.label(name), "applications": count, "hired": hires}
         for name, count, hires in _scoped(query, scope).all()
+    ]
+
+
+def department_mix(db: Session, scope: Scope) -> list[dict]:
+    """Applications and hires per job department, busiest first (Track 2 Phase 3).
+
+    Departments come from the fixed list since Phase 3, so "Eng" and
+    "Engineering" can no longer split one team in two here.
+    """
+    department = func.coalesce(
+        func.nullif(func.trim(Job.department), literal_column("''")),
+        literal_column("'No department'"),
+    )
+    applications = func.count(JobApplication.id)
+    hired = func.count(case((JobApplication.status == ps.APP_HIRED, JobApplication.id)))
+    jobs = func.count(distinct(Job.id))
+    query = (
+        db.query(department, jobs, applications, hired)
+        .select_from(JobApplication)
+        .join(Job, Job.id == JobApplication.job_id)
+        .group_by(department)
+        .order_by(applications.desc(), department)
+    )
+    return [
+        {"department": name, "jobs": job_count, "applications": count, "hired": hires}
+        for name, job_count, count, hires in _scoped(query, scope).all()
     ]
 
 
@@ -414,8 +441,8 @@ def activity(db: Session, scope: Scope, limit: int = ACTIVITY_LIMIT) -> list[dic
     of row are bookkeeping rather than events and are left out: stages
     skipped automatically (no changed_by) when an application ends or a
     disabled round is passed over, and the last round passing at the very
-    instant the Hired or Offer declined outcome is recorded, where the
-    outcome is the event.
+    instant the Hired or Offer declined outcome is recorded, or the round a
+    candidate withdrew from, where the outcome is the event.
     """
     actor = aliased(User)
     outcome = aliased(ApplicationStage)
@@ -457,7 +484,9 @@ def activity(db: Session, scope: Scope, limit: int = ACTIVITY_LIMIT) -> list[dic
             ),
             ~and_(
                 PipelineStage.kind == ps.ROUND,
-                ApplicationStage.status == ps.PASSED,
+                # SKIPPED: Withdraw closes the round it leaves from as skipped
+                # at the instant the Withdrawn outcome lands.
+                ApplicationStage.status.in_((ps.PASSED, ps.SKIPPED)),
                 folded_into_outcome,
             ),
         )
@@ -557,6 +586,7 @@ def reports(db: Session, scope: Scope, now: datetime) -> dict:
         "no_movement": waiting,
         "no_movement_total": waiting_total,
         "source_mix": source_mix(db, scope),
+        "department_mix": department_mix(db, scope),
         "quarters": [
             outcomes_between(db, scope, *quarter_bounds(now)),
             outcomes_between(db, scope, *quarter_bounds(now, offset=-1)),

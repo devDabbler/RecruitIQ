@@ -18,10 +18,12 @@ from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend.main import app
 from backend.models.models import (
+    Department,
     Candidate,
     CandidateSkill,
     Job,
@@ -45,6 +47,7 @@ SEED_EMAIL_DOMAIN = "recruitiq-seed.example.com"
 ADMIN_PASSWORD = "contract-suite-admin-password"
 STAFF_PASSWORD = "contract-suite-staff-password"
 STAFF_ROLES_UNDER_TEST = ("hiring_manager", "hiring_team", "interviewer")
+SEED_DEPARTMENTS = ("Engineering", "Research", "Infrastructure")
 
 
 @pytest.fixture(scope="session")
@@ -131,6 +134,13 @@ def seed(db_session: Session):
         ),
     ]
     db_session.add_all(jobs)
+    db_session.flush()
+
+    # Track 2 Phase 3: jobs created through the API must name a listed
+    # department. A loaded dev database may already have some of these.
+    for name in SEED_DEPARTMENTS:
+        if db_session.query(Department).filter(func.lower(Department.name) == name.lower()).first() is None:
+            db_session.add(Department(name=name, active=True))
     db_session.flush()
 
     for offset, (candidate_id, (first, last, email, position, company)) in enumerate(

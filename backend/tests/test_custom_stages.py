@@ -60,8 +60,8 @@ def test_add_stage_defaults_to_just_before_the_offer(db_session):
     assert stage.key == "custom_portfolio_review"
     assert keys.index("custom_portfolio_review") == keys.index("offer") - 1
     assert keys[0] == "resume_submitted"
-    assert keys[-2:] == ["offer_declined", "hired"]
-    assert [s.position for s in ps.ensure_job_stages(db_session, job.id)] == list(range(1, 13))
+    assert keys[-3:] == ["offer_declined", "hired", "withdrawn"]
+    assert [s.position for s in ps.ensure_job_stages(db_session, job.id)] == list(range(1, len(ps.DEFAULT_STAGES) + 2))
     assert ps.is_custom(stage) and ps.is_movable(stage)
 
 
@@ -119,7 +119,7 @@ def test_reorder_moves_interview_stages(db_session):
     order = ["case_study", "hm_review", "technical_written", "technical_interview", "problem_solving", "hr_screen"]
     ps.reorder_stages(db_session, job.id, order)
     keys = _keys(db_session, job.id)
-    assert keys == ["resume_submitted", *order, "offer", "offer_accepted", "offer_declined", "hired"]
+    assert keys == ["resume_submitted", *order, "offer", "offer_accepted", "offer_declined", "hired", "withdrawn"]
 
 
 def test_reorder_refuses_pinned_or_partial_lists(db_session):
@@ -160,9 +160,9 @@ def test_remove_custom_stage_compacts_positions(db_session):
     ps.remove_custom_stage(db_session, job.id, stage.key)
     stages = ps.ensure_job_stages(db_session, job.id)
     assert stage.key not in [s.key for s in stages]
-    assert [s.position for s in stages] == list(range(1, 12))
+    assert [s.position for s in stages] == list(range(1, len(ps.DEFAULT_STAGES) + 1))
     db_session.expire_all()
-    assert len(application.stages) == 11
+    assert len(application.stages) == len(ps.DEFAULT_STAGES)
 
 
 def test_remove_refuses_default_and_used_stages(db_session):

@@ -50,6 +50,16 @@ class PendingFeedbackRow(BaseModel):
 
 class SourceRow(BaseModel):
     source: str
+    # Track 2 Phase 3: the display name ("Company website", "Not recorded").
+    label: str
+    applications: int
+    hired: int
+
+
+class DepartmentRow(BaseModel):
+    """Track 2 Phase 3: applications and hires per job department."""
+    department: str
+    jobs: int
     applications: int
     hired: int
 
@@ -95,4 +105,5 @@ class ReportsResponse(BaseModel):
     no_movement: List[WaitingApplication]
     no_movement_total: int
     source_mix: List[SourceRow]
+    department_mix: List[DepartmentRow]
     quarters: List[QuarterOutcomes]

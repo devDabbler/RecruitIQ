@@ -5,12 +5,15 @@ import { useRouter } from "next/navigation";
 import { Loader2, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { SourceSelect } from "@/components/source-select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { describeError } from "@/lib/intake";
+import { DEFAULT_SOURCE } from "@/lib/sources";
 
 /**
- * Add a person by hand: name, email, and optionally the job they are for.
+ * Add a person by hand: name, email, how they found us (Track 2 Phase 3),
+ * and optionally the job they are for.
  *
  * Choosing a job puts them at Resume submitted on it in the same request,
  * so the new profile opens with its pipeline already started.
@@ -26,6 +29,7 @@ export function AddCandidatePanel({
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [jobId, setJobId] = useState("");
+  const [source, setSource] = useState<string>(DEFAULT_SOURCE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,6 +47,7 @@ export function AddCandidatePanel({
           last_name: lastName.trim(),
           email: email.trim(),
           job_id: jobId ? Number(jobId) : null,
+          source,
         }),
       });
       const payload = (await response.json().catch(() => null)) as {
@@ -109,6 +114,10 @@ export function AddCandidatePanel({
               </option>
             ))}
           </select>
+          <label className="flex items-center gap-2 text-sm text-slate-600 sm:col-span-2 lg:col-span-4">
+            How did they find us?
+            <SourceSelect id="add-source" value={source} onChange={setSource} />
+          </label>
           <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
             <Button type="submit" disabled={busy}>
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}

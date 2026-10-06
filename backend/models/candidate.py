@@ -28,6 +28,23 @@ class CandidateSource(str, Enum):
     OTHER = "other"
 
 
+class ApplicationSource(str, Enum):
+    """Track 2 Phase 3: how a candidate found the job, on every way in.
+
+    The CandidateSource values plus INTERNAL. Labels and the legacy mapping
+    live in services/sources.py.
+    """
+    LINKEDIN = "linkedin"
+    INDEED = "indeed"
+    COMPANY_WEBSITE = "company_website"
+    REFERRAL = "referral"
+    AGENCY = "agency"
+    JOB_BOARD = "job_board"
+    DIRECT_APPLICATION = "direct_application"
+    OTHER = "other"
+    INTERNAL = "internal"
+
+
 class CandidateCreate(BaseModel):
     """Schema for creating a new candidate."""
     first_name: str
@@ -36,7 +53,7 @@ class CandidateCreate(BaseModel):
     phone: Optional[str] = None
     location: Optional[str] = None
     headline: Optional[str] = None
-    source: Optional[CandidateSource] = None
+    source: Optional[ApplicationSource] = None
     status: Union[CandidateStatus, str] = CandidateStatus.ACTIVE
     position_applied: Optional[str] = None
     job_id: Optional[int] = None
@@ -51,7 +68,7 @@ class CandidateUpdate(BaseModel):
     phone: Optional[str] = None
     location: Optional[str] = None
     headline: Optional[str] = None
-    source: Optional[CandidateSource] = None
+    source: Optional[ApplicationSource] = None
     status: Optional[CandidateStatus] = None
     position_applied: Optional[str] = None
     job_id: Optional[int] = None

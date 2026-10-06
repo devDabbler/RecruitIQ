@@ -23,6 +23,7 @@ export const TEMPLATES_MANAGE = "templates.manage";
 export const PROFILE_EDIT = "profile.edit";
 export const AUDIT_VIEW = "audit.view";
 export const DATA_EXPORT = "candidates.export_data";
+export const DEPARTMENTS_MANAGE = "departments.manage";
 
 export type Permission =
   | typeof JOBS_WRITE
@@ -37,7 +38,8 @@ export type Permission =
   | typeof TEMPLATES_MANAGE
   | typeof PROFILE_EDIT
   | typeof AUDIT_VIEW
-  | typeof DATA_EXPORT;
+  | typeof DATA_EXPORT
+  | typeof DEPARTMENTS_MANAGE;
 
 export type Role = "admin" | "hiring_manager" | "hiring_team" | "interviewer" | "demo";
 

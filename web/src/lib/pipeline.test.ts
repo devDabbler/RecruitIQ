@@ -24,8 +24,8 @@ function stage(key: string, kind: string, enabled = true): ApplicationStage {
 }
 
 describe("availableActions", () => {
-  it("offers advance, skip, and reject mid-pipeline", () => {
-    expect(availableActions(detail({}))).toEqual(["advance", "skip", "reject"]);
+  it("offers advance, skip, reject, and withdraw mid-pipeline", () => {
+    expect(availableActions(detail({}))).toEqual(["advance", "skip", "reject", "withdraw"]);
   });
 
   it("adds decline once an offer is out", () => {
@@ -34,11 +34,13 @@ describe("availableActions", () => {
       "skip",
       "reject",
       "decline",
+      "withdraw",
     ]);
     expect(availableActions(detail({ current_stage_key: "offer_accepted" }))).toEqual([
       "advance",
       "reject",
       "decline",
+      "withdraw",
     ]);
   });
 
@@ -53,6 +55,7 @@ describe("availableActions", () => {
       "advance",
       "reject",
       "decline",
+      "withdraw",
     ]);
   });
 
@@ -67,12 +70,14 @@ describe("availableActions", () => {
       "advance",
       "reject",
       "decline",
+      "withdraw",
     ]);
   });
 
   it("offers nothing on a terminal application", () => {
     expect(availableActions(detail({ status: "hired", current_stage_key: null }))).toEqual([]);
     expect(availableActions(detail({ status: "rejected", current_stage_key: null }))).toEqual([]);
+    expect(availableActions(detail({ status: "withdrawn", current_stage_key: null }))).toEqual([]);
   });
 });
 
