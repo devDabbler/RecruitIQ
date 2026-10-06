@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { FitChip } from "@/components/fit-chip";
 import type { JobPipeline } from "@/lib/domain";
+import { capReason } from "@/lib/fit";
 
 /**
  * One column per enabled round, candidates as chips, outcomes as a footer.
@@ -42,9 +44,15 @@ export function PipelineBoard({ pipeline }: { pipeline: JobPipeline }) {
                       <span className="block truncate font-medium text-slate-800">
                         {card.candidate_name}
                       </span>
-                      {card.current_position ? (
-                        <span className="block truncate text-xs text-slate-500">
-                          {card.current_position}
+                      <span className="mt-0.5 flex items-center justify-between gap-1.5">
+                        <span className="truncate text-xs text-slate-500">
+                          {card.current_position ?? ""}
+                        </span>
+                        <FitChip fit={card.fit} compact />
+                      </span>
+                      {card.fit?.capped ? (
+                        <span className="mt-0.5 block truncate text-[11px] text-rose-600">
+                          Capped: {capReason(card.fit.missing)}
                         </span>
                       ) : null}
                     </Link>

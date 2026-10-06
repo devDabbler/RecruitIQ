@@ -62,6 +62,41 @@
         "title": "ActivityEvent",
         "type": "object"
       },
+      "ApplicantFit": {
+        "description": "How well one applicant fits the job they applied to (Track 2 Phase 2).\n\nThe same `score_pair` number the matching page ranks by. `hidden` is True\nfor an interviewer who has not yet submitted feedback on this candidate;\nthen `score` is None and `missing` is empty, so nothing about the score\nleaks before they have formed their own view.",
+        "properties": {
+          "capped": {
+            "default": false,
+            "title": "Capped",
+            "type": "boolean"
+          },
+          "hidden": {
+            "default": false,
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "missing": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing",
+            "type": "array"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "title": "ApplicantFit",
+        "type": "object"
+      },
       "ApplicationCard": {
         "description": "One candidate chip on the board.",
         "properties": {
@@ -99,6 +134,16 @@
               }
             ],
             "title": "Entered At"
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicantFit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1652,6 +1697,16 @@
               }
             ],
             "title": "First Name"
+          },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicantFit"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "headline": {
             "anyOf": [
@@ -5497,6 +5552,16 @@
             ],
             "title": "Candidate Id"
           },
+          "fit": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicantFit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "message": {
             "default": "Candidate saved",
             "title": "Message",
@@ -8446,7 +8511,7 @@
     },
     "/api/candidates/": {
       "get": {
-        "description": "Search for candidates with various filters.",
+        "description": "Search for candidates with various filters.\n\nWith `job_id`, each result carries `fit` (Track 2 Phase 2): how well that\napplicant fits the job, hidden from an interviewer until they have given\nfeedback. `sort_by=fit` ranks the job's applicants best first and needs\na `job_id`.",
         "operationId": "search_candidates_api_candidates__get",
         "parameters": [
           {

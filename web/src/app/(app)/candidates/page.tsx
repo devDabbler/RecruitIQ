@@ -3,12 +3,13 @@ import { Download } from "lucide-react";
 
 import { AddCandidatePanel } from "@/components/add-candidate-panel";
 import { CandidateFilters } from "@/components/candidate-filters";
-import { type BulkContext, CandidateTable } from "@/components/candidate-table";
+import { type BulkContext, CandidateTable, type FitColumn } from "@/components/candidate-table";
 import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
 import { getJobPipeline, listCandidates, listJobs } from "@/lib/data";
 import type { CandidateSearch } from "@/lib/domain";
+import { fitQuery, fitSortFrom } from "@/lib/fit";
 import { applicationsByCandidate, exportHref } from "@/lib/intake";
 import { canWrite } from "@/lib/session";
 
@@ -23,6 +24,8 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
   const jobId = first(params.job);
   // A hand-edited `?page=abc` should land on page 1, not send NaN to the API.
   const page = Math.max(1, Number(first(params.page)) || 1);
+  // Track 2 Phase 2: a job's applicants are ranked by fit, best first.
+  const fitSort = jobId ? fitSortFrom(first(params.sort)) : null;
 
   const [writable, jobList] = await Promise.all([canWrite(), listJobs().catch(() => null)]);
   const jobs = (jobList?.results ?? [])
@@ -46,7 +49,14 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
 
   let data: CandidateSearch;
   try {
-    data = await listCandidates({ keyword, status, jobId, page, pageSize: PAGE_SIZE });
+    data = await listCandidates({
+      keyword,
+      status,
+      jobId,
+      page,
+      pageSize: PAGE_SIZE,
+      ...(fitSort ? fitQuery(fitSort) : {}),
+    });
   } catch (error) {
     return (
       <>
@@ -70,6 +80,13 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
     }
   }
 
+  const fit: FitColumn | null = fitSort
+    ? {
+        sort: fitSort,
+        toggleHref: listHref(params, { sort: fitSort === "best" ? "worst" : null, page: null }),
+      }
+    : null;
+
   const lastPage = Math.max(1, Math.ceil(data.total / PAGE_SIZE));
   const from = data.total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const to = Math.min(page * PAGE_SIZE, data.total);
@@ -78,9 +95,7 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
     <>
       <PageHeader
         title="Candidates"
-        description={
-          data.total === 1 ? "1 candidate" : `${data.total} candidates in the pipeline`
-        }
+        description={data.total === 1 ? "1 candidate" : `${data.total} candidates in the pipeline`}
         actions={exportLink}
       />
 
@@ -99,7 +114,7 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
           detail="Clear the search box, pick a different stage, or choose All jobs."
         />
       ) : (
-        <CandidateTable candidates={data.results} bulk={bulk} />
+        <CandidateTable candidates={data.results} bulk={bulk} fit={fit} />
       )}
 
       {data.total > PAGE_SIZE ? (
@@ -119,6 +134,27 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
       ) : null}
     </>
   );
+}
+
+/**
+ * This page's URL with some params changed (null removes one). Rebuilt from
+ * the incoming params so paging and sorting preserve the active search, stage
+ * and job filters instead of silently resetting them.
+ */
+function listHref(
+  params: Record<string, string | string[] | undefined>,
+  changes: Record<string, string | null>,
+): string {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    const single = first(value);
+    if (!(key in changes) && single) query.set(key, single);
+  }
+  for (const [key, value] of Object.entries(changes)) {
+    if (value !== null) query.set(key, value);
+  }
+  const text = query.toString();
+  return text ? `/candidates?${text}` : "/candidates";
 }
 
 /** Next hands repeated query params through as arrays; take the first. */
@@ -145,18 +181,9 @@ function PageLink({
     );
   }
 
-  // Rebuilt from the incoming params so paging preserves the active search and
-  // stage filter instead of silently resetting them.
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    const single = first(value);
-    if (key !== "page" && single) query.set(key, single);
-  }
-  query.set("page", String(page));
-
   return (
     <Link
-      href={`/candidates?${query}`}
+      href={listHref(params, { page: String(page) })}
       className="rounded-md border border-slate-200 bg-white px-3 py-1.5 font-medium hover:border-slate-300"
     >
       {children}

@@ -60,6 +60,25 @@ def can_see_score(db: Session, user: Optional[User], candidate_id: str) -> bool:
     return submitted is not None
 
 
+def score_visible_ids(db: Session, user: Optional[User], candidate_ids) -> Optional[set[str]]:
+    """`can_see_score` for many candidates in one query. None means all of them."""
+    if user is None or can(user.role, SCORE_BEFORE_FEEDBACK):
+        return None
+    ids = sorted({str(cid) for cid in candidate_ids})
+    if not ids:
+        return set()
+    rows = (
+        db.query(JobApplication.candidate_id)
+        .join(ApplicationStage, ApplicationStage.application_id == JobApplication.id)
+        .join(Interview, Interview.application_stage_id == ApplicationStage.id)
+        .join(Feedback, Feedback.interview_id == Interview.id)
+        .filter(Interview.interviewer_id == user.id, JobApplication.candidate_id.in_(ids))
+        .distinct()
+        .all()
+    )
+    return {candidate_id for (candidate_id,) in rows}
+
+
 def request_user(request: Request) -> Optional[User]:
     """The staff User behind this request, as resolved by the app-wide gates.
 

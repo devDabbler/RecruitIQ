@@ -439,6 +439,11 @@ export interface paths {
         /**
          * Search Candidates
          * @description Search for candidates with various filters.
+         *
+         *     With `job_id`, each result carries `fit` (Track 2 Phase 2): how well that
+         *     applicant fits the job, hidden from an interviewer until they have given
+         *     feedback. `sort_by=fit` ranks the job's applicants best first and needs
+         *     a `job_id`.
          */
         get: operations["search_candidates_api_candidates__get"];
         put?: never;
@@ -2305,6 +2310,31 @@ export interface components {
             stage_name?: string | null;
         };
         /**
+         * ApplicantFit
+         * @description How well one applicant fits the job they applied to (Track 2 Phase 2).
+         *
+         *     The same `score_pair` number the matching page ranks by. `hidden` is True
+         *     for an interviewer who has not yet submitted feedback on this candidate;
+         *     then `score` is None and `missing` is empty, so nothing about the score
+         *     leaks before they have formed their own view.
+         */
+        ApplicantFit: {
+            /**
+             * Capped
+             * @default false
+             */
+            capped: boolean;
+            /**
+             * Hidden
+             * @default false
+             */
+            hidden: boolean;
+            /** Missing */
+            missing?: string[];
+            /** Score */
+            score?: number | null;
+        };
+        /**
          * ApplicationCard
          * @description One candidate chip on the board.
          */
@@ -2319,6 +2349,7 @@ export interface components {
             current_position?: string | null;
             /** Entered At */
             entered_at?: string | null;
+            fit?: components["schemas"]["ApplicantFit"] | null;
         };
         /** ApplicationDetail */
         ApplicationDetail: {
@@ -2822,6 +2853,7 @@ export interface components {
             email?: string | null;
             /** First Name */
             first_name?: string | null;
+            fit?: components["schemas"]["ApplicantFit"] | null;
             /** Headline */
             headline?: string | null;
             /** Id */
@@ -4065,6 +4097,7 @@ export interface components {
             application_id?: number | null;
             /** Candidate Id */
             candidate_id?: string | null;
+            fit?: components["schemas"]["ApplicantFit"] | null;
             /**
              * Message
              * @default Candidate saved

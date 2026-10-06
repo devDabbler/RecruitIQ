@@ -52,6 +52,9 @@ export interface CandidateQuery {
   jobId?: string;
   page?: number;
   pageSize?: number;
+  /** Track 2 Phase 2: "fit" ranks a job's applicants; needs `jobId`. */
+  sortBy?: "fit";
+  sortOrder?: "asc" | "desc";
 }
 
 export async function listCandidates({
@@ -60,10 +63,20 @@ export async function listCandidates({
   jobId,
   page = 1,
   pageSize = 25,
+  sortBy,
+  sortOrder,
 }: CandidateQuery = {}): Promise<CandidateSearch> {
   return apiFetch<CandidateSearch>("/api/candidates/", {
     token: await getToken(),
-    query: { keyword, status, job_id: jobId, page, page_size: pageSize },
+    query: {
+      keyword,
+      status,
+      job_id: jobId,
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    },
   });
 }
 
@@ -148,10 +161,9 @@ export async function getCandidateApplications(candidateId: string): Promise<App
 
 export async function getCandidateSavedJobs(candidateId: string): Promise<SavedJob[]> {
   return (
-    (await apiFetchOptional<SavedJob[]>(
-      `/api/jobs/saved/${encodeURIComponent(candidateId)}`,
-      { token: await getToken() },
-    )) ?? []
+    (await apiFetchOptional<SavedJob[]>(`/api/jobs/saved/${encodeURIComponent(candidateId)}`, {
+      token: await getToken(),
+    })) ?? []
   );
 }
 
@@ -289,7 +301,9 @@ export async function getPublicStatus(token: string): Promise<PublicStatus | nul
 }
 
 /** The same view, by application, for staff and the demo to preview. */
-export async function getCandidateView(applicationId: number | string): Promise<PublicStatus | null> {
+export async function getCandidateView(
+  applicationId: number | string,
+): Promise<PublicStatus | null> {
   return apiFetchOptional<PublicStatus>(`/api/applications/${applicationId}/candidate-view`, {
     token: await getToken(),
   });

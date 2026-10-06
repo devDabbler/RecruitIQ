@@ -35,7 +35,7 @@ from ..models.models import (
     Resume,
     User,
 )
-from ..services import audit_service, data_export_service, erasure_service, intake_service
+from ..services import applicant_fit, audit_service, data_export_service, erasure_service, intake_service
 from ..services.service_registry import provide_resume_service
 from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
@@ -750,13 +750,23 @@ def search_candidates(
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service)
 ):
-    """Search for candidates with various filters."""
+    """Search for candidates with various filters.
+
+    With `job_id`, each result carries `fit` (Track 2 Phase 2): how well that
+    applicant fits the job, hidden from an interviewer until they have given
+    feedback. `sort_by=fit` ranks the job's applicants best first and needs
+    a `job_id`.
+    """
+    if sort_by == "fit" and job_id is None:
+        raise HTTPException(status_code=400, detail="Sorting by fit needs a job_id.")
+    job = db.get(Job, job_id) if job_id is not None else None
+    user = request_user(http_request)
     try:
         logging.info(f"Searching candidates with filters: keyword={keyword}, status={status}, position={position}, skills={skills}")
         
         query = _filtered_candidates(
             db,
-            request_user(http_request),
+            user,
             keyword=keyword,
             status=status.value if status else None,
             position=position,
@@ -765,7 +775,11 @@ def search_candidates(
         )
 
         # Apply sorting
-        if hasattr(Candidate, sort_by):
+        if sort_by == "fit":
+            # A job's applicants are a short list, so rank them all in Python
+            # and page the ranked ids. The id tiebreak keeps pages stable.
+            query = query.order_by(asc(Candidate.id))
+        elif hasattr(Candidate, sort_by):
             sort_column = getattr(Candidate, sort_by)
             if sort_order.lower() == 'desc':
                 query = query.order_by(desc(sort_column))
@@ -784,7 +798,19 @@ def search_candidates(
         
         # Apply pagination
         offset = (page - 1) * page_size
-        candidates = query.offset(offset).limit(page_size).all()
+        fits: Dict[str, Any] = {}
+        if sort_by == "fit":
+            ids = [cid for (cid,) in query.with_entities(Candidate.id).all()]
+            fits = applicant_fit.score_applicants(db, job, ids, user) if job else {}
+            descending = sort_order.lower() == "desc"
+            ids.sort(key=lambda cid: applicant_fit.order_key(fits.get(cid), descending))
+            page_ids = ids[offset:offset + page_size]
+            by_id = {c.id: c for c in db.query(Candidate).filter(Candidate.id.in_(page_ids)).all()}
+            candidates = [by_id[cid] for cid in page_ids if cid in by_id]
+        else:
+            candidates = query.offset(offset).limit(page_size).all()
+            if job is not None:
+                fits = applicant_fit.score_applicants(db, job, [c.id for c in candidates], user)
         
         # Convert candidates to response model format
         results = []
@@ -843,6 +869,7 @@ def search_candidates(
                 # Ensure required fields have defaults
                 candidate_dict.setdefault('created_at', datetime.utcnow())
                 candidate_dict.setdefault('updated_at', datetime.utcnow())
+                candidate_dict['fit'] = fits.get(candidate.id)
                 
                 # Add to results
                 results.append(CandidateResponse(**candidate_dict))
