@@ -87,4 +87,9 @@ def test_jobs_without_requirements_score_exactly_as_before():
     for label in expected:
         assert current[label].keys() == expected[label].keys(), label
         for pair, scores in expected[label].items():
-            assert current[label][pair] == scores, f"{label}: {pair}"
+            got = current[label][pair]
+            assert got["match_explanation"] == scores["match_explanation"], f"{label}: {pair}"
+            for key in KEYS[:-1]:
+                # Last-digit float noise differs between machines' BLAS (the
+                # cosine in role fit); a real scoring change moves far more.
+                assert got[key] == pytest.approx(scores[key], rel=0, abs=1e-9), f"{label}: {pair}: {key}"
