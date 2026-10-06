@@ -312,3 +312,157 @@ def test_assistant_lists_pending_feedback(db_session, application, staff_users):
     assert mine and mine[0]["interviewer"] == "Test Interviewer"
     assert mine[0]["stage"] == "Resume submitted"
     assert "@" not in str(result)  # names only, never addresses
+
+
+# --- drafts (Track 2 Phase 4) -------------------------------------------------
+
+
+def test_a_draft_is_partial_private_and_still_pending(db_session, application, staff_users):
+    interviewer = staff_users["interviewer"]
+    interview = fs.assign(db_session, _row(application, "resume_submitted"), interviewer)
+    draft = fs.save_draft(db_session, interview, interviewer, None, None, "Half a thought")
+    assert draft.status == fs.DRAFT and draft.submitted_at is None and draft.rating is None
+    assert interview.submitted_feedback is None and interview.draft_feedback is draft
+    assert fs.interview_state(interview) == "waiting"
+    assert interview in fs.pending_feedback(db_session, interviewer.id)
+    assert fs.pending_count(db_session, interviewer.id) == 1
+    # A draft does not unlock the score.
+    assert not can_see_score(db_session, interviewer, application.candidate_id)
+
+
+def test_submit_finalizes_the_draft_in_place(db_session, application, staff_users):
+    interviewer = staff_users["interviewer"]
+    interview = fs.assign(db_session, _row(application, "resume_submitted"), interviewer)
+    draft = fs.save_draft(db_session, interview, interviewer, 3, "hire", "Draft notes")
+    submitted = fs.submit_feedback(db_session, interview, interviewer, 4, "hire", " Final. ")
+    assert submitted.id == draft.id
+    assert (submitted.status, submitted.rating, submitted.notes) == (fs.SUBMITTED, 4, "Final.")
+    assert submitted.submitted_at is not None
+    assert fs.pending_count(db_session, interviewer.id) == 0
+    assert can_see_score(db_session, interviewer, application.candidate_id)
+    with pytest.raises(fs.FeedbackError) as after:
+        fs.save_draft(db_session, interview, interviewer, 5, None, "")
+    assert after.value.status_code == 409
+
+
+def test_only_the_author_saves_a_draft(db_session, application, staff_users):
+    interview = fs.assign(db_session, _row(application, "resume_submitted"), staff_users["interviewer"])
+    with pytest.raises(fs.FeedbackError) as caught:
+        fs.save_draft(db_session, interview, staff_users["hiring_team"], 3, None, "")
+    assert caught.value.status_code == 403
+
+
+def test_unassign_discards_a_draft(db_session, application, staff_users):
+    interview = fs.assign(db_session, _row(application, "resume_submitted"), staff_users["interviewer"])
+    fs.save_draft(db_session, interview, staff_users["interviewer"], 2, None, "")
+    interview_id = interview.id
+    fs.unassign(db_session, interview)
+    db_session.flush()
+    assert db_session.query(Feedback).filter(Feedback.interview_id == interview_id).count() == 0
+
+
+def test_draft_route_never_leaks_to_another_viewer(
+    hiring_team_client, interviewer_client, hiring_manager_client, scoped_application, staff_users
+):
+    app_id = scoped_application["application_id"]
+    mine = _assign(hiring_team_client, app_id, "resume_submitted", staff_users["interviewer"]).json()
+    theirs = _assign(hiring_team_client, app_id, "resume_submitted", staff_users["hiring_team"]).json()
+
+    saved = interviewer_client.put(
+        f"/api/interviews/{mine['id']}/feedback", json={"rating": 2, "notes": "Unsure so far"}
+    )
+    assert saved.status_code == 200, saved.text
+    body = saved.json()
+    assert body["draft"]["rating"] == 2 and body["draft"]["recommendation"] is None
+    assert body["feedback"] is None and body["state"] == "waiting"
+
+    # Nobody else learns the draft exists: not the colleague, not the manager.
+    for client in (hiring_team_client, hiring_manager_client):
+        seen = {i["id"]: i for i in client.get(f"/api/applications/{app_id}/interviews").json()}
+        assert seen[mine["id"]]["draft"] is None
+        assert seen[mine["id"]]["feedback"] is None
+        assert seen[mine["id"]]["feedback_hidden"] is False
+    listed = hiring_manager_client.get("/api/interviews", params={"scope": "all"}).json()["items"]
+    assert all(i["draft"] is None for i in listed)
+
+    # The colleague submits; the interviewer's draft does not unlock it.
+    hiring_team_client.post(
+        f"/api/interviews/{theirs['id']}/feedback", json={"rating": 4, "recommendation": "hire"}
+    )
+    seen = {i["id"]: i for i in interviewer_client.get(f"/api/applications/{app_id}/interviews").json()}
+    assert seen[theirs["id"]]["feedback"] is None and seen[theirs["id"]]["feedback_hidden"] is True
+    assert seen[mine["id"]]["draft"]["notes"] == "Unsure so far"
+
+    assert hiring_team_client.put(f"/api/interviews/{mine['id']}/feedback", json={}).status_code == 403
+    assert interviewer_client.put(
+        f"/api/interviews/{mine['id']}/feedback", json={"rating": 9}
+    ).status_code == 422
+
+    submitted = interviewer_client.post(
+        f"/api/interviews/{mine['id']}/feedback", json={"rating": 3, "recommendation": "hire"}
+    )
+    assert submitted.status_code == 200
+    assert submitted.json()["draft"] is None and submitted.json()["feedback"]["rating"] == 3
+    assert interviewer_client.put(f"/api/interviews/{mine['id']}/feedback", json={}).status_code == 409
+
+
+def test_pending_count_route(hiring_team_client, interviewer_client, demo_client, scoped_application, staff_users):
+    assert interviewer_client.get("/api/interviews/pending-count").json() == {"count": 0}
+    interview = _assign(
+        hiring_team_client, scoped_application["application_id"], "resume_submitted", staff_users["interviewer"]
+    ).json()
+    _assign(hiring_team_client, scoped_application["application_id"], "case_study", staff_users["interviewer"])
+    # The case study has not started, so only one is owed; a draft still counts.
+    interviewer_client.put(f"/api/interviews/{interview['id']}/feedback", json={"notes": "x"})
+    assert interviewer_client.get("/api/interviews/pending-count").json() == {"count": 1}
+    interviewer_client.post(
+        f"/api/interviews/{interview['id']}/feedback", json={"rating": 3, "recommendation": "hire"}
+    )
+    assert interviewer_client.get("/api/interviews/pending-count").json() == {"count": 0}
+    assert demo_client.get("/api/interviews/pending-count").json() == {"count": 0}
+
+
+# --- feedback templates (Track 2 Phase 4) --------------------------------------
+
+
+def test_feedback_template_crud_and_permissions(
+    hiring_manager_client, hiring_team_client, interviewer_client, demo_client, scoped_application
+):
+    job_id = scoped_application["job_id"]
+    body = {"name": "Phone screen", "body": "Strengths:\nConcerns:"}
+    assert hiring_team_client.post("/api/feedback-templates", json=body).status_code == 403
+    assert interviewer_client.post("/api/feedback-templates", json=body).status_code == 403
+    assert demo_client.post("/api/feedback-templates", json=body).status_code == 403
+
+    made = hiring_manager_client.post("/api/feedback-templates", json=body)
+    assert made.status_code == 201, made.text
+    global_id = made.json()["id"]
+    assert made.json()["job_id"] is None
+    job_one = hiring_manager_client.post(
+        "/api/feedback-templates", json={"name": "Architecture round", "body": "Design:", "job_id": job_id}
+    ).json()
+    try:
+        # The form's list: this job's first, then the global ones. Interviewers may read it.
+        listed = interviewer_client.get("/api/feedback-templates", params={"job_id": job_id})
+        assert listed.status_code == 200
+        ids = [t["id"] for t in listed.json()["items"]]
+        assert ids.index(job_one["id"]) < ids.index(global_id)
+        other_job = hiring_team_client.get("/api/feedback-templates", params={"job_id": job_id + 100000})
+        assert job_one["id"] not in [t["id"] for t in other_job.json()["items"]]
+
+        edited = hiring_manager_client.put(
+            f"/api/feedback-templates/{global_id}", json={"name": " Screen ", "body": "New text"}
+        )
+        assert edited.status_code == 200
+        assert (edited.json()["name"], edited.json()["body"]) == ("Screen", "New text")
+        assert hiring_team_client.put(f"/api/feedback-templates/{global_id}", json=body).status_code == 403
+        assert hiring_manager_client.post(
+            "/api/feedback-templates", json={"name": "   ", "body": "x"}
+        ).status_code == 422
+        assert hiring_manager_client.post(
+            "/api/feedback-templates", json={**body, "job_id": 987654321}
+        ).status_code == 404
+    finally:
+        assert hiring_manager_client.delete(f"/api/feedback-templates/{global_id}").status_code == 200
+        assert hiring_manager_client.delete(f"/api/feedback-templates/{job_one['id']}").status_code == 200
+    assert hiring_manager_client.delete(f"/api/feedback-templates/{global_id}").status_code == 404

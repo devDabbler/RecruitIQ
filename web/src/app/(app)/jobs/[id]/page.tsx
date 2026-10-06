@@ -5,6 +5,7 @@ import { ArrowLeft, Pencil } from "lucide-react";
 
 import { DefaultInterviewersEditor } from "@/components/default-interviewers-editor";
 import { DeleteJobButton } from "@/components/delete-job-button";
+import { FeedbackTemplatesManager } from "@/components/feedback-templates-manager";
 import { MatchScore, SubScore } from "@/components/match-score";
 import { PageHeader } from "@/components/page-header";
 import { PipelineBoard } from "@/components/pipeline-board";
@@ -15,13 +16,20 @@ import {
   getDefaultInterviewers,
   getJob,
   getJobPipeline,
+  listFeedbackTemplates,
   listTeam,
   matchCandidatesForJob,
 } from "@/lib/data";
 import { formatDate, formatSalary, humanize } from "@/lib/format";
 import { educationLabel, yearsLabel } from "@/lib/job-form";
 import { memberName } from "@/lib/interviews";
-import { DELETE_RECORDS, JOBS_WRITE, SCORE_BEFORE_FEEDBACK, can } from "@/lib/permissions";
+import {
+  DELETE_RECORDS,
+  JOBS_WRITE,
+  SCORE_BEFORE_FEEDBACK,
+  TEMPLATES_MANAGE,
+  can,
+} from "@/lib/permissions";
 import type { Job } from "@/lib/domain";
 import { getUser } from "@/lib/session";
 
@@ -143,6 +151,26 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
               </CardContent>
             </Card>
           ) : null}
+
+          {role !== "interviewer" ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Feedback templates</CardTitle>
+                <p className="text-xs text-slate-500">
+                  Offered first on this job&apos;s feedback forms, before the{" "}
+                  <Link href="/feedback-templates" className="text-indigo-700 hover:underline">
+                    global templates
+                  </Link>
+                  .
+                </p>
+              </CardHeader>
+              <CardContent>
+                <Suspense fallback={<Skeleton className="h-16 w-full rounded-lg" />}>
+                  <JobFeedbackTemplates jobId={job.id} editable={can(role, TEMPLATES_MANAGE)} />
+                </Suspense>
+              </CardContent>
+            </Card>
+          ) : null}
         </div>
 
         <div className="space-y-6">
@@ -189,6 +217,20 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
         </div>
       </div>
     </>
+  );
+}
+
+async function JobFeedbackTemplates({ jobId, editable }: { jobId: number; editable: boolean }) {
+  const templates = await listFeedbackTemplates(jobId).catch(() => null);
+  if (templates === null) {
+    return <p className="text-sm text-slate-500">The templates could not be loaded.</p>;
+  }
+  return (
+    <FeedbackTemplatesManager
+      templates={templates.filter((t) => t.job_id === jobId)}
+      jobId={jobId}
+      editable={editable}
+    />
   );
 }
 

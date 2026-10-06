@@ -575,6 +575,17 @@ class Interview(Base):
         "Feedback", back_populates="interview", uselist=False, cascade="all, delete-orphan"
     )
 
+    @property
+    def submitted_feedback(self):
+        """The feedback, if submitted. A draft does not count as given."""
+        feedback = self.feedback
+        return feedback if feedback is not None and feedback.status == "submitted" else None
+
+    @property
+    def draft_feedback(self):
+        feedback = self.feedback
+        return feedback if feedback is not None and feedback.status == "draft" else None
+
     def __repr__(self):
         return f"<Interview(stage_row={self.application_stage_id}, interviewer={self.interviewer_id})>"
 
@@ -587,14 +598,44 @@ class Feedback(Base):
     interview_id = Column(
         Integer, ForeignKey("interviews.id", ondelete="CASCADE"), nullable=False, unique=True
     )
-    rating = Column(SmallInteger, nullable=False)
-    recommendation = Column(String(20), nullable=False)
+    # Track 2 Phase 4: a draft may be partial and is seen only by its author.
+    # Everything that reads "has this interviewer given feedback" must ask for
+    # status == submitted (Interview.submitted_feedback), never just a row.
+    status = Column(String(10), nullable=False, default="submitted", server_default="submitted")
+    rating = Column(SmallInteger, nullable=True)
+    recommendation = Column(String(20), nullable=True)
     notes = Column(Text, nullable=True)
-    submitted_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    # NULL while a draft (written explicitly); the server default covers raw inserts.
+    submitted_at = Column(DateTime, nullable=True, server_default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
 
-    __table_args__ = (CheckConstraint("rating BETWEEN 1 AND 5", name="ck_feedback_rating"),)
+    __table_args__ = (
+        CheckConstraint("rating BETWEEN 1 AND 5", name="ck_feedback_rating"),
+        CheckConstraint("status IN ('draft', 'submitted')", name="ck_feedback_status"),
+        CheckConstraint(
+            "status = 'draft' OR (rating IS NOT NULL AND recommendation IS NOT NULL AND submitted_at IS NOT NULL)",
+            name="ck_feedback_submitted_complete",
+        ),
+    )
 
     interview = relationship("Interview", back_populates="feedback")
+
+    @property
+    def is_draft(self) -> bool:
+        return self.status == "draft"
+
+
+class FeedbackTemplate(Base):
+    """Starting text for an interviewer's notes. Global when job_id is NULL.
+    Not candidate data (Track 2 Phase 4)."""
+    __tablename__ = "feedback_templates"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(80), nullable=False)
+    body = Column(Text, nullable=False)
+    job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=True, index=True)
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, server_default=func.now())
 
 
 class StageDefaultInterviewer(Base):

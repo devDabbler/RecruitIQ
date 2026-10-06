@@ -11,3 +11,10 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!NUMERIC_ID.test(id)) return badRequest("That is not a valid interview id.");
   return forwardWrite(request, `/api/interviews/${id}/feedback`, "POST");
 }
+
+/** Save the author's draft (Track 2 Phase 4). */
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params;
+  if (!NUMERIC_ID.test(id)) return badRequest("That is not a valid interview id.");
+  return forwardWrite(request, `/api/interviews/${id}/feedback`, "PUT");
+}

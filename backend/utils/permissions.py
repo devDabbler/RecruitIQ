@@ -145,6 +145,11 @@ ROUTE_PERMISSIONS: list[tuple[str, re.Pattern[str], str]] = [
         ("POST", r"/api/applications/\d+/interviews", PIPELINE_MOVE),
         ("DELETE", r"/api/interviews/\d+", PIPELINE_MOVE),
         ("POST", r"/api/interviews/\d+/feedback", FEEDBACK_SUBMIT),
+        # Track 2 Phase 4: the author's draft, and feedback templates.
+        ("PUT", r"/api/interviews/\d+/feedback", FEEDBACK_SUBMIT),
+        ("POST", r"/api/feedback-templates", TEMPLATES_MANAGE),
+        ("PUT", r"/api/feedback-templates/\d+", TEMPLATES_MANAGE),
+        ("DELETE", r"/api/feedback-templates/\d+", TEMPLATES_MANAGE),
         ("POST", r"/api/team/users", USERS_INVITE),
         ("PUT", r"/api/team/users/[^/]+/role", USERS_CHANGE_ROLE),
         ("DELETE", r"/api/team/users/[^/]+", DELETE_RECORDS),

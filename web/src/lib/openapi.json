@@ -2696,6 +2696,96 @@
         "title": "ExperienceStep",
         "type": "object"
       },
+      "FeedbackDraftIn": {
+        "description": "A work in progress: every field optional, validated only on submit.",
+        "properties": {
+          "notes": {
+            "default": "",
+            "maxLength": 5000,
+            "title": "Notes",
+            "type": "string"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "maximum": 5.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "enum": [
+                  "strong_hire",
+                  "hire",
+                  "no_hire",
+                  "strong_no_hire"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation"
+          }
+        },
+        "title": "FeedbackDraftIn",
+        "type": "object"
+      },
+      "FeedbackDraftOut": {
+        "properties": {
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          },
+          "rating": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating"
+          },
+          "recommendation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recommendation"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "updated_at"
+        ],
+        "title": "FeedbackDraftOut",
+        "type": "object"
+      },
       "FeedbackIn": {
         "properties": {
           "notes": {
@@ -2787,6 +2877,95 @@
         "title": "FeedbackPolicy",
         "type": "object"
       },
+      "FeedbackTemplateIn": {
+        "properties": {
+          "body": {
+            "maxLength": 5000,
+            "minLength": 1,
+            "title": "Body",
+            "type": "string"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "body"
+        ],
+        "title": "FeedbackTemplateIn",
+        "type": "object"
+      },
+      "FeedbackTemplateList": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackTemplateOut"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "title": "FeedbackTemplateList",
+        "type": "object"
+      },
+      "FeedbackTemplateOut": {
+        "properties": {
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "body",
+          "updated_at"
+        ],
+        "title": "FeedbackTemplateOut",
+        "type": "object"
+      },
       "FinalPenalty": {
         "properties": {
           "condition": {
@@ -2873,6 +3052,16 @@
           "candidate_name": {
             "title": "Candidate Name",
             "type": "string"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackDraftOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "feedback": {
             "anyOf": [
@@ -2980,6 +3169,16 @@
           "assignment_source": {
             "title": "Assignment Source",
             "type": "string"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeedbackDraftOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "feedback": {
             "anyOf": [
@@ -4422,6 +4621,19 @@
           "new_password"
         ],
         "title": "PasswordChange",
+        "type": "object"
+      },
+      "PendingCount": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "title": "PendingCount",
         "type": "object"
       },
       "PendingFeedbackRow": {
@@ -9785,6 +9997,188 @@
         ]
       }
     },
+    "/api/feedback-templates": {
+      "get": {
+        "operationId": "list_feedback_templates_api_feedback_templates_get",
+        "parameters": [
+          {
+            "description": "That job's templates first, then the global ones.",
+            "in": "query",
+            "name": "job_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "That job's templates first, then the global ones.",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackTemplateList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Feedback Templates",
+        "tags": [
+          "interviews"
+        ]
+      },
+      "post": {
+        "operationId": "create_feedback_template_api_feedback_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackTemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackTemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Feedback Template",
+        "tags": [
+          "interviews"
+        ]
+      }
+    },
+    "/api/feedback-templates/{template_id}": {
+      "delete": {
+        "operationId": "delete_feedback_template_api_feedback_templates__template_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Feedback Template",
+        "tags": [
+          "interviews"
+        ]
+      },
+      "put": {
+        "operationId": "update_feedback_template_api_feedback_templates__template_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template_id",
+            "required": true,
+            "schema": {
+              "title": "Template Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackTemplateIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackTemplateOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Feedback Template",
+        "tags": [
+          "interviews"
+        ]
+      }
+    },
     "/api/intelligence/benchmark_salary": {
       "post": {
         "description": "POST endpoint to match frontend. Returns structure the UI expects.",
@@ -10366,6 +10760,28 @@
         ]
       }
     },
+    "/api/interviews/pending-count": {
+      "get": {
+        "description": "How many feedback forms the signed-in person owes (the nav badge).",
+        "operationId": "my_pending_count_api_interviews_pending_count_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PendingCount"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "My Pending Count",
+        "tags": [
+          "interviews"
+        ]
+      }
+    },
     "/api/interviews/{interview_id}": {
       "delete": {
         "operationId": "unassign_interviewer_api_interviews__interview_id__delete",
@@ -10455,6 +10871,57 @@
           }
         },
         "summary": "Submit Feedback",
+        "tags": [
+          "interviews"
+        ]
+      },
+      "put": {
+        "description": "Save the author's draft (Track 2 Phase 4). Seen by nobody else; the\nform autosaves through this and submits with POST.",
+        "operationId": "save_feedback_draft_api_interviews__interview_id__feedback_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "interview_id",
+            "required": true,
+            "schema": {
+              "title": "Interview Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackDraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InterviewOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Feedback Draft",
         "tags": [
           "interviews"
         ]

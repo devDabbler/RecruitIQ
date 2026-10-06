@@ -8,6 +8,7 @@ for (const [path, heading] of [
   ["/interviews", "Interviews"],
   ["/team", "Team"],
   ["/settings", "Settings"],
+  ["/feedback-templates", "Feedback templates"],
 ] as const) {
   test(`${path} renders for the demo account`, async ({ page }) => {
     await page.goto(path);

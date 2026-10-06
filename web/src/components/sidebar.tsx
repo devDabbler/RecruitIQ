@@ -3,6 +3,7 @@
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
+import { badgeText } from "@/lib/feedback";
 import { isActive, visibleGroups } from "@/lib/nav";
 import type { Role } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -30,8 +31,10 @@ function PendingDot() {
  * filtered list once the session resolves, so the shell never waits on
  * /auth/me.
  */
-export function Sidebar({ role }: { role: Role | null }) {
+export function Sidebar({ role, pendingFeedback = 0 }: { role: Role | null; pendingFeedback?: number }) {
   const pathname = usePathname();
+  // Track 2 Phase 4: how many feedback forms the signed-in person owes.
+  const badge = badgeText(pendingFeedback);
 
   return (
     <aside className="sticky top-14 h-[calc(100vh-3.5rem)] w-14 shrink-0 overflow-y-auto border-r border-slate-200 bg-white lg:w-56">
@@ -44,15 +47,19 @@ export function Sidebar({ role }: { role: Role | null }) {
             <ul className="space-y-0.5">
               {group.items.map(({ href, label, icon: Icon }) => {
                 const active = isActive(href, pathname);
+                const count = href === "/interviews" ? badge : null;
+                const described = count
+                  ? `${label}, ${pendingFeedback} feedback ${pendingFeedback === 1 ? "form" : "forms"} to give`
+                  : label;
                 return (
                   <li key={href}>
                     <Link
                       href={href}
-                      aria-label={label}
-                      title={label}
+                      aria-label={described}
+                      title={described}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "flex items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:justify-start",
+                        "relative flex items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors lg:justify-start",
                         active
                           ? "bg-indigo-600 text-white"
                           : "text-slate-600 hover:bg-indigo-50 hover:text-indigo-700",
@@ -61,6 +68,18 @@ export function Sidebar({ role }: { role: Role | null }) {
                       <Icon className="h-4 w-4 shrink-0" aria-hidden />
                       <span className="hidden lg:inline">{label}</span>
                       <PendingDot />
+                      {count ? (
+                        <span
+                          aria-hidden
+                          data-testid="pending-feedback-badge"
+                          className={cn(
+                            "absolute top-0.5 right-0.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold lg:static lg:ml-auto lg:h-5 lg:min-w-5 lg:text-xs",
+                            active ? "bg-white text-indigo-700" : "bg-amber-500 text-white",
+                          )}
+                        >
+                          {count}
+                        </span>
+                      ) : null}
                     </Link>
                   </li>
                 );
