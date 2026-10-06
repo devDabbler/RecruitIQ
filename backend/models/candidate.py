@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, EmailStr, ConfigDict, validator
 from datetime import datetime
 from enum import Enum
 
+from backend.models.pipeline import ApplicantFit
+
 
 class CandidateStatus(str, Enum):
     ACTIVE = "active"
@@ -104,6 +106,8 @@ class CandidateResponse(BaseModel):
     work_experience: List[Dict[str, Any]] = Field(default_factory=list)
     parsed_data: Optional[Dict[str, Any]] = None
     resume_id: Optional[int] = None
+    # Track 2 Phase 2: set only when the list is filtered to one job.
+    fit: Optional[ApplicantFit] = None
     created_at: datetime
     updated_at: datetime
     

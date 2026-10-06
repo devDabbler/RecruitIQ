@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Loader2, X } from "lucide-react";
 
+import { FitChip } from "@/components/fit-chip";
 import { StageBadge } from "@/components/stage-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -17,12 +18,20 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { type BulkTransitionResult, type Candidate, fullName, initials } from "@/lib/domain";
+import type { FitSort } from "@/lib/fit";
 import { type ActiveApplication, bulkSummary, describeError } from "@/lib/intake";
 
 /** Present when the list is filtered to one job: who can be moved, and where they are. */
 export interface BulkContext {
   jobTitle: string;
   applications: Record<string, ActiveApplication>;
+}
+
+/** Present when the list is filtered to one job: the Fit column and its sort links. */
+export interface FitColumn {
+  sort: FitSort;
+  /** Link that flips the order (best first <-> worst first). */
+  toggleHref: string;
 }
 
 interface Outcome {
@@ -38,9 +47,11 @@ interface Outcome {
 export function CandidateTable({
   candidates,
   bulk,
+  fit = null,
 }: {
   candidates: Candidate[];
   bulk: BulkContext | null;
+  fit?: FitColumn | null;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -85,8 +96,7 @@ export function CandidateTable({
         }),
       });
       const payload = (await response.json().catch(() => null)) as
-        | (BulkTransitionResult & { detail?: unknown })
-        | null;
+        (BulkTransitionResult & { detail?: unknown }) | null;
       if (!response.ok || !payload?.results) {
         throw new Error(describeError(payload?.detail, response.status));
       }
@@ -222,6 +232,26 @@ export function CandidateTable({
                 </TableHead>
               ) : null}
               <TableHead>Name</TableHead>
+              {fit ? (
+                <TableHead className="w-24">
+                  <Link
+                    href={fit.toggleHref}
+                    className="inline-flex items-center gap-1 hover:text-slate-900"
+                    aria-label={
+                      fit.sort === "best"
+                        ? "Fit, best first. Show worst first."
+                        : "Fit, worst first. Show best first."
+                    }
+                  >
+                    Fit
+                    {fit.sort === "best" ? (
+                      <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                    ) : (
+                      <ArrowUp className="h-3.5 w-3.5" aria-hidden />
+                    )}
+                  </Link>
+                </TableHead>
+              ) : null}
               <TableHead className="hidden md:table-cell">Current role</TableHead>
               <TableHead className="hidden lg:table-cell">Location</TableHead>
               <TableHead className="hidden xl:table-cell">Skills</TableHead>
@@ -244,7 +274,7 @@ export function CandidateTable({
                       />
                     </TableCell>
                   ) : null}
-                  <TableCell>
+                  <TableCell className="max-w-52 sm:max-w-none">
                     <Link
                       href={`/candidates/${candidate.id}`}
                       className="flex items-center gap-3 font-medium hover:underline"
@@ -260,10 +290,17 @@ export function CandidateTable({
                       </span>
                     </Link>
                   </TableCell>
+                  {fit ? (
+                    <TableCell>
+                      <FitChip fit={candidate.fit} />
+                    </TableCell>
+                  ) : null}
                   <TableCell className="hidden max-w-56 truncate text-slate-600 md:table-cell">
                     {candidate.current_position ?? candidate.position_applied ?? "Not listed"}
                     {candidate.current_company ? (
-                      <span className="block text-xs text-slate-400">{candidate.current_company}</span>
+                      <span className="block text-xs text-slate-400">
+                        {candidate.current_company}
+                      </span>
                     ) : null}
                   </TableCell>
                   <TableCell className="hidden text-slate-600 lg:table-cell">

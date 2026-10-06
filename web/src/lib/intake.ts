@@ -4,6 +4,7 @@
  * here has a unit test.
  */
 import type { JobPipeline } from "./domain";
+import { type ApplicantFit, byFit } from "./fit";
 
 export const MAX_TAGS_PER_CANDIDATE = 20;
 export const MAX_BULK_FILES = 20;
@@ -78,7 +79,11 @@ export function applicationsByCandidate(pipeline: JobPipeline): Record<string, A
   return out;
 }
 
-export function bulkSummary(action: "advance" | "reject", succeeded: number, failed: number): string {
+export function bulkSummary(
+  action: "advance" | "reject",
+  succeeded: number,
+  failed: number,
+): string {
   const verb = action === "advance" ? "Advanced" : "Rejected";
   const moved = `${verb} ${succeeded} ${succeeded === 1 ? "candidate" : "candidates"}.`;
   if (failed === 0) return moved;
@@ -96,6 +101,19 @@ export interface UploadItem {
   candidateName?: string;
   candidateId?: string;
   detail?: string;
+  /** Track 2 Phase 2: how well the saved applicant fits the job. */
+  fit?: ApplicantFit | null;
+}
+
+/**
+ * The progress list once a batch has finished: everyone added, best fit
+ * first, then the files that were not added. While a batch runs the list
+ * stays in file order so rows do not jump under the cursor.
+ */
+export function rankedUploads(items: UploadItem[]): UploadItem[] {
+  const added = items.filter((item) => item.status === "done");
+  const rest = items.filter((item) => item.status !== "done");
+  return [...byFit(added, (item) => item.fit), ...rest];
 }
 
 /** Which picked files will be uploaded, and a reason for each one that will not. */
@@ -119,7 +137,11 @@ export function queueFiles(files: { name: string; size: number }[]): {
   return { items, skipped };
 }
 
-export function updateItem(items: UploadItem[], id: string, patch: Partial<UploadItem>): UploadItem[] {
+export function updateItem(
+  items: UploadItem[],
+  id: string,
+  patch: Partial<UploadItem>,
+): UploadItem[] {
   return items.map((item) => (item.id === id ? { ...item, ...patch } : item));
 }
 
@@ -131,7 +153,12 @@ export function uploadProgress(items: UploadItem[]): {
 } {
   const done = items.filter((i) => i.status === "done").length;
   const failed = items.filter((i) => i.status === "failed").length;
-  return { total: items.length, done, failed, finished: items.length > 0 && done + failed === items.length };
+  return {
+    total: items.length,
+    done,
+    failed,
+    finished: items.length > 0 && done + failed === items.length,
+  };
 }
 
 /** The person's name from a parse response, wherever this parser path put it. */

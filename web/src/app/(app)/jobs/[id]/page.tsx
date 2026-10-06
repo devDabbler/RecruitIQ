@@ -54,10 +54,7 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           .join(" · ")}
         actions={
           writable ? (
-            <Link
-              href={`/jobs/${job.id}/edit`}
-              className={buttonVariants({ variant: "outline" })}
-            >
+            <Link href={`/jobs/${job.id}/edit`} className={buttonVariants({ variant: "outline" })}>
               <Pencil className="mr-1.5 h-4 w-4" aria-hidden />
               Edit
             </Link>
@@ -70,14 +67,22 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           <Card>
             <CardHeader className="flex flex-row items-baseline justify-between gap-2">
               <CardTitle className="text-base">Pipeline</CardTitle>
-              {writable ? (
+              <span className="flex gap-3">
                 <Link
-                  href={`/jobs/${job.id}/stages`}
+                  href={`/candidates?job=${job.id}`}
                   className="text-xs font-medium text-indigo-700 hover:underline"
                 >
-                  Edit stages
+                  Rank applicants by fit
                 </Link>
-              ) : null}
+                {writable ? (
+                  <Link
+                    href={`/jobs/${job.id}/stages`}
+                    className="text-xs font-medium text-indigo-700 hover:underline"
+                  >
+                    Edit stages
+                  </Link>
+                ) : null}
+              </span>
             </CardHeader>
             <CardContent>
               <Suspense fallback={<Skeleton className="h-40 w-full rounded-lg" />}>
@@ -107,20 +112,20 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
           </Card>
 
           {seesScores ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Matching candidates</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Streamed separately: matching is model-backed and takes ~9s,
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Matching candidates</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Streamed separately: matching is model-backed and takes ~9s,
                   and awaiting it here held the whole navigation open for that
                   long — a click on a job card looked like a dead link. The
                   description now paints immediately and scores fill in. */}
-              <Suspense fallback={<MatchesSkeleton />}>
-                <Matches jobId={job.id} />
-              </Suspense>
-            </CardContent>
-          </Card>
+                <Suspense fallback={<MatchesSkeleton />}>
+                  <Matches jobId={job.id} />
+                </Suspense>
+              </CardContent>
+            </Card>
           ) : null}
 
           {role !== "interviewer" ? (

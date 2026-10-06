@@ -22,6 +22,22 @@ class StageOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ApplicantFit(BaseModel):
+    """How well one applicant fits the job they applied to (Track 2 Phase 2).
+
+    The same `score_pair` number the matching page ranks by. `hidden` is True
+    for an interviewer who has not yet submitted feedback on this candidate;
+    then `score` is None and `missing` is empty, so nothing about the score
+    leaks before they have formed their own view.
+    """
+    score: Optional[float] = None
+    hidden: bool = False
+    # A missing must-have (or years / education rule) pulled the score down.
+    capped: bool = False
+    # What the candidate lacks against the job's requirements, in plain words.
+    missing: List[str] = Field(default_factory=list)
+
+
 class ApplicationCard(BaseModel):
     """One candidate chip on the board."""
     application_id: int
@@ -29,6 +45,7 @@ class ApplicationCard(BaseModel):
     candidate_name: str
     current_position: Optional[str] = None
     entered_at: Optional[datetime] = None
+    fit: Optional[ApplicantFit] = None
 
 
 class BoardColumn(BaseModel):

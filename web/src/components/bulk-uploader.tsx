@@ -4,14 +4,17 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, CircleDashed, Loader2, Upload, XCircle } from "lucide-react";
 
+import { FitChip } from "@/components/fit-chip";
 import { ACCEPT, type SelectableJob } from "@/components/resume-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { ApplicantFit } from "@/lib/fit";
 import {
   type UploadItem,
   candidateNameFromParse,
   describeError,
   queueFiles,
+  rankedUploads,
   updateItem,
   uploadProgress,
 } from "@/lib/intake";
@@ -40,6 +43,13 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
   const stop = useRef(false);
   const input = useRef<HTMLInputElement>(null);
   const progress = uploadProgress(items);
+  // Once a batch is over, the new applicants are listed best fit first.
+  const finished =
+    !running &&
+    items.length > 0 &&
+    items.every((i) => i.status === "done" || i.status === "failed");
+  const shown = finished ? rankedUploads(items) : items;
+  const anyFit = items.some((i) => i.fit && !i.fit.hidden && typeof i.fit.score === "number");
   const job = jobs.find((j) => String(j.id) === jobId) ?? null;
 
   function choose(list: FileList | null) {
@@ -80,6 +90,7 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
       const savedBody = (await saved.json().catch(() => null)) as {
         candidate_id?: string | null;
         already_in_pipeline?: boolean;
+        fit?: ApplicantFit | null;
         detail?: unknown;
       } | null;
       if (!saved.ok || !savedBody?.candidate_id) {
@@ -88,6 +99,7 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
       patch({
         status: "done",
         candidateId: savedBody.candidate_id,
+        fit: savedBody.fit ?? null,
         detail: savedBody.already_in_pipeline
           ? "Already in this pipeline. Resume updated."
           : undefined,
@@ -160,7 +172,11 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
               className="flex-1"
             >
               {running ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
-              {running ? "Adding" : progress.failed ? "Retry the ones not added" : "Add to pipeline"}
+              {running
+                ? "Adding"
+                : progress.failed
+                  ? "Retry the ones not added"
+                  : "Add to pipeline"}
             </Button>
             {running ? (
               <Button variant="outline" onClick={() => (stop.current = true)}>
@@ -193,15 +209,19 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
               <p className="mb-3 text-xs text-slate-500" role="status">
                 {progress.done} of {progress.total} added
                 {progress.failed ? `, ${progress.failed} not added` : ""}
+                {finished && anyFit ? ". Best fit for the job first." : ""}
               </p>
               <ul className="space-y-2 text-sm">
-                {items.map((item) => (
+                {shown.map((item) => (
                   <li key={item.id} className="flex items-start gap-2">
                     <StatusIcon status={item.status} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-slate-800">
                         {item.candidateId ? (
-                          <Link href={`/candidates/${item.candidateId}`} className="hover:underline">
+                          <Link
+                            href={`/candidates/${item.candidateId}`}
+                            className="hover:underline"
+                          >
                             {item.candidateName ?? item.fileName}
                           </Link>
                         ) : (
@@ -213,6 +233,7 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
                         {item.detail ? `. ${item.detail}` : ""}
                       </span>
                     </span>
+                    {item.status === "done" && item.fit ? <FitChip fit={item.fit} /> : null}
                   </li>
                 ))}
               </ul>

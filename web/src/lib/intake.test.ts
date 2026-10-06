@@ -11,6 +11,7 @@ import {
   exportHref,
   normalizeTag,
   queueFiles,
+  rankedUploads,
   updateItem,
   uploadProgress,
 } from "./intake";
@@ -116,7 +117,10 @@ describe("bulk upload queue", () => {
   });
 
   it("caps a batch", () => {
-    const files = Array.from({ length: MAX_BULK_FILES + 2 }, (_, i) => ({ name: `${i}.pdf`, size: 1 }));
+    const files = Array.from({ length: MAX_BULK_FILES + 2 }, (_, i) => ({
+      name: `${i}.pdf`,
+      size: 1,
+    }));
     const { items, skipped } = queueFiles(files);
     expect(items).toHaveLength(MAX_BULK_FILES);
     expect(skipped).toHaveLength(2);
@@ -145,5 +149,25 @@ describe("candidateNameFromParse", () => {
       "Grace",
     );
     expect(candidateNameFromParse({})).toBeNull();
+  });
+});
+
+describe("rankedUploads", () => {
+  const fit = (score: number | null, hidden = false) => ({
+    score,
+    hidden,
+    capped: false,
+    missing: [],
+  });
+
+  it("puts everyone added first, best fit first, then the files not added", () => {
+    const items = [
+      { id: "a", index: 0, fileName: "a.pdf", status: "done" as const, fit: fit(40) },
+      { id: "b", index: 1, fileName: "b.pdf", status: "failed" as const },
+      { id: "c", index: 2, fileName: "c.pdf", status: "done" as const, fit: fit(88) },
+      { id: "d", index: 3, fileName: "d.pdf", status: "done" as const, fit: null },
+      { id: "e", index: 4, fileName: "e.pdf", status: "done" as const, fit: fit(61) },
+    ];
+    expect(rankedUploads(items).map((i) => i.id)).toEqual(["c", "e", "a", "d", "b"]);
   });
 });

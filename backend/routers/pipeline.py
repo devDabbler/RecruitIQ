@@ -27,7 +27,7 @@ from ..models.pipeline import (
     StageOut,
     TransitionRequest,
 )
-from ..services import audit_service
+from ..services import applicant_fit, audit_service
 from ..services import pipeline_service as ps
 from ..services.access_service import request_user, visible_candidate_ids
 from ..utils.auth import get_optional_user
@@ -105,7 +105,9 @@ def _stage_out(stage) -> StageOut:
     )
 
 
-def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipelineResponse:
+def _board(
+    db: Session, job: Job, user: Optional[User], visible: Optional[set[str]] = None
+) -> JobPipelineResponse:
     stages = ps.ensure_job_stages(db, job.id)
     applications = (
         db.query(JobApplication)
@@ -129,6 +131,10 @@ def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipe
         if applications
         else {}
     )
+    # Track 2 Phase 2: each active card shows how well the person fits.
+    fits = applicant_fit.score_applicants(
+        db, job, [a.candidate_id for a in applications if a.status == ps.APP_ACTIVE], user
+    )
 
     columns = []
     for stage in stages:
@@ -149,6 +155,7 @@ def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipe
                     candidate_name=_name(candidate) if candidate else "Unnamed candidate",
                     current_position=candidate.current_position if candidate else None,
                     entered_at=current.started_at,
+                    fit=fits.get(application.candidate_id),
                 )
             )
         cards.sort(key=lambda c: (c.entered_at or datetime.min, c.candidate_name))
@@ -170,13 +177,14 @@ def _board(db: Session, job: Job, visible: Optional[set[str]] = None) -> JobPipe
 @router.get("/jobs/{job_id}/pipeline", response_model=JobPipelineResponse)
 def get_job_pipeline(job_id: int, request: Request, db: Session = Depends(get_db)) -> JobPipelineResponse:
     """The job's stages and who is at each one (an interviewer sees only their candidates)."""
-    visible = visible_candidate_ids(db, request_user(request))
-    return _board(db, _job_or_404(db, job_id), visible)
+    user = request_user(request)
+    visible = visible_candidate_ids(db, user)
+    return _board(db, _job_or_404(db, job_id), user, visible)
 
 
 @router.put("/jobs/{job_id}/pipeline", response_model=JobPipelineResponse)
 def update_job_pipeline(
-    job_id: int, payload: PipelineUpdateRequest, db: Session = Depends(get_db)
+    job_id: int, payload: PipelineUpdateRequest, request: Request, db: Session = Depends(get_db)
 ) -> JobPipelineResponse:
     """Edit a job's stages in one transaction.
 
@@ -227,7 +235,7 @@ def update_job_pipeline(
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc))
     db.commit()
-    return _board(db, job)
+    return _board(db, job, request_user(request))
 
 
 @router.get("/applications/{application_id}", response_model=ApplicationDetail)

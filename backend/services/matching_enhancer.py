@@ -7,6 +7,7 @@ import re
 import logging
 import numpy as np
 from collections import OrderedDict
+from contextvars import ContextVar
 from typing import Dict, List, Any, Optional, Tuple, Union
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -16,6 +17,13 @@ logging.basicConfig(level=logging.DEBUG)
 # Titles and positions are a small, highly repetitive vocabulary, so a few
 # hundred entries covers a realistic database many times over.
 _EMBEDDING_CACHE_MAX = 512
+
+# Placeholder vectors `prime_titles` got during an outage. Never cached across
+# requests (see `_embed`), but kept for the rest of this request so scoring a
+# board of applicants costs one failed round trip instead of one per title.
+_request_placeholders: ContextVar[Optional[Dict[str, np.ndarray]]] = ContextVar(
+    "request_placeholder_vectors", default=None
+)
 
 
 class MatchingEnhancer:
@@ -55,6 +63,9 @@ class MatchingEnhancer:
         if cached is not None:
             self._embedding_cache.move_to_end(text)
             return cached
+        placeholder = (_request_placeholders.get() or {}).get(text)
+        if placeholder is not None:
+            return placeholder
 
         vector = np.array(self.embedding_model.embed_query(text)).reshape(1, -1)
         if getattr(self.embedding_model, "is_degraded", False):
@@ -63,6 +74,39 @@ class MatchingEnhancer:
         if len(self._embedding_cache) > _EMBEDDING_CACHE_MAX:
             self._embedding_cache.popitem(last=False)
         return vector
+
+    def prime_titles(self, titles) -> None:
+        """Embed every uncached title in one batched call.
+
+        `role_match_details` embeds the job title and each candidate's position
+        one at a time, which on a cold cache is one tunnel round trip per
+        distinct title (measured on dev: 7.6s to score 50 applicants cold,
+        0.06s warm). Ranking loops call this first so a cold cache costs one
+        round trip. Titles are lowercased the way `role_match_details` does
+        before it embeds, so the keys match. Placeholder vectors from an
+        outage are not cached across requests, the same rule as `_embed`;
+        they are kept for this request only, so an outage costs one failed
+        call per ranking instead of one per title.
+        """
+        if not self.embedding_model:
+            return
+        wanted = list(dict.fromkeys(t.lower() for t in titles if t and t.strip()))
+        missing = [t for t in wanted if t not in self._embedding_cache]
+        if not missing:
+            return
+        try:
+            vectors = self.embedding_model.embed_documents(missing)
+        except Exception as e:
+            logger.warning(f"[RoleMatchDebug] Could not batch-embed titles: {e}")
+            return
+        arrays = [np.array(vector).reshape(1, -1) for vector in vectors]
+        if getattr(self.embedding_model, "is_degraded", False):
+            _request_placeholders.set({**(_request_placeholders.get() or {}), **dict(zip(missing, arrays))})
+            return
+        for text, vector in zip(missing, arrays):
+            self._embedding_cache[text] = vector
+        while len(self._embedding_cache) > _EMBEDDING_CACHE_MAX:
+            self._embedding_cache.popitem(last=False)
 
     def extract_experience_level(self, text: str) -> Tuple[str, int]:
         """

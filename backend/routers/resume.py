@@ -20,6 +20,7 @@ from backend.utils.permissions import CANDIDATES_ADD, can
 from backend.utils.database import get_db
 from backend.utils.parse_quota import enforce_parse_quota
 from backend.models.models import Job
+from backend.models.pipeline import ApplicantFit
 from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
@@ -422,6 +423,9 @@ class SaveCandidateResponse(BaseModel):
     # ATS Phase C: set when the save also put them on a job's pipeline.
     application_id: Optional[int] = None
     already_in_pipeline: bool = False
+    # Track 2 Phase 2: with job_id, how well they fit that job, so a bulk
+    # upload can list the new applicants best first.
+    fit: Optional[ApplicantFit] = None
     message: str = "Candidate saved"
 
 
@@ -537,11 +541,29 @@ async def save_candidate_from_parse(
     db.commit()
     audit_service.note(http_request, candidate_ids=[candidate_id])
 
+    fit = None
+    if application_id is not None:
+        from fastapi.concurrency import run_in_threadpool
+
+        from backend.services import applicant_fit
+        from backend.services.access_service import request_user
+
+        # Scoring may embed a title over the network; keep it off the event loop.
+        fits = await run_in_threadpool(
+            applicant_fit.score_applicants,
+            db,
+            db.get(Job, job_id),
+            [candidate_id],
+            request_user(http_request),
+        )
+        fit = fits.get(candidate_id)
+
     return SaveCandidateResponse(
         candidate_id=candidate_id,
         resume_id=resume_id,
         application_id=application_id,
         already_in_pipeline=already_in_pipeline,
+        fit=fit,
         message=(
             "Candidate saved and added to the pipeline" if application_id else "Candidate saved"
         ),
