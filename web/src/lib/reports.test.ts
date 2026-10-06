@@ -61,6 +61,7 @@ describe("activityPredicate", () => {
     expect(activityPredicate({ ...base, kind: "declined" })).toBe(
       "declined the offer for Data Engineer",
     );
+    expect(activityPredicate({ ...base, kind: "withdrew" })).toBe("withdrew from Data Engineer");
   });
 });
 

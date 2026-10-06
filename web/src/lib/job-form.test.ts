@@ -6,6 +6,7 @@ import {
   applyDraft,
   canRequestDraft,
   copyJobValues,
+  departmentChoices,
   draftRequestFrom,
   educationLabel,
   hasWrittenDescription,
@@ -77,10 +78,7 @@ describe("toJobPayload", () => {
   });
 
   it("drops empty skill entries", () => {
-    expect(toJobPayload(values({ skills: "Python,,  , SQL" })).skills).toEqual([
-      "Python",
-      "SQL",
-    ]);
+    expect(toJobPayload(values({ skills: "Python,,  , SQL" })).skills).toEqual(["Python", "SQL"]);
   });
 
   it("sends an empty list rather than nothing when no skills are given", () => {
@@ -105,9 +103,7 @@ describe("toJobPayload", () => {
   });
 
   it("trims the required text fields", () => {
-    expect(toJobPayload(values({ title: "  Staff Engineer  " })).title).toBe(
-      "Staff Engineer",
-    );
+    expect(toJobPayload(values({ title: "  Staff Engineer  " })).title).toBe("Staff Engineer");
   });
 });
 
@@ -172,8 +168,11 @@ describe("copyJobValues", () => {
       status: "open",
       application_deadline: "2026-11-01T00:00:00",
       start_date: "2026-12-01T00:00:00",
+      requisition_number: "REQ-7",
     } as unknown as Job;
     const copied = copyJobValues(job);
+    // A copy is a new requisition, and numbers are unique.
+    expect(copied.requisition_number).toBe("");
     expect(copied.title).toBe("Data Engineer");
     expect(copied.skills).toBe("SQL, dbt");
     expect(copied.status).toBe("draft");
@@ -183,7 +182,12 @@ describe("copyJobValues", () => {
 });
 
 describe("AI draft helpers", () => {
-  const filled = { ...EMPTY_JOB, title: " Data Engineer ", department: "Data", skills: "SQL, , dbt" };
+  const filled = {
+    ...EMPTY_JOB,
+    title: " Data Engineer ",
+    department: "Data",
+    skills: "SQL, , dbt",
+  };
 
   it("sends only the structured fields", () => {
     expect(draftRequestFrom(filled)).toEqual({
@@ -225,7 +229,12 @@ describe("requirements (Track 2 Phase 1)", () => {
 
   it("sends requirements with blanks as null and no minimum education as null", () => {
     const payload = toJobPayload(
-      values({ must_have_skills: ["Python"], nice_to_have_skills: [], min_years: "3", max_years: "" }),
+      values({
+        must_have_skills: ["Python"],
+        nice_to_have_skills: [],
+        min_years: "3",
+        max_years: "",
+      }),
     );
     expect(payload.requirements).toEqual({
       must_have_skills: ["Python"],
@@ -241,19 +250,29 @@ describe("requirements (Track 2 Phase 1)", () => {
   });
 
   it("validates the years range and the list limits", () => {
-    expect(validateJob(values({ min_years: "8", max_years: "3" })).max_years).toMatch(/below the minimum/);
+    expect(validateJob(values({ min_years: "8", max_years: "3" })).max_years).toMatch(
+      /below the minimum/,
+    );
     expect(validateJob(values({ min_years: "2.5" })).min_years).toBeTruthy();
     expect(validateJob(values({ max_years: "-1" })).max_years).toBeTruthy();
     const many = Array.from({ length: 21 }, (_, i) => `skill ${i}`);
     expect(validateJob(values({ must_have_skills: many })).must_have_skills).toMatch(/At most 20/);
-    expect(validateJob(values({ nice_to_have_skills: ["x".repeat(61)] })).nice_to_have_skills).toBeTruthy();
+    expect(
+      validateJob(values({ nice_to_have_skills: ["x".repeat(61)] })).nice_to_have_skills,
+    ).toBeTruthy();
     expect(validateJob(values({ min_years: "2", max_years: "6" }))).toEqual({});
   });
 
   it("reads requirements back from a job, defaulting to none", () => {
     const job = {
       title: "T",
-      requirements: { must_have_skills: ["Go"], nice_to_have_skills: [], min_years: 4, max_years: null, min_education: "phd" },
+      requirements: {
+        must_have_skills: ["Go"],
+        nice_to_have_skills: [],
+        min_years: 4,
+        max_years: null,
+        min_education: "phd",
+      },
     } as unknown as Job;
     const form = jobToFormValues(job);
     expect(form.must_have_skills).toEqual(["Go"]);
@@ -272,5 +291,37 @@ describe("requirements (Track 2 Phase 1)", () => {
     expect(educationLabel("phd")).toBe("PhD");
     expect(educationLabel("none")).toBeNull();
     expect(educationLabel(null)).toBeNull();
+  });
+});
+
+describe("job and intake hygiene (Track 2 Phase 3)", () => {
+  it("sends a trimmed requisition number, or null when blank", () => {
+    expect(
+      toJobPayload(values({ requisition_number: "  REQ-2026-0141 " })).requisition_number,
+    ).toBe("REQ-2026-0141");
+    expect(toJobPayload(values({ requisition_number: "   " })).requisition_number).toBeNull();
+  });
+
+  it("reads the requisition number back from the API", () => {
+    const job = { ...values(), skills: [], requisition_number: "WD-9" } as unknown as Job;
+    expect(jobToFormValues(job).requisition_number).toBe("WD-9");
+    expect(
+      jobToFormValues({ ...job, requisition_number: null } as unknown as Job).requisition_number,
+    ).toBe("");
+  });
+
+  it("caps the requisition number at 40 characters", () => {
+    expect(
+      validateJob(values({ requisition_number: "R".repeat(41) })).requisition_number,
+    ).toBeTruthy();
+    expect(
+      validateJob(values({ requisition_number: "R".repeat(40) })).requisition_number,
+    ).toBeUndefined();
+  });
+
+  it("offers the active departments plus a turned-off one the job still uses", () => {
+    expect(departmentChoices(["Engineering", "Product"], "")).toEqual(["Engineering", "Product"]);
+    expect(departmentChoices(["Engineering"], "engineering")).toEqual(["Engineering"]);
+    expect(departmentChoices(["Engineering"], "Legacy Ops")).toEqual(["Engineering", "Legacy Ops"]);
   });
 });

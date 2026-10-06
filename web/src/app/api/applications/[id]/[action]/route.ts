@@ -12,7 +12,7 @@ import { getToken } from "@/lib/session";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-const ACTIONS = new Set(["advance", "skip", "reject", "decline"]);
+const ACTIONS = new Set(["advance", "skip", "reject", "decline", "withdraw"]);
 
 export async function POST(
   request: NextRequest,

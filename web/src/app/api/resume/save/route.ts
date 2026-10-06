@@ -47,6 +47,14 @@ export async function POST(request: NextRequest) {
     }
     outgoing.set("job_id", jobId);
   }
+  // Track 2 Phase 3: how they found the job. The API checks the vocabulary.
+  const source = incoming.get("source");
+  if (typeof source === "string" && source) {
+    if (!/^[a-z_]{1,40}$/.test(source)) {
+      return NextResponse.json({ detail: "That is not a valid source." }, { status: 400 });
+    }
+    outgoing.set("source", source);
+  }
 
   let upstream: Response;
   try {

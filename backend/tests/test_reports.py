@@ -372,11 +372,11 @@ def test_an_interviewer_sees_only_their_own_pending_feedback(db_session, timelin
 
 
 def test_source_mix(db_session, timeline):
-    # D's blank source groups as "unknown". Ties sort by name.
+    # D's blank source groups as "unknown", labelled "Not recorded". Ties sort by name.
     assert rs.source_mix(db_session, _scope(timeline)) == [
-        {"source": "referral", "applications": 2, "hired": 1},
-        {"source": "linkedin", "applications": 1, "hired": 0},
-        {"source": "unknown", "applications": 1, "hired": 0},
+        {"source": "referral", "label": "Referral", "applications": 2, "hired": 1},
+        {"source": "linkedin", "label": "LinkedIn", "applications": 1, "hired": 0},
+        {"source": "unknown", "label": "Not recorded", "applications": 1, "hired": 0},
     ]
 
 

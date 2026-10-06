@@ -41,7 +41,10 @@ class ExperienceLevel(str, Enum):
 class JobCreateUpdate(BaseModel):
     """Schema for creating or updating a job posting. 'skills' is a list of required skills for the job."""
     title: str
+    # Track 2 Phase 3: must name an active department (GET /api/departments).
     department: str
+    # Track 2 Phase 3: the HR system's requisition number, free text, unique when set.
+    requisition_number: Optional[str] = Field(default=None, max_length=40)
     job_overview: str
     required_qualifications: str
     location: Optional[str] = None
@@ -69,6 +72,7 @@ class JobResponse(BaseModel):
     id: int
     title: str
     department: str
+    requisition_number: Optional[str] = None
     job_overview: str
     required_qualifications: str
     location: Optional[str] = None
@@ -115,7 +119,7 @@ class JobResponse(BaseModel):
 
 class JobSearchQuery(BaseModel):
     """Schema for job search query parameters."""
-    keyword: Optional[str] = None
+    keyword: Optional[str] = None  # also matches the requisition number
     department: Optional[str] = None
     location: Optional[str] = None
     location_type: Optional[LocationType] = None

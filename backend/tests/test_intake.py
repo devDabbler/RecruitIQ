@@ -173,6 +173,36 @@ def test_save_with_a_job_lands_at_stage_one(admin_client):
     assert again["already_in_pipeline"] is True
 
 
+def test_save_records_the_batch_source_on_application_and_candidate(admin_client, db_session):
+    """Track 2 Phase 3: the bulk uploader sends one source for the batch."""
+    job_id = new_job(admin_client, "Upload Source")
+    email = f"{unique('src')}@{SEED_EMAIL_DOMAIN}"
+    form = _save_form(email, job_id)
+    form["data"]["source"] = "agency"
+    body = admin_client.post(SAVE_PATH, **form).json()
+    detail = admin_client.get(f"/api/jobs/applications/{body['candidate_id']}").json()
+    assert [row["source"] for row in detail if row["job_id"] == job_id] == ["agency"]
+    db_session.expire_all()
+    assert db_session.query(Candidate).filter(Candidate.email == email).one().source == "agency"
+
+
+def test_save_without_a_source_applied_directly(admin_client):
+    job_id = new_job(admin_client, "Upload Default Source")
+    body = admin_client.post(SAVE_PATH, **_save_form(f"{unique('nosrc')}@{SEED_EMAIL_DOMAIN}", job_id)).json()
+    detail = admin_client.get(f"/api/jobs/applications/{body['candidate_id']}").json()
+    assert [row["source"] for row in detail if row["job_id"] == job_id] == ["direct_application"]
+
+
+def test_save_refuses_an_unknown_source_before_storing(admin_client, db_session):
+    email = f"{unique('badsrc')}@{SEED_EMAIL_DOMAIN}"
+    form = _save_form(email)
+    form["data"]["source"] = "resume_upload"
+    response = admin_client.post(SAVE_PATH, **form)
+    assert response.status_code == 422
+    db_session.expire_all()
+    assert db_session.query(Candidate).filter(Candidate.email == email).count() == 0
+
+
 def test_save_without_a_job_is_unchanged(admin_client):
     response = admin_client.post(SAVE_PATH, **_save_form(f"{unique('nojob')}@{SEED_EMAIL_DOMAIN}"))
     assert response.status_code == 200, response.text

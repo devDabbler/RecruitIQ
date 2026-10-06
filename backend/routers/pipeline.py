@@ -161,7 +161,7 @@ def _board(
         cards.sort(key=lambda c: (c.entered_at or datetime.min, c.candidate_name))
         columns.append(BoardColumn(stage_key=stage.key, stage_name=stage.name, applications=cards))
 
-    outcomes = {"hired": 0, "rejected": 0, "declined": 0}
+    outcomes = {"hired": 0, "rejected": 0, "declined": 0, "withdrawn": 0}
     for application in applications:
         if application.status in outcomes:
             outcomes[application.status] += 1
@@ -325,7 +325,7 @@ def transition_application(
     db: Session = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ) -> ApplicationDetail:
-    """Advance, skip, reject, or decline. One transaction; 409 when not allowed."""
+    """Advance, skip, reject, decline, or withdraw. One transaction; 409 when not allowed."""
     fn = ps.ACTIONS.get(action)
     if fn is None:
         raise HTTPException(status_code=404, detail=f"Unknown action '{action}'.")

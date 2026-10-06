@@ -24,7 +24,7 @@ from backend.utils.database import Base, engine, verify_postgres_connection
 # Import routers
 from fastapi import Depends, FastAPI
 from backend.routers import matching, jobs, candidates, resume, assistant, crawler, enhanced_matching, intelligence
-from backend.routers import auth, tasks, pitches, agent, performance, cache, transparency, pipeline, feedback, team
+from backend.routers import auth, tasks, pitches, agent, performance, cache, transparency, pipeline, feedback, team, departments
 from backend.routers import notes, reports, tags
 from backend.routers import emails, job_drafts, status_links
 from backend.api.routes import job_routes
@@ -116,6 +116,7 @@ app.include_router(tasks.router, prefix="/api", tags=["tasks"])
 # otherwise swallow POST /applications/{id}/interviews.
 app.include_router(feedback.router, prefix="/api", tags=["interviews"])  # ATS Phase B
 app.include_router(team.router, prefix="/api", tags=["team"])  # ATS Phase B
+app.include_router(departments.router, prefix="/api", tags=["departments"])  # Track 2 Phase 3
 # ATS Phase E. Mounted above the pipeline router on purpose: its
 # POST /api/applications/{id}/{action} matches any third path segment and
 # would answer "Unknown action" for /status-link and /emails.

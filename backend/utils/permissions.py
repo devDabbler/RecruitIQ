@@ -46,6 +46,9 @@ AUDIT_VIEW = "audit.view"
 # Pilot plan Track 1 #5: download everything held about one candidate (a data
 # access request). Admin only: it is the whole record in one file.
 DATA_EXPORT = "candidates.export_data"
+# Track 2 Phase 3: add, rename, and turn off departments. Admin only: a
+# rename rewrites every job in that department.
+DEPARTMENTS_MANAGE = "departments.manage"
 
 ALL_PERMISSIONS = (
     JOBS_WRITE,
@@ -61,6 +64,7 @@ ALL_PERMISSIONS = (
     PROFILE_EDIT,
     AUDIT_VIEW,
     DATA_EXPORT,
+    DEPARTMENTS_MANAGE,
 )
 
 ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
@@ -141,7 +145,7 @@ ROUTE_PERMISSIONS: list[tuple[str, re.Pattern[str], str]] = [
         ("DELETE", r"/api/candidates/[^/]+", DELETE_RECORDS),
         ("POST", r"/api/candidates/[^/]+/(upload-resume|parsed-resume)", CANDIDATES_ADD),
         ("POST", r"/api/resume/(save-candidate|confirm)", CANDIDATES_ADD),
-        ("POST", r"/api/applications/\d+/(advance|skip|reject|decline)", PIPELINE_MOVE),
+        ("POST", r"/api/applications/\d+/(advance|skip|reject|decline|withdraw)", PIPELINE_MOVE),
         ("POST", r"/api/applications/\d+/interviews", PIPELINE_MOVE),
         ("DELETE", r"/api/interviews/\d+", PIPELINE_MOVE),
         ("POST", r"/api/interviews/\d+/feedback", FEEDBACK_SUBMIT),
@@ -162,6 +166,9 @@ ROUTE_PERMISSIONS: list[tuple[str, re.Pattern[str], str]] = [
         ("POST", r"/api/applications/\d+/emails", PIPELINE_MOVE),
         ("PUT", r"/api/email-templates/[a-z_]+", TEMPLATES_MANAGE),
         ("POST", r"/api/job-drafts/description", JOBS_WRITE),
+        # Track 2 Phase 3: the department list.
+        ("POST", r"/api/departments", DEPARTMENTS_MANAGE),
+        ("PUT", r"/api/departments/\d+", DEPARTMENTS_MANAGE),
     ]
 ]
 

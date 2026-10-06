@@ -104,6 +104,9 @@ class Job(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(255))
     department = Column(String(100))
+    # Track 2 Phase 3: the requisition number from the company's HR system
+    # (Workday's format, not ours). Unique when set, via a partial index.
+    requisition_number = Column(String(40), nullable=True)
     job_overview = Column(Text)
     required_qualifications = Column(Text)
     location = Column(String(255), nullable=True)
@@ -145,6 +148,24 @@ class Job(Base):
 
     def __repr__(self):
         return f"<Job(id={self.id}, title='{self.title}', status='{self.status}')>"
+
+class Department(Base):
+    """Track 2 Phase 3: the fixed department list jobs choose from.
+
+    Jobs keep the department *name* (no foreign key); create and update
+    validate it against the active rows here, and a rename rewrites the
+    matching jobs in the same transaction (services/department_service.py).
+    """
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)  # unique ignoring case (index on lower(name))
+    active = Column(Boolean, nullable=False, default=True, server_default="true")
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<Department(id={self.id}, name='{self.name}', active={self.active})>"
+
 
 class CandidatePitch(Base):
     __tablename__ = "candidate_pitches"

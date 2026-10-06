@@ -49,7 +49,12 @@ export default async function JobDetailPage({ params }: PageProps<"/jobs/[id]">)
 
       <PageHeader
         title={job.title}
-        description={[job.department, job.location, humanize(job.location_type)]
+        description={[
+          job.department,
+          job.requisition_number ? `Requisition ${job.requisition_number}` : null,
+          job.location,
+          humanize(job.location_type),
+        ]
           .filter(Boolean)
           .join(" · ")}
         actions={

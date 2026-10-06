@@ -16,6 +16,7 @@ from ..models.job import (
     LocationType,
     ExperienceLevel
 )
+from ..models.candidate import ApplicationSource
 from ..models.models import Job, Candidate, Resume, JobApplication, SavedJob, User
 from ..utils.auth import STAFF_ROLES
 from ..services.job_requirements import requirements_for_storage
@@ -47,7 +48,9 @@ class JobApplicationCreate(BaseModel):
     """Model for creating a job application."""
     candidate_id: str
     cover_letter: Optional[str] = None
-    source: Optional[str] = "direct"
+    # Track 2 Phase 3: one vocabulary (services/sources.py). Omitted means
+    # the candidate applied directly.
+    source: Optional[ApplicationSource] = None
 
 class JobApplicationResponse(BaseModel):
     """Model for job application response."""
@@ -126,6 +129,36 @@ def _team_link(db: Session, user_id: Optional[str], label: str) -> None:
         raise HTTPException(status_code=422, detail=f"The {label} must be someone on the team.")
 
 
+def _clean_job_fields(db: Session, data: Dict[str, Any], job: Optional[Job] = None) -> None:
+    """Track 2 Phase 3: canonical department and requisition number, or a 422/409.
+
+    Mutates `data` in place. Only keys present are checked, so a partial
+    update that leaves the department alone never re-validates it.
+    """
+    from ..services import department_service
+
+    if "department" in data:
+        try:
+            data["department"] = department_service.validate_for_job(
+                db, data["department"], current=job.department if job else None
+            )
+        except department_service.DepartmentError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+    if "requisition_number" in data:
+        number = " ".join((data["requisition_number"] or "").split()) or None
+        data["requisition_number"] = number
+        if number is not None:
+            clash = db.query(Job).filter(Job.requisition_number == number)
+            if job is not None:
+                clash = clash.filter(Job.id != job.id)
+            other = clash.first()
+            if other is not None:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Requisition {number} is already used by '{other.title}'.",
+                )
+
+
 def _active_counts(db: Session, job_ids: List[int]) -> Dict[int, int]:
     """Applications still in progress per job, in one query."""
     if not job_ids:
@@ -153,12 +186,13 @@ def create_job(
     logger = logging.getLogger("backend.routers.jobs")
     _team_link(db, job.hiring_manager_id, "hiring manager")
     _team_link(db, job.recruiter_id, "recruiter")
+    job_data = job.dict()
+    _clean_job_fields(db, job_data)
     try:
         # Log incoming job data
         logger.info(f"Received job creation request: {job.dict()}")
 
         # Convert enum values to strings
-        job_data = job.dict()
         job_data["status"] = job.status.value
         job_data["job_type"] = job.job_type.value
         job_data["location_type"] = job.location_type.value
@@ -251,6 +285,7 @@ def update_job(
     
     # Update the fields that are provided
     update_data = job_update.dict(exclude_unset=True)
+    _clean_job_fields(db, update_data, db_job)
     
     # Handle enum conversions
     if "status" in update_data and update_data["status"]:
@@ -421,7 +456,8 @@ def search_jobs(
         query = query.filter(
             (Job.title.ilike(f"%{keyword}%")) |
             (Job.job_overview.ilike(f"%{keyword}%")) |
-            (Job.required_qualifications.ilike(f"%{keyword}%"))
+            (Job.required_qualifications.ilike(f"%{keyword}%")) |
+            (Job.requisition_number.ilike(f"%{keyword.strip()}%"))
         )
     
     if department:
@@ -557,7 +593,7 @@ def apply_to_job(
             db,
             application.candidate_id,
             job_id,
-            source=application.source or "direct",
+            source=application.source.value if application.source else None,
             cover_letter=application.cover_letter,
         )
     except intake_service.IntakeError as exc:

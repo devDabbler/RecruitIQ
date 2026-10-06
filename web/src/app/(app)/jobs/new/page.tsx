@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { CopyFromJob } from "@/components/copy-from-job";
 import { JobForm } from "@/components/job-form";
 import { PageHeader } from "@/components/page-header";
-import { MAX_PAGE_SIZE, getJob, listJobs } from "@/lib/data";
+import { MAX_PAGE_SIZE, getJob, listDepartments, listJobs } from "@/lib/data";
 import { copyJobValues } from "@/lib/job-form";
 import { JOBS_WRITE } from "@/lib/permissions";
 import { hasPermission } from "@/lib/session";
@@ -26,10 +26,11 @@ export default async function NewJobPage({ searchParams }: PageProps<"/jobs/new"
 
   const { from } = await searchParams;
   const fromId = typeof from === "string" && /^\d+$/.test(from) ? from : null;
-  const [source, jobs] = await Promise.all([
+  const [source, jobs, departments] = await Promise.all([
     fromId ? getJob(fromId) : Promise.resolve(null),
     // Optional context: a failed list only hides the picker.
     listJobs(1, MAX_PAGE_SIZE).catch(() => null),
+    listDepartments(),
   ]);
 
   return (
@@ -62,6 +63,7 @@ export default async function NewJobPage({ searchParams }: PageProps<"/jobs/new"
           key={source ? `from-${source.id}` : "blank"}
           initial={source ? copyJobValues(source) : undefined}
           canDraft
+          departments={departments.map((d) => d.name)}
         />
       </div>
     </>

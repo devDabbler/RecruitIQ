@@ -221,7 +221,7 @@ export interface paths {
         put?: never;
         /**
          * Transition Application
-         * @description Advance, skip, reject, or decline. One transaction; 409 when not allowed.
+         * @description Advance, skip, reject, decline, or withdraw. One transaction; 409 when not allowed.
          */
         post: operations["transition_application_api_applications__application_id___action__post"];
         delete?: never;
@@ -784,6 +784,47 @@ export interface paths {
          *     This endpoint leverages crawl4ai to find and extract information from web pages.
          */
         post: operations["search_and_crawl_api_crawler_search_and_crawl_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Departments
+         * @description Departments in name order; turned-off ones only with `include_inactive`.
+         */
+        get: operations["list_departments_api_departments_get"];
+        put?: never;
+        /** Create Department */
+        post: operations["create_department_api_departments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/departments/{department_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Department
+         * @description Rename (its jobs move with it, in the same transaction) or turn on/off.
+         */
+        put: operations["update_department_api_departments__department_id__put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1710,6 +1751,10 @@ export interface paths {
          *     With `job_id` (ATS Phase C) the candidate also lands at the first stage of
          *     that job's pipeline; saving the same person to the same job again returns
          *     the existing application instead of failing.
+         *
+         *     `source` (Track 2 Phase 3) is how they found the job, from the one
+         *     vocabulary in services/sources.py; the bulk uploader sends one for the
+         *     whole batch. Omitted means they applied directly.
          */
         post: operations["save_candidate_from_parse_api_resume_save_candidate_post"];
         delete?: never;
@@ -2374,6 +2419,15 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * ApplicationSource
+         * @description Track 2 Phase 3: how a candidate found the job, on every way in.
+         *
+         *     The CandidateSource values plus INTERNAL. Labels and the legacy mapping
+         *     live in services/sources.py.
+         * @enum {string}
+         */
+        ApplicationSource: "linkedin" | "indeed" | "company_website" | "referral" | "agency" | "job_board" | "direct_application" | "other" | "internal";
         /** ApplicationStageOut */
         ApplicationStageOut: {
             /** Completed At */
@@ -2547,6 +2601,8 @@ export interface components {
             parsed_data: string;
             /** Position Applied */
             position_applied?: string | null;
+            /** Source */
+            source?: string | null;
         };
         /** Body_save_candidate_pitch_api_pitches_save_post */
         Body_save_candidate_pitch_api_pitches_save_post: {
@@ -2656,7 +2712,7 @@ export interface components {
             phone?: string | null;
             /** Position Applied */
             position_applied?: string | null;
-            source?: components["schemas"]["CandidateSource"] | null;
+            source?: components["schemas"]["ApplicationSource"] | null;
             /**
              * Status
              * @default active
@@ -2943,11 +2999,6 @@ export interface components {
             total: number;
         };
         /**
-         * CandidateSource
-         * @enum {string}
-         */
-        CandidateSource: "linkedin" | "indeed" | "company_website" | "referral" | "agency" | "job_board" | "direct_application" | "other";
-        /**
          * CandidateStatus
          * @enum {string}
          */
@@ -2980,7 +3031,7 @@ export interface components {
             phone?: string | null;
             /** Position Applied */
             position_applied?: string | null;
-            source?: components["schemas"]["CandidateSource"] | null;
+            source?: components["schemas"]["ApplicationSource"] | null;
             status?: components["schemas"]["CandidateStatus"] | null;
         };
         /**
@@ -3026,6 +3077,60 @@ export interface components {
             job_id: number;
             /** Stages */
             stages: components["schemas"]["StageDefaults"][];
+        };
+        /** DepartmentCreate */
+        DepartmentCreate: {
+            /** Name */
+            name: string;
+        };
+        /** DepartmentListResponse */
+        DepartmentListResponse: {
+            /** Departments */
+            departments: components["schemas"]["DepartmentOut"][];
+        };
+        /** DepartmentOut */
+        DepartmentOut: {
+            /** Active */
+            active: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Job Count
+             * @default 0
+             */
+            job_count: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * DepartmentRow
+         * @description Track 2 Phase 3: applications and hires per job department.
+         */
+        DepartmentRow: {
+            /** Applications */
+            applications: number;
+            /** Department */
+            department: string;
+            /** Hired */
+            hired: number;
+            /** Jobs */
+            jobs: number;
+        };
+        /** DepartmentUpdate */
+        DepartmentUpdate: {
+            /** Active */
+            active?: boolean | null;
+            /** Name */
+            name?: string | null;
+        };
+        /** DepartmentUpdateResponse */
+        DepartmentUpdateResponse: {
+            department: components["schemas"]["DepartmentOut"];
+            /**
+             * Jobs Renamed
+             * @default 0
+             */
+            jobs_renamed: number;
         };
         /** EducationCheck */
         EducationCheck: {
@@ -3323,11 +3428,7 @@ export interface components {
             candidate_id: string;
             /** Cover Letter */
             cover_letter?: string | null;
-            /**
-             * Source
-             * @default direct
-             */
-            source: string | null;
+            source?: components["schemas"]["ApplicationSource"] | null;
         };
         /**
          * JobApplicationResponse
@@ -3401,6 +3502,8 @@ export interface components {
             /** Required Qualifications */
             required_qualifications: string;
             requirements?: components["schemas"]["JobRequirements"] | null;
+            /** Requisition Number */
+            requisition_number?: string | null;
             /** Skills */
             skills?: string[];
             /** Start Date */
@@ -3559,6 +3662,8 @@ export interface components {
             /** Required Qualifications */
             required_qualifications: string;
             requirements?: components["schemas"]["JobRequirements"] | null;
+            /** Requisition Number */
+            requisition_number?: string | null;
             /** Skills */
             skills?: string[];
             /** Start Date */
@@ -3873,6 +3978,8 @@ export interface components {
         };
         /** ReportsResponse */
         ReportsResponse: {
+            /** Department Mix */
+            department_mix: components["schemas"]["DepartmentRow"][];
             /** Funnel */
             funnel: components["schemas"]["FunnelRow"][];
             /**
@@ -4340,6 +4447,8 @@ export interface components {
             applications: number;
             /** Hired */
             hired: number;
+            /** Label */
+            label: string;
             /** Source */
             source: string;
         };
@@ -6216,6 +6325,105 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_departments_api_departments_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_department_api_departments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_department_api_departments__department_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                department_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepartmentUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DepartmentUpdateResponse"];
                 };
             };
             /** @description Validation Error */

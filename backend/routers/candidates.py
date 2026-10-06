@@ -328,7 +328,7 @@ def create_candidate(
             )
         )
     if job is not None:
-        intake_service.add_to_job(db, db_candidate.id, job.id, source=db_candidate.source or "direct")
+        intake_service.add_to_job(db, db_candidate.id, job.id, source=db_candidate.source)
 
     db.commit()
     db.refresh(db_candidate)
@@ -416,7 +416,13 @@ def export_candidates_csv(
         ):
             tags_by[candidate_id].append(tag)
         rows = (
-            db.query(JobApplication.candidate_id, Job.title, JobApplication.status, PipelineStage.name)
+            db.query(
+                JobApplication.candidate_id,
+                Job.title,
+                Job.requisition_number,
+                JobApplication.status,
+                PipelineStage.name,
+            )
             .join(Job, Job.id == JobApplication.job_id)
             .outerjoin(
                 ApplicationStage,
@@ -430,13 +436,15 @@ def export_candidates_csv(
             .order_by(Job.title)
             .all()
         )
-        for candidate_id, title, app_status, stage_name in rows:
+        for candidate_id, title, requisition, app_status, stage_name in rows:
             where = (
                 stage_name
                 if app_status == "active" and stage_name
                 else _APPLICATION_LABELS.get(app_status, app_status)
             )
-            applications_by[candidate_id].append(f"{title} ({where})")
+            # Track 2 Phase 3: the requisition number, so the sheet lines up with Workday.
+            job = f"{title} [{requisition}]" if requisition else title
+            applications_by[candidate_id].append(f"{job} ({where})")
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)

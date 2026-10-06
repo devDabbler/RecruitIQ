@@ -4,7 +4,7 @@ import { ArrowLeft } from "lucide-react";
 
 import { JobForm } from "@/components/job-form";
 import { PageHeader } from "@/components/page-header";
-import { getJob } from "@/lib/data";
+import { getJob, listDepartments } from "@/lib/data";
 import { jobToFormValues } from "@/lib/job-form";
 import { JOBS_WRITE } from "@/lib/permissions";
 import { hasPermission } from "@/lib/session";
@@ -15,7 +15,7 @@ export default async function EditJobPage({ params }: PageProps<"/jobs/[id]/edit
   const { id } = await params;
   if (!(await hasPermission(JOBS_WRITE))) redirect(`/jobs/${id}`);
 
-  const job = await getJob(id);
+  const [job, departments] = await Promise.all([getJob(id), listDepartments()]);
   if (!job) notFound();
 
   return (
@@ -34,7 +34,12 @@ export default async function EditJobPage({ params }: PageProps<"/jobs/[id]/edit
       />
 
       <div className="max-w-3xl">
-        <JobForm initial={jobToFormValues(job)} jobId={job.id} canDraft />
+        <JobForm
+          initial={jobToFormValues(job)}
+          jobId={job.id}
+          canDraft
+          departments={departments.map((d) => d.name)}
+        />
       </div>
     </>
   );

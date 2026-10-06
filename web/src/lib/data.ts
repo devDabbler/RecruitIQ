@@ -20,6 +20,7 @@ import type {
   CandidateSearch,
   CandidateTags,
   Dashboard,
+  Department,
   EmailLogEntry,
   EmailTemplates,
   InterviewEntry,
@@ -95,10 +96,11 @@ export async function getSkillsBreakdown(): Promise<SkillsBreakdown> {
   });
 }
 
-export async function listJobs(page = 1, pageSize = 50): Promise<JobList> {
+/** `keyword` matches title, description, and (Track 2 Phase 3) requisition number. */
+export async function listJobs(page = 1, pageSize = 50, keyword?: string): Promise<JobList> {
   return apiFetch<JobList>("/api/jobs/", {
     token: await getToken(),
-    query: { page, page_size: pageSize },
+    query: { page, page_size: pageSize, keyword: keyword || undefined },
   });
 }
 
@@ -224,6 +226,15 @@ export async function listTeam(): Promise<TeamMember[]> {
     token: await getToken(),
   });
   return result.members;
+}
+
+/** Track 2 Phase 3: the department list, active ones only unless asked. */
+export async function listDepartments(includeInactive = false): Promise<Department[]> {
+  const result = await apiFetch<{ departments: Department[] }>("/api/departments", {
+    token: await getToken(),
+    query: includeInactive ? { include_inactive: true } : undefined,
+  });
+  return result.departments;
 }
 
 export async function getMyProfile(): Promise<Profile | null> {

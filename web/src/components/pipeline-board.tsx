@@ -18,7 +18,7 @@ export function PipelineBoard({ pipeline }: { pipeline: JobPipeline }) {
     <div className="space-y-3">
       <p className="text-xs text-slate-500">
         {active} in progress · {outcomes.hired ?? 0} hired · {outcomes.rejected ?? 0} rejected ·{" "}
-        {outcomes.declined ?? 0} declined
+        {outcomes.declined ?? 0} declined · {outcomes.withdrawn ?? 0} withdrawn
       </p>
       <div className="flex gap-3 overflow-x-auto pb-2">
         {pipeline.columns.map((column) => (

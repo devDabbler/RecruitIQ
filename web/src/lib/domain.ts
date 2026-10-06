@@ -37,10 +37,14 @@ export type WaitingApplication = Schemas["WaitingApplication"];
 export type PendingFeedbackRow = Schemas["PendingFeedbackRow"];
 export type ActivityEvent = Schemas["ActivityEvent"];
 export type SourceRow = Schemas["SourceRow"];
+export type DepartmentRow = Schemas["DepartmentRow"];
 export type QuarterOutcomes = Schemas["QuarterOutcomes"];
 
 /** ATS Phase B: the team, interviews, and feedback. */
 export type TeamMember = Schemas["TeamMember"];
+// Track 2 Phase 3: the department list.
+export type Department = Schemas["DepartmentOut"];
+export type ApplicationSource = Schemas["ApplicationSource"];
 export type Profile = Schemas["ProfileResponse"];
 export type InterviewEntry = Schemas["InterviewOut"];
 export type InterviewListItem = Schemas["InterviewListItem"];
@@ -99,6 +103,7 @@ export const PIPELINE_STAGES = [
   "offered",
   "hired",
   "rejected",
+  "withdrawn",
   "on_hold",
 ] as const;
 
@@ -111,6 +116,7 @@ export const STAGE_LABELS: Record<PipelineStage, string> = {
   offered: "Offered",
   hired: "Hired",
   rejected: "Rejected",
+  withdrawn: "Withdrawn",
   on_hold: "On hold",
 };
 
@@ -125,6 +131,7 @@ export const STAGE_CLASSES: Record<PipelineStage, string> = {
   offered: "bg-amber-50 text-amber-700 border-amber-200",
   hired: "bg-emerald-50 text-emerald-700 border-emerald-200",
   rejected: "bg-rose-50 text-rose-700 border-rose-200",
+  withdrawn: "bg-stone-100 text-stone-600 border-stone-200",
   on_hold: "bg-neutral-100 text-neutral-600 border-neutral-200",
 };
 

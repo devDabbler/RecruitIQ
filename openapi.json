@@ -234,6 +234,22 @@
         "title": "ApplicationDetail",
         "type": "object"
       },
+      "ApplicationSource": {
+        "description": "Track 2 Phase 3: how a candidate found the job, on every way in.\n\nThe CandidateSource values plus INTERNAL. Labels and the legacy mapping\nlive in services/sources.py.",
+        "enum": [
+          "linkedin",
+          "indeed",
+          "company_website",
+          "referral",
+          "agency",
+          "job_board",
+          "direct_application",
+          "other",
+          "internal"
+        ],
+        "title": "ApplicationSource",
+        "type": "string"
+      },
       "ApplicationStageOut": {
         "properties": {
           "completed_at": {
@@ -756,6 +772,17 @@
               }
             ],
             "title": "Position Applied"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           }
         },
         "required": [
@@ -1138,7 +1165,7 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CandidateSource"
+                "$ref": "#/components/schemas/ApplicationSource"
               },
               {
                 "type": "null"
@@ -2043,20 +2070,6 @@
         "title": "CandidateSearchResponse",
         "type": "object"
       },
-      "CandidateSource": {
-        "enum": [
-          "linkedin",
-          "indeed",
-          "company_website",
-          "referral",
-          "agency",
-          "job_board",
-          "direct_application",
-          "other"
-        ],
-        "title": "CandidateSource",
-        "type": "string"
-      },
       "CandidateStatus": {
         "enum": [
           "active",
@@ -2187,7 +2200,7 @@
           "source": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/CandidateSource"
+                "$ref": "#/components/schemas/ApplicationSource"
               },
               {
                 "type": "null"
@@ -2320,6 +2333,141 @@
           "stages"
         ],
         "title": "DefaultInterviewersResponse",
+        "type": "object"
+      },
+      "DepartmentCreate": {
+        "properties": {
+          "name": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "DepartmentCreate",
+        "type": "object"
+      },
+      "DepartmentListResponse": {
+        "properties": {
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentOut"
+            },
+            "title": "Departments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "departments"
+        ],
+        "title": "DepartmentListResponse",
+        "type": "object"
+      },
+      "DepartmentOut": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "job_count": {
+            "default": 0,
+            "title": "Job Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "active"
+        ],
+        "title": "DepartmentOut",
+        "type": "object"
+      },
+      "DepartmentRow": {
+        "description": "Track 2 Phase 3: applications and hires per job department.",
+        "properties": {
+          "applications": {
+            "title": "Applications",
+            "type": "integer"
+          },
+          "department": {
+            "title": "Department",
+            "type": "string"
+          },
+          "hired": {
+            "title": "Hired",
+            "type": "integer"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "department",
+          "jobs",
+          "applications",
+          "hired"
+        ],
+        "title": "DepartmentRow",
+        "type": "object"
+      },
+      "DepartmentUpdate": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "DepartmentUpdate",
+        "type": "object"
+      },
+      "DepartmentUpdateResponse": {
+        "properties": {
+          "department": {
+            "$ref": "#/components/schemas/DepartmentOut"
+          },
+          "jobs_renamed": {
+            "default": 0,
+            "title": "Jobs Renamed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "department"
+        ],
+        "title": "DepartmentUpdateResponse",
         "type": "object"
       },
       "EducationCheck": {
@@ -3115,14 +3263,12 @@
           "source": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/ApplicationSource"
               },
               {
                 "type": "null"
               }
-            ],
-            "default": "direct",
-            "title": "Source"
+            ]
           }
         },
         "required": [
@@ -3375,6 +3521,18 @@
                 "type": "null"
               }
             ]
+          },
+          "requisition_number": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requisition Number"
           },
           "skills": {
             "items": {
@@ -3899,6 +4057,17 @@
                 "type": "null"
               }
             ]
+          },
+          "requisition_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requisition Number"
           },
           "skills": {
             "items": {
@@ -4785,6 +4954,13 @@
       },
       "ReportsResponse": {
         "properties": {
+          "department_mix": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentRow"
+            },
+            "title": "Department Mix",
+            "type": "array"
+          },
           "funnel": {
             "items": {
               "$ref": "#/components/schemas/FunnelRow"
@@ -4864,6 +5040,7 @@
           "no_movement",
           "no_movement_total",
           "source_mix",
+          "department_mix",
           "quarters"
         ],
         "title": "ReportsResponse",
@@ -6232,6 +6409,10 @@
             "title": "Hired",
             "type": "integer"
           },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
           "source": {
             "title": "Source",
             "type": "string"
@@ -6239,6 +6420,7 @@
         },
         "required": [
           "source",
+          "label",
           "applications",
           "hired"
         ],
@@ -8034,7 +8216,7 @@
     },
     "/api/applications/{application_id}/{action}": {
       "post": {
-        "description": "Advance, skip, reject, or decline. One transaction; 409 when not allowed.",
+        "description": "Advance, skip, reject, decline, or withdraw. One transaction; 409 when not allowed.",
         "operationId": "transition_application_api_applications__application_id___action__post",
         "parameters": [
           {
@@ -9580,6 +9762,142 @@
         "summary": "Search And Crawl",
         "tags": [
           "crawler"
+        ]
+      }
+    },
+    "/api/departments": {
+      "get": {
+        "description": "Departments in name order; turned-off ones only with `include_inactive`.",
+        "operationId": "list_departments_api_departments_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "include_inactive",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Inactive",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Departments",
+        "tags": [
+          "departments"
+        ]
+      },
+      "post": {
+        "operationId": "create_department_api_departments_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Department",
+        "tags": [
+          "departments"
+        ]
+      }
+    },
+    "/api/departments/{department_id}": {
+      "put": {
+        "description": "Rename (its jobs move with it, in the same transaction) or turn on/off.",
+        "operationId": "update_department_api_departments__department_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "department_id",
+            "required": true,
+            "schema": {
+              "title": "Department Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DepartmentUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepartmentUpdateResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Department",
+        "tags": [
+          "departments"
         ]
       }
     },
@@ -12043,7 +12361,7 @@
     },
     "/api/resume/save-candidate": {
       "post": {
-        "description": "Persist a reviewed parse: upsert the candidate, store the file, save the resume.\n\nTakes the parse the client already has instead of re-running the model, so a\nsave is a few hundred milliseconds rather than another LLM round trip.\n\nDeliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`\ngate refuses anonymous callers (401), the demo role and interviewers (403)\nbefore this handler runs, so only roles with candidates.add reach it.\n\nWith `job_id` (ATS Phase C) the candidate also lands at the first stage of\nthat job's pipeline; saving the same person to the same job again returns\nthe existing application instead of failing.",
+        "description": "Persist a reviewed parse: upsert the candidate, store the file, save the resume.\n\nTakes the parse the client already has instead of re-running the model, so a\nsave is a few hundred milliseconds rather than another LLM round trip.\n\nDeliberately NOT in READ_ONLY_POST_PATHS: the app-wide `enforce_read_only`\ngate refuses anonymous callers (401), the demo role and interviewers (403)\nbefore this handler runs, so only roles with candidates.add reach it.\n\nWith `job_id` (ATS Phase C) the candidate also lands at the first stage of\nthat job's pipeline; saving the same person to the same job again returns\nthe existing application instead of failing.\n\n`source` (Track 2 Phase 3) is how they found the job, from the one\nvocabulary in services/sources.py; the bulk uploader sends one for the\nwhole batch. Omitted means they applied directly.",
         "operationId": "save_candidate_from_parse_api_resume_save_candidate_post",
         "requestBody": {
           "content": {
