@@ -63,7 +63,7 @@ def test_ensure_job_stages_creates_the_eleven_defaults(db_session, seed):
 
 def test_ensure_application_stages_starts_at_resume_submitted(db_session, application):
     rows = ps.ensure_application_stages(db_session, application)
-    assert len(rows) == 11
+    assert len(rows) == len(ps.DEFAULT_STAGES)
     assert rows[0].stage.key == "resume_submitted"
     assert rows[0].status == "in_progress"
     assert rows[0].started_at is not None
@@ -104,7 +104,7 @@ def test_advance_from_the_last_round_hires(db_session, application):
     assert application.status == "hired"
     assert ps.current_stage(application) is None
     assert "hired" in _keys_by_status(application, "passed")
-    assert _keys_by_status(application, "skipped") == ["offer_declined"]
+    assert _keys_by_status(application, "skipped") == ["offer_declined", "withdrawn"]
     assert db_session.get(Candidate, application.candidate_id).status == "hired"
     with pytest.raises(ps.PipelineError):
         ps.advance(db_session, application)
@@ -116,7 +116,7 @@ def test_reject_fails_current_and_skips_the_rest(db_session, application):
     ps.reject(db_session, application, note="Not enough SQL depth.")
     assert application.status == "rejected"
     assert _keys_by_status(application, "failed") == ["hm_review"]
-    assert len(_keys_by_status(application, "skipped")) == 9
+    assert len(_keys_by_status(application, "skipped")) == 10
     failed = next(r for r in application.stages if r.status == "failed")
     assert failed.note == "Not enough SQL depth."
     assert db_session.get(Candidate, application.candidate_id).status == "rejected"
@@ -176,7 +176,7 @@ def test_get_job_pipeline_has_a_column_per_enabled_stage(client, seed):
     first = body["columns"][0]
     assert first["stage_key"] == "resume_submitted"
     assert any(a["application_id"] == seed["application_id"] for a in first["applications"])
-    assert body["outcomes"] == {"hired": 0, "rejected": 0, "declined": 0}
+    assert body["outcomes"] == {"hired": 0, "rejected": 0, "declined": 0, "withdrawn": 0}
 
 
 def test_get_application_returns_the_timeline(client, seed):
@@ -185,7 +185,7 @@ def test_get_application_returns_the_timeline(client, seed):
     body = response.json()
     assert body["status"] == "active"
     assert body["current_stage_key"] == "resume_submitted"
-    assert len(body["stages"]) == 11
+    assert len(body["stages"]) == len(ps.DEFAULT_STAGES)
     assert body["stages"][0]["status"] == "in_progress"
     assert body["candidate_name"] == "Ada Lovelace"
 
@@ -275,7 +275,7 @@ def test_creating_a_job_seeds_its_stages(admin_client, db_session):
     )
     assert response.status_code == 201, response.text
     job_id = response.json()["id"]
-    assert db_session.query(PipelineStage).filter(PipelineStage.job_id == job_id).count() == 11
+    assert db_session.query(PipelineStage).filter(PipelineStage.job_id == job_id).count() == len(ps.DEFAULT_STAGES)
 
 
 def test_apply_starts_the_pipeline(admin_client, seed):
@@ -312,7 +312,7 @@ def test_deleting_a_job_with_a_moved_application_removes_its_pipeline(admin_clie
     job_id = created.json()["id"]
     applied = admin_client.post(
         f"/api/jobs/{job_id}/apply",
-        json={"candidate_id": seed["candidate_ids"][2], "source": "direct"},
+        json={"candidate_id": seed["candidate_ids"][2], "source": "direct_application"},
     )
     application_id = applied.json()["id"]
     assert admin_client.post(f"/api/applications/{application_id}/advance", json={}).status_code == 200

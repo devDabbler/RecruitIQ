@@ -17,8 +17,9 @@ import {
 import { ApiError } from "@/lib/api";
 import { getReport, listJobs } from "@/lib/data";
 import type { Report } from "@/lib/domain";
-import { formatDate, humanize } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { canViewReports, daysLabel, exportHref, formatDays } from "@/lib/reports";
+import { sourceLabel } from "@/lib/sources";
 import { getUser } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -217,7 +218,7 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                 <TableBody>
                   {report.source_mix.map((row) => (
                     <TableRow key={row.source}>
-                      <TableCell>{humanize(row.source)}</TableCell>
+                      <TableCell>{row.label || sourceLabel(row.source)}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
                       <TableCell className="text-right tabular-nums">{row.hired}</TableCell>
                     </TableRow>
@@ -225,6 +226,42 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                 </TableBody>
               </Table>
             )}
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>By department</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {report.department_mix.length === 0 ? (
+              <p className="text-sm text-slate-500">No applications yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Department</TableHead>
+                    <TableHead className="text-right">Jobs</TableHead>
+                    <TableHead className="text-right">Applications</TableHead>
+                    <TableHead className="text-right">Hired</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {report.department_mix.map((row) => (
+                    <TableRow key={row.department}>
+                      <TableCell>{row.department}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.jobs}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.applications}</TableCell>
+                      <TableCell className="text-right tabular-nums">{row.hired}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Departments come from the fixed list on the Team page, so one team is never split
+              across two spellings.
+            </p>
           </CardContent>
         </Card>
       </div>

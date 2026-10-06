@@ -50,11 +50,15 @@ export const EDUCATION_LEVELS = [
 ] as const;
 
 export const MAX_REQUIREMENT_SKILLS = 20;
+/** Mirrors JobCreateUpdate.requisition_number (Track 2 Phase 3). */
+export const MAX_REQUISITION_LENGTH = 40;
 export const MAX_SKILL_LENGTH = 60;
 
 export interface JobFormValues {
   title: string;
   department: string;
+  /** Track 2 Phase 3: the HR system's requisition number. */
+  requisition_number: string;
   job_overview: string;
   required_qualifications: string;
   skills: string;
@@ -80,6 +84,7 @@ export interface JobFormValues {
 export const EMPTY_JOB: JobFormValues = {
   title: "",
   department: "",
+  requisition_number: "",
   job_overview: "",
   required_qualifications: "",
   skills: "",
@@ -106,6 +111,7 @@ export function jobToFormValues(job: Job): JobFormValues {
   return {
     title: job.title ?? "",
     department: job.department ?? "",
+    requisition_number: job.requisition_number ?? "",
     job_overview: job.job_overview ?? "",
     required_qualifications: job.required_qualifications ?? "",
     skills: (job.skills ?? []).join(", "),
@@ -160,6 +166,9 @@ export function validateJob(values: JobFormValues): FieldErrors {
 
   if (!values.title.trim()) errors.title = "A title is required.";
   if (!values.department.trim()) errors.department = "A department is required.";
+  if (values.requisition_number.trim().length > MAX_REQUISITION_LENGTH) {
+    errors.requisition_number = `Keep it to ${MAX_REQUISITION_LENGTH} characters.`;
+  }
   if (!values.job_overview.trim()) errors.job_overview = "An overview is required.";
   if (!values.required_qualifications.trim()) {
     errors.required_qualifications = "Required qualifications cannot be empty.";
@@ -223,6 +232,7 @@ export function toJobPayload(values: JobFormValues): Record<string, unknown> {
   return {
     title: values.title.trim(),
     department: values.department.trim(),
+    requisition_number: orNull(values.requisition_number),
     job_overview: values.job_overview.trim(),
     required_qualifications: values.required_qualifications.trim(),
     skills: values.skills
@@ -252,10 +262,30 @@ export function toJobPayload(values: JobFormValues): Record<string, unknown> {
 
 /**
  * "Start from an existing job" (ATS Phase E): the same role, as a new draft.
- * Dates are cleared because they almost never carry over.
+ * Dates are cleared because they almost never carry over, and so is the
+ * requisition number: a copy is a new requisition, and numbers are unique.
  */
 export function copyJobValues(job: Job): JobFormValues {
-  return { ...jobToFormValues(job), status: "draft", application_deadline: "", start_date: "" };
+  return {
+    ...jobToFormValues(job),
+    status: "draft",
+    requisition_number: "",
+    application_deadline: "",
+    start_date: "",
+  };
+}
+
+/**
+ * The departments a job form offers: the active list, plus the job's own
+ * department if it has since been turned off (the API lets a job keep it).
+ */
+export function departmentChoices(active: string[], current: string): string[] {
+  const choices = [...active];
+  const kept = current.trim();
+  if (kept && !choices.some((name) => name.toLowerCase() === kept.toLowerCase())) {
+    choices.push(kept);
+  }
+  return choices;
 }
 
 export interface DescriptionDraft {

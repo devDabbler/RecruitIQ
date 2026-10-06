@@ -38,6 +38,7 @@ import { formatDate } from "@/lib/format";
 import { dataExportHref } from "@/lib/intake";
 import { can, DATA_EXPORT } from "@/lib/permissions";
 import { canWrite, getUser } from "@/lib/session";
+import { sourceLabel } from "@/lib/sources";
 
 export const dynamic = "force-dynamic";
 
@@ -164,7 +165,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
 
               {candidate.source ? (
                 <p className="text-xs text-slate-500">
-                  Source: <span className="text-slate-700">{candidate.source}</span>
+                  Source: <span className="text-slate-700">{sourceLabel(candidate.source)}</span>
                 </p>
               ) : null}
             </CardContent>

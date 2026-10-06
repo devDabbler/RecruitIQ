@@ -5,6 +5,7 @@ import Link from "next/link";
 import { CheckCircle2, CircleDashed, Loader2, Upload, XCircle } from "lucide-react";
 
 import { FitChip } from "@/components/fit-chip";
+import { SourceSelect } from "@/components/source-select";
 import { ACCEPT, type SelectableJob } from "@/components/resume-uploader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +19,7 @@ import {
   updateItem,
   uploadProgress,
 } from "@/lib/intake";
+import { DEFAULT_SOURCE } from "@/lib/sources";
 
 const STATUS_LABELS: Record<UploadItem["status"], string> = {
   queued: "Waiting",
@@ -36,6 +38,7 @@ const STATUS_LABELS: Record<UploadItem["status"], string> = {
  */
 export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
   const [jobId, setJobId] = useState("");
+  const [source, setSource] = useState<string>(DEFAULT_SOURCE);
   const [items, setItems] = useState<UploadItem[]>([]);
   const [skipped, setSkipped] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
@@ -85,6 +88,7 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
       saveForm.set("file", file);
       saveForm.set("parsed_data", JSON.stringify(parsedBody.parsed_data ?? {}));
       saveForm.set("job_id", jobId);
+      saveForm.set("source", source);
       if (job) saveForm.set("position_applied", job.title);
       const saved = await fetch("/api/resume/save", { method: "POST", body: saveForm });
       const savedBody = (await saved.json().catch(() => null)) as {
@@ -163,6 +167,20 @@ export function BulkUploader({ jobs }: { jobs: SelectableJob[] }) {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block text-sm font-medium text-slate-700">
+            How did they find us?
+            <SourceSelect
+              id="bulk-source"
+              value={source}
+              onChange={setSource}
+              disabled={running}
+              className="mt-1 block w-full font-normal"
+            />
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              One source for the whole batch. Upload separate batches for different sources.
+            </span>
           </label>
 
           <div className="flex gap-2">

@@ -147,6 +147,8 @@ NOT_AUDITED: list[tuple[re.Pattern[str], str]] = [
         (r"GET /api/public/status/\{token\}", "the candidate's own status page, no staff account"),
         (r"(GET|PUT) /api/team/me(/password)?", "the caller's own profile"),
         (r"GET /api/team/users", "staff directory"),
+        (r"(GET|POST) /api/departments", "the department list"),
+        (r"PUT /api/departments/\{department_id\}", "the department list"),
     ]
 ]
 

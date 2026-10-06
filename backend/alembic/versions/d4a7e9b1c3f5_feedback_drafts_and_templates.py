@@ -11,7 +11,7 @@ author last touched it, which is what retention reads.
 `job_id` is NULL, else for one job. Not candidate data.
 
 Revision ID: d4a7e9b1c3f5
-Revises: b1d4f6a8c2e3
+Revises: c8e2f4a6b9d1
 Create Date: 2026-10-06
 """
 from typing import Sequence, Union
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "d4a7e9b1c3f5"
-down_revision: Union[str, None] = "b1d4f6a8c2e3"
+down_revision: Union[str, None] = "c8e2f4a6b9d1"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

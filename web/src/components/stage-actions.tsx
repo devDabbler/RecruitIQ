@@ -2,16 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2, SkipForward, UserX, X } from "lucide-react";
+import { ArrowRight, DoorOpen, Loader2, SkipForward, UserX, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ACTION_LABELS, type StageAction } from "@/lib/pipeline";
 
 /**
- * Advance, Skip, Reject, Decline for one application.
+ * Advance, Skip, Reject, Decline, Withdraw for one application.
  *
- * Reject and Decline ask for confirmation and an optional note because they
- * are terminal. The timeline is a Server Component, so a refresh is what
+ * Reject, Decline, and Withdraw ask for confirmation and an optional note
+ * because they are terminal. The timeline is a Server Component, so a refresh is what
  * re-renders it after the API answers.
  */
 export function StageActions({
@@ -56,7 +56,12 @@ export function StageActions({
   if (actions.length === 0) return null;
 
   if (confirming) {
-    const terminal = confirming === "reject" ? "rejected" : "marked as declined";
+    const terminal =
+      confirming === "reject"
+        ? "rejected"
+        : confirming === "withdraw"
+          ? "marked as withdrawn"
+          : "marked as declined";
     return (
       <div
         role="alertdialog"
@@ -139,6 +144,17 @@ export function StageActions({
           >
             <UserX className="mr-2 h-4 w-4" aria-hidden />
             Candidate declined
+          </Button>
+        ) : null}
+        {actions.includes("withdraw") ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setConfirming("withdraw")}
+            disabled={busy !== null}
+          >
+            <DoorOpen className="mr-2 h-4 w-4" aria-hidden />
+            Candidate withdrew
           </Button>
         ) : null}
         {actions.includes("reject") ? (

@@ -91,9 +91,24 @@ PIPELINE_WEIGHTS = [
     ("hired", 2),
     ("rejected", 4),
     ("on_hold", 2),
+    # Track 2 Phase 3: someone who pulled out, so the Withdrawn outcome shows.
+    ("withdrawn", 1),
 ]
 
 SOURCES = ["linkedin", "referral", "job_board", "indeed", "direct_application", "agency"]
+
+# Track 2 Phase 3: synthetic requisition numbers, in the shape an HR system
+# might use. Keyed on title like SEED_REQUIREMENTS; only set where empty.
+SEED_REQUISITIONS = {
+    "Machine Learning Engineer": "REQ-2026-0141",
+    "Engineering Manager, Platform": "REQ-2026-0142",
+    "Senior Data Scientist": "REQ-2026-0143",
+    "Junior Data Scientist": "REQ-2026-0144",
+    "Software Development Engineer": "REQ-2026-0145",
+    "Product Manager": "REQ-2026-0146",
+    "Gen AI Engineer": "REQ-2026-0147",
+    "Data Engineer": "REQ-2026-0148",
+}
 
 # Applications mirror the candidate's own funnel position, in the vocabulary
 # the ATS Phase A migration introduced: an application is active until it
@@ -622,6 +637,50 @@ def _weighted_statuses(rng: random.Random, n: int) -> list[str]:
     return pool
 
 
+def seed_departments(db) -> int:
+    """Every department a job names, on the department list (Track 2 Phase 3).
+
+    Additive: an existing department (any spelling) is left as it is,
+    including one an admin turned off.
+    """
+    from sqlalchemy import func
+
+    from backend.models.models import Department
+
+    names = {spec["department"] for spec in NEW_JOBS}
+    names.update(name for (name,) in db.query(Job.department).distinct() if name and name.strip())
+    added = 0
+    for name in sorted(names):
+        exists = db.query(Department).filter(func.lower(Department.name) == name.strip().lower()).first()
+        if exists is None:
+            db.add(Department(name=name.strip(), active=True))
+            added += 1
+    db.commit()
+    return added
+
+
+def seed_requisitions(db) -> int:
+    """SEED_REQUISITIONS on the seeded jobs that have no number yet."""
+    changed = 0
+    for spec in NEW_JOBS:
+        number = SEED_REQUISITIONS.get(spec["title"])
+        if number is None:
+            continue
+        job = (
+            db.query(Job)
+            .filter(Job.title == spec["title"], Job.department == spec["department"])
+            .first()
+        )
+        if job is None or job.requisition_number:
+            continue
+        if db.query(Job).filter(Job.requisition_number == number).first() is not None:
+            continue  # someone used this number for another job
+        job.requisition_number = number
+        changed += 1
+    db.commit()
+    return changed
+
+
 def seed_jobs(db) -> list[Job]:
     for spec in NEW_JOBS:
         job = (
@@ -752,9 +811,11 @@ def _seed_stage_history(db, application: JobApplication, candidate_status: str) 
     for index, stage in enumerate(stages):
         row = ApplicationStage(application_id=application.id, stage_id=stage.id, status="pending")
         if final == "hired":
-            row.status = "skipped" if stage.key == "offer_declined" else "passed"
+            row.status = "skipped" if stage.key in ("offer_declined", "withdrawn") else "passed"
         elif final in ("rejected", "withdrawn"):
-            if index == 0:
+            if final == "withdrawn" and stage.key == "withdrawn":
+                row.status = "passed"
+            elif index == 0:
                 row.status = "passed"
             elif index == 1:
                 row.status = "failed" if final == "rejected" else "skipped"
@@ -992,7 +1053,7 @@ def seed_pipeline(db, candidates: list[Candidate], jobs: list[Job]) -> None:
         if application is None:
             application = JobApplication(job_id=job.id, candidate_id=candidate.id)
             db.add(application)
-        application.source = candidate.source or "direct"
+        application.source = candidate.source or "direct_application"
         application.notes = f"{SEEDED_APPLICATION_NOTE} ({app_status})."
         db.flush()
         _seed_stage_history(db, application, candidate.status or "active")
@@ -1253,6 +1314,14 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--hygiene-only",
+        action="store_true",
+        help=(
+            "only add the department list entries and synthetic requisition numbers "
+            "(Track 2 Phase 3) where missing. Never changes a number someone has set"
+        ),
+    )
+    parser.add_argument(
         "--feedback-templates-only",
         action="store_true",
         help=(
@@ -1265,6 +1334,11 @@ def main() -> int:
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
+
+        if args.hygiene_only:
+            print(f"  departments added: {seed_departments(db)}")
+            print(f"  jobs given requisition numbers: {seed_requisitions(db)}")
+            return 0
 
         if args.feedback_templates_only:
             print(f"  feedback templates added: {seed_feedback_templates(db)}")
@@ -1302,8 +1376,11 @@ def main() -> int:
                   f"interviews: {db.query(Interview).count()}  feedback: {db.query(Feedback).count()}")
             return 0
 
+        seed_departments(db)
         jobs = seed_jobs(db)
+        seed_departments(db)  # again: covers any job that existed before this run
         seed_requirements(db)
+        seed_requisitions(db)
         candidates = seed_candidates(db, random.Random(SEED_FIELDS))
         seed_pipeline(db, candidates, jobs)
         seed_interviews(db, seed_team(db), jobs)

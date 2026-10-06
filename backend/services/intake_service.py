@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.models import Candidate, Job, JobApplication
 from backend.services import pipeline_service as ps
+from backend.services import sources
 
 
 class IntakeError(Exception):
@@ -29,13 +30,15 @@ def add_to_job(
     db: Session,
     candidate_id: str,
     job_id: int,
-    source: Optional[str] = "direct",
+    source: Optional[str] = None,
     cover_letter: Optional[str] = None,
 ) -> Tuple[JobApplication, bool]:
     """The candidate's application to this job, and whether it was just created.
 
     One application per candidate per job (spec decision 2): an existing one is
-    returned untouched, whatever its status.
+    returned untouched, whatever its status. `source` is stored in the one
+    vocabulary (services/sources.py); blank means the candidate applied
+    directly.
     """
     job = db.get(Job, job_id)
     if job is None:
@@ -56,7 +59,7 @@ def add_to_job(
         job_id=job_id,
         candidate_id=candidate_id,
         cover_letter=cover_letter,
-        source=source or "direct",
+        source=sources.normalize(source),
     )
     db.add(application)
     job.applications = (job.applications or 0) + 1

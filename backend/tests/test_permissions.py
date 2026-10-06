@@ -34,6 +34,7 @@ MATRIX = [
     (p.PROFILE_EDIT, {ADMIN, HM, TEAM, INT}),
     (p.AUDIT_VIEW, {ADMIN}),
     (p.DATA_EXPORT, {ADMIN}),
+    (p.DEPARTMENTS_MANAGE, {ADMIN}),
 ]
 
 
@@ -76,6 +77,9 @@ def test_demo_holds_no_write_permission():
         ("DELETE", "/api/candidates/abc", p.DELETE_RECORDS),
         ("POST", "/api/resume/save-candidate", p.CANDIDATES_ADD),
         ("POST", "/api/applications/7/advance", p.PIPELINE_MOVE),
+        ("POST", "/api/applications/7/withdraw", p.PIPELINE_MOVE),
+        ("POST", "/api/departments", p.DEPARTMENTS_MANAGE),
+        ("PUT", "/api/departments/4", p.DEPARTMENTS_MANAGE),
         ("POST", "/api/applications/7/interviews", p.PIPELINE_MOVE),
         ("DELETE", "/api/interviews/3", p.PIPELINE_MOVE),
         ("POST", "/api/interviews/3/feedback", p.FEEDBACK_SUBMIT),

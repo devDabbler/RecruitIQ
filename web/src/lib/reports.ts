@@ -62,6 +62,8 @@ export function activityPredicate(
       return `was hired as ${event.job_title}`;
     case "declined":
       return `declined the offer for ${event.job_title}`;
+    case "withdrew":
+      return `withdrew from ${event.job_title}`;
     default:
       return `moved forward for ${event.job_title}`;
   }

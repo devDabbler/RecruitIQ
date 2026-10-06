@@ -436,6 +436,7 @@ async def save_candidate_from_parse(
     parsed_data: str = Form(...),
     position_applied: Optional[str] = Form(None),
     job_id: Optional[int] = Form(None),
+    source: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     resume_service = Depends(provide_resume_service),
 ):
@@ -451,8 +452,14 @@ async def save_candidate_from_parse(
     With `job_id` (ATS Phase C) the candidate also lands at the first stage of
     that job's pipeline; saving the same person to the same job again returns
     the existing application instead of failing.
+
+    `source` (Track 2 Phase 3) is how they found the job, from the one
+    vocabulary in services/sources.py; the bulk uploader sends one for the
+    whole batch. Omitted means they applied directly.
     """
     import tempfile
+
+    from backend.services import sources
 
     from sqlalchemy import text as sql_text
 
@@ -463,6 +470,13 @@ async def save_candidate_from_parse(
         resume_model = ResumeData.model_validate(data)
     except Exception as e:
         raise HTTPException(status_code=422, detail=f"parsed_data is not a valid parse payload: {e}")
+
+    source = (source or "").strip().lower() or None
+    if source is not None and source not in sources.APPLICATION_SOURCES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown source '{source}'. Use one of: {', '.join(sources.APPLICATION_SOURCES)}.",
+        )
 
     # Checked before anything is stored, so a bad job id never leaves a
     # half-saved candidate behind.
@@ -527,6 +541,16 @@ async def save_candidate_from_parse(
             ),
             {"position": position_applied.strip(), "id": candidate_id},
         )
+    # save_resume fills a missing source with the default channel; a source
+    # the recruiter chose replaces only that default, never a real one.
+    if candidate_id and source:
+        db.execute(
+            sql_text(
+                "UPDATE candidates SET source = :source WHERE id = :id "
+                "AND (source IS NULL OR source IN ('', :default))"
+            ),
+            {"source": source, "id": candidate_id, "default": sources.DEFAULT_SOURCE},
+        )
 
     application_id = None
     already_in_pipeline = False
@@ -534,7 +558,7 @@ async def save_candidate_from_parse(
         from backend.services import intake_service
 
         application, created = intake_service.add_to_job(
-            db, candidate_id, job_id, source="resume_upload"
+            db, candidate_id, job_id, source=source
         )
         application_id = application.id
         already_in_pipeline = not created

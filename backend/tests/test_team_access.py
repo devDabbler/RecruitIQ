@@ -95,8 +95,17 @@ def test_board_shows_only_assigned(interviewer_client, assigned, seed):
 
 def test_other_roles_still_see_everyone(hiring_team_client, demo_client, seed, assigned):
     for client in (hiring_team_client, demo_client):
-        body = client.get("/api/candidates/", params={"page_size": 100}).json()
-        assert set(seed["candidate_ids"]) <= {c["id"] for c in body["results"]}
+        # Page through: other modules add candidates, so the seeded ones are
+        # not guaranteed to be on the first page.
+        seen: set[str] = set()
+        page = 1
+        while True:
+            body = client.get("/api/candidates/", params={"page_size": 100, "page": page}).json()
+            seen.update(c["id"] for c in body["results"])
+            if not body["results"] or page * 100 >= body["total"]:
+                break
+            page += 1
+        assert set(seed["candidate_ids"]) <= seen
 
 
 def test_score_is_hidden_until_feedback(interviewer_client, hiring_team_client, assigned):

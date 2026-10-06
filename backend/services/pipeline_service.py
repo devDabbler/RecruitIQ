@@ -28,6 +28,8 @@ DEFAULT_STAGES: list[tuple[str, str, str, str]] = [
     ("offer_accepted", "Offer accepted", "round", "You have accepted. We are completing paperwork and a start date."),
     ("offer_declined", "Offer declined", "outcome", "You declined the offer."),
     ("hired", "Hired", "outcome", "Welcome aboard."),
+    # Track 2 Phase 3: the candidate pulled out (Withdraw, any active stage).
+    ("withdrawn", "Withdrawn", "outcome", "You withdrew from the process."),
 ]
 
 ROUND = "round"
@@ -127,12 +129,18 @@ def ensure_application_stages(db: Session, application: JobApplication) -> list[
 
     now = datetime.utcnow()
     started = any(row.status != PENDING for row in existing.values())
+    finished = application.status in TERMINAL and bool(existing)
     entered: Optional[ApplicationStage] = None
     for stage in stages:
         if stage.id in existing:
             continue
         row = ApplicationStage(application_id=application.id, stage_id=stage.id, status=PENDING)
-        if not started and stage.kind == ROUND and stage.enabled:
+        if finished:
+            # A stage added after this application ended (an outcome added by
+            # a later release) never happened for it.
+            row.status = SKIPPED
+            row.completed_at = now
+        elif not started and stage.kind == ROUND and stage.enabled:
             row.status = IN_PROGRESS
             row.started_at = application.applied_at or now
             started = True
@@ -305,7 +313,20 @@ def decline(db: Session, application: JobApplication, actor_id: Optional[str] = 
     _set_outcome(db, application, "offer_declined", APP_DECLINED, now)
 
 
-ACTIONS = {"advance": advance, "skip": skip, "reject": reject, "decline": decline}
+def withdraw(db: Session, application: JobApplication, actor_id: Optional[str] = None, note: Optional[str] = None) -> None:
+    """The candidate pulled out (Track 2 Phase 3). Valid at any active stage.
+
+    The current round is closed as skipped (it did not finish, and nobody
+    failed it), the Withdrawn outcome is recorded, and every later stage is
+    skipped. The reason note sits on the round they left from.
+    """
+    current = _require_active(application)
+    now = datetime.utcnow()
+    _close(current, SKIPPED, now, actor_id, note)
+    _set_outcome(db, application, "withdrawn", APP_WITHDRAWN, now)
+
+
+ACTIONS = {"advance": advance, "skip": skip, "reject": reject, "decline": decline, "withdraw": withdraw}
 
 
 # --- custom stages and reordering (ATS Phase E) --------------------------------
@@ -472,4 +493,4 @@ def remove_custom_stage(db: Session, job_id: int, key: str) -> None:
     db.flush()
     if application_ids:
         for application in db.query(JobApplication).filter(JobApplication.id.in_(application_ids)).all():
-            db.expire(application, ["stages"])
+            db.expire(application, ["stages"])

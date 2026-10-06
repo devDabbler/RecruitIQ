@@ -6,13 +6,14 @@
  */
 import type { ApplicationDetail } from "./domain";
 
-export type StageAction = "advance" | "skip" | "reject" | "decline";
+export type StageAction = "advance" | "skip" | "reject" | "decline" | "withdraw";
 
 export const ACTION_LABELS: Record<StageAction, string> = {
   advance: "Advance",
   skip: "Skip stage",
   reject: "Reject",
   decline: "Candidate declined",
+  withdraw: "Candidate withdrew",
 };
 
 export const STAGE_STATUS_LABELS: Record<string, string> = {
@@ -54,5 +55,7 @@ export function availableActions(application: ApplicationDetail): StageAction[] 
   if (hasLaterRound(application, key)) actions.push("skip");
   actions.push("reject");
   if (DECLINABLE.has(key)) actions.push("decline");
+  // Track 2 Phase 3: a candidate can pull out at any active stage.
+  actions.push("withdraw");
   return actions;
 }
