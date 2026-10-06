@@ -39,3 +39,23 @@ class CandidateTagsResponse(BaseModel):
 class TagCount(BaseModel):
     tag: str
     count: int
+
+
+class BulkTagRequest(BaseModel):
+    """Track 2 Phase 5: one tag for many candidates."""
+    candidate_ids: List[str] = Field(min_length=1, max_length=100)
+    tag: str = Field(max_length=80)
+
+
+class BulkTagItem(BaseModel):
+    candidate_id: str
+    ok: bool
+    candidate_name: Optional[str] = None
+    detail: Optional[str] = None
+
+
+class BulkTagResponse(BaseModel):
+    tag: str
+    succeeded: int
+    failed: int
+    results: List[BulkTagItem]

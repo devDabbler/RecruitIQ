@@ -164,6 +164,8 @@ ROUTE_PERMISSIONS: list[tuple[str, re.Pattern[str], str]] = [
         ("POST", r"/api/candidates/[^/]+/tags", PIPELINE_MOVE),
         ("DELETE", r"/api/candidates/[^/]+/tags/[^/]+", PIPELINE_MOVE),
         ("POST", r"/api/applications/bulk/[a-z_]+", PIPELINE_MOVE),
+        # Track 2 Phase 5: one tag for many candidates.
+        ("POST", r"/api/candidates/bulk/tag", PIPELINE_MOVE),
         # ATS Phase E: status links, candidate email, templates, job drafts.
         # (The stage editor reuses PUT /api/jobs/{id}/pipeline above.)
         ("POST", r"/api/applications/\d+/status-link", PIPELINE_MOVE),

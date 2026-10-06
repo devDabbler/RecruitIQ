@@ -462,6 +462,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/candidates/bulk/tag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk Tag
+         * @description Give many candidates one tag; each one succeeds or fails on its own.
+         *
+         *     Every candidate runs in its own savepoint, like the bulk pipeline moves,
+         *     so one at the tag limit is reported by name instead of blocking the
+         *     rest. A candidate who already has the tag counts as done. Works from any
+         *     candidate list, not only one filtered to a job.
+         */
+        post: operations["bulk_tag_api_candidates_bulk_tag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/candidates/export.csv": {
         parameters: {
             query?: never;
@@ -2705,6 +2730,38 @@ export interface components {
             /** Status */
             status?: string | null;
         };
+        /** BulkTagItem */
+        BulkTagItem: {
+            /** Candidate Id */
+            candidate_id: string;
+            /** Candidate Name */
+            candidate_name?: string | null;
+            /** Detail */
+            detail?: string | null;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * BulkTagRequest
+         * @description Track 2 Phase 5: one tag for many candidates.
+         */
+        BulkTagRequest: {
+            /** Candidate Ids */
+            candidate_ids: string[];
+            /** Tag */
+            tag: string;
+        };
+        /** BulkTagResponse */
+        BulkTagResponse: {
+            /** Failed */
+            failed: number;
+            /** Results */
+            results: components["schemas"]["BulkTagItem"][];
+            /** Succeeded */
+            succeeded: number;
+            /** Tag */
+            tag: string;
+        };
         /** BulkTransitionRequest */
         BulkTransitionRequest: {
             /** Application Ids */
@@ -3002,6 +3059,8 @@ export interface components {
              * @default active
              */
             status: string | null;
+            /** Tags */
+            tags?: string[];
             /**
              * Updated At
              * Format: date-time
@@ -3124,6 +3183,7 @@ export interface components {
             no_movement_total: number;
             /** Pending Feedback */
             pending_feedback: components["schemas"]["PendingFeedbackRow"][];
+            time_to_outcome: components["schemas"]["OutcomeTiming"];
             /** Total Applications */
             total_applications: number;
         };
@@ -3686,6 +3746,21 @@ export interface components {
             /** Title */
             title: string;
         };
+        /** JobOutcomeTiming */
+        JobOutcomeTiming: {
+            /** Hires */
+            hires: number;
+            /** Job Id */
+            job_id: number;
+            /** Job Title */
+            job_title: string;
+            /** Median Days To Hire */
+            median_days_to_hire?: number | null;
+            /** Median Days To Reject */
+            median_days_to_reject?: number | null;
+            /** Rejections */
+            rejections: number;
+        };
         /** JobPipelineResponse */
         JobPipelineResponse: {
             /** Columns */
@@ -3920,6 +3995,23 @@ export interface components {
             /** Stage Name */
             stage_name?: string | null;
         };
+        /**
+         * OutcomeTiming
+         * @description Track 2 Phase 5: median days from applying to hired, and to rejected.
+         *
+         *     A median is null when nobody has reached that outcome. Declined offers
+         *     and withdrawals are not rejections.
+         */
+        OutcomeTiming: {
+            /** Hires */
+            hires: number;
+            /** Median Days To Hire */
+            median_days_to_hire?: number | null;
+            /** Median Days To Reject */
+            median_days_to_reject?: number | null;
+            /** Rejections */
+            rejections: number;
+        };
         /** PairTrace */
         PairTrace: {
             /** Above Threshold */
@@ -4128,6 +4220,9 @@ export interface components {
             source_mix: components["schemas"]["SourceRow"][];
             /** Time In Stage */
             time_in_stage: components["schemas"]["StageTiming"][];
+            time_to_outcome: components["schemas"]["OutcomeTiming"];
+            /** Time To Outcome By Job */
+            time_to_outcome_by_job: components["schemas"]["JobOutcomeTiming"][];
             /** Total Applications */
             total_applications: number;
         };
@@ -5796,6 +5891,8 @@ export interface operations {
                 position?: string | null;
                 skills?: string | null;
                 job_id?: number | null;
+                /** @description Only candidates carrying every one of these tags. */
+                tag?: string[] | null;
                 sort_by?: string;
                 sort_order?: string;
                 page?: number;
@@ -5860,12 +5957,47 @@ export interface operations {
             };
         };
     };
+    bulk_tag_api_candidates_bulk_tag_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTagRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_candidates_csv_api_candidates_export_csv_get: {
         parameters: {
             query?: {
                 keyword?: string | null;
                 status?: components["schemas"]["CandidateStatus"] | null;
                 job_id?: number | null;
+                /** @description Only candidates carrying every one of these tags. */
+                tag?: string[] | null;
             };
             header?: never;
             path?: never;

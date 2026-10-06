@@ -45,14 +45,16 @@ export interface CandidateExportQuery {
   keyword?: string;
   status?: string;
   jobId?: string;
+  tags?: string[];
 }
 
 /** The CSV link for whatever the candidates list is currently filtered to. */
-export function exportHref({ keyword, status, jobId }: CandidateExportQuery): string {
+export function exportHref({ keyword, status, jobId, tags }: CandidateExportQuery): string {
   const query = new URLSearchParams();
   if (keyword) query.set("keyword", keyword);
   if (status) query.set("status", status);
   if (jobId) query.set("job_id", jobId);
+  for (const tag of tags ?? []) query.append("tag", tag);
   const qs = query.toString();
   return qs ? `/api/candidates/export?${qs}` : "/api/candidates/export";
 }
@@ -88,6 +90,63 @@ export function bulkSummary(
   const moved = `${verb} ${succeeded} ${succeeded === 1 ? "candidate" : "candidates"}.`;
   if (failed === 0) return moved;
   return `${moved} ${failed} could not be ${action === "advance" ? "advanced" : "rejected"}.`;
+}
+
+/**
+ * Shown under every tag input (Track 2 Phase 5). Tags are free text, so the
+ * one rule that keeps them lawful is said where people type them.
+ */
+export const TAG_GUIDANCE =
+  "Tag skills, availability, or follow-ups. Never tag pay, health, age, or any protected trait.";
+
+/** How many tag chips the candidates filter shows before the rest are left out. */
+export const TAG_FILTER_CHIPS = 12;
+
+/**
+ * The tag chips for the candidates filter: the most used tags, plus any
+ * selected tag that would not otherwise make the cut, so a selection can
+ * always be cleared. Keeps the API's most-used-first order.
+ */
+export function tagFilterChips(
+  counts: { tag: string; count: number }[],
+  selected: string[],
+  limit: number = TAG_FILTER_CHIPS,
+): { tag: string; count: number | null }[] {
+  const top: { tag: string; count: number | null }[] = counts.slice(0, limit);
+  const shown = new Set(top.map((c) => c.tag));
+  for (const tag of selected) {
+    if (shown.has(tag)) continue;
+    const known = counts.find((c) => c.tag === tag);
+    top.push({ tag, count: known ? known.count : null });
+    shown.add(tag);
+  }
+  return top;
+}
+
+/** The selected tags after clicking one chip: on if it was off, off if it was on. */
+export function toggleTag(selected: string[], tag: string): string[] {
+  return selected.includes(tag) ? selected.filter((t) => t !== tag) : [...selected, tag];
+}
+
+/** What the bulk bar says about the current selection. `jobTitle` null: no job filter. */
+export function selectionLabel(selected: number, movable: number, jobTitle: string | null): string {
+  if (selected === 0) {
+    return jobTitle
+      ? `Select candidates to tag them, or to move them together in ${jobTitle}.`
+      : "Select candidates to tag them together.";
+  }
+  const picked = `${selected} selected`;
+  if (!jobTitle) return picked;
+  return movable === selected
+    ? `${picked} in ${jobTitle}`
+    : `${picked}, ${movable} in progress in ${jobTitle}`;
+}
+
+/** The line after a bulk tag, like bulkSummary for moves. */
+export function bulkTagSummary(tag: string, succeeded: number, failed: number): string {
+  const done = `Tagged ${succeeded} ${succeeded === 1 ? "candidate" : "candidates"} ${tag}.`;
+  if (failed === 0) return done;
+  return `${done} ${failed} could not be tagged.`;
 }
 
 export type UploadStatus = "queued" | "parsing" | "saving" | "done" | "failed";

@@ -5,7 +5,8 @@ import { useEffect, useState, useTransition } from "react";
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
-import { PIPELINE_STAGES, STAGE_LABELS } from "@/lib/domain";
+import { PIPELINE_STAGES, STAGE_LABELS, type TagCount } from "@/lib/domain";
+import { tagFilterChips, toggleTag } from "@/lib/intake";
 import { cn } from "@/lib/utils";
 
 /**
@@ -20,11 +21,16 @@ export function CandidateFilters({
   initialStatus,
   initialJob,
   jobs,
+  tagCounts = [],
+  selectedTags = [],
 }: {
   initialKeyword: string;
   initialStatus: string;
   initialJob: string;
   jobs: { id: number; title: string }[];
+  /** Track 2 Phase 5: every tag in use, most used first, from GET /api/tags. */
+  tagCounts?: TagCount[];
+  selectedTags?: string[];
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -65,6 +71,16 @@ export function CandidateFilters({
     startTransition(() => router.replace(`/candidates?${next}`, { scroll: false }));
   }
 
+  function setTags(tags: string[]) {
+    const next = new URLSearchParams(params.toString());
+    next.delete("tag");
+    for (const tag of tags) next.append("tag", tag);
+    next.delete("page");
+    startTransition(() => router.replace(`/candidates?${next}`, { scroll: false }));
+  }
+
+  const chips = tagFilterChips(tagCounts, selectedTags);
+
   return (
     <div className="mb-4 space-y-3">
       <div className="flex flex-wrap items-center gap-3">
@@ -100,15 +116,41 @@ export function CandidateFilters({
           All
         </FilterChip>
         {PIPELINE_STAGES.map((stage) => (
-          <FilterChip
-            key={stage}
-            active={initialStatus === stage}
-            onClick={() => setStatus(stage)}
-          >
+          <FilterChip key={stage} active={initialStatus === stage} onClick={() => setStatus(stage)}>
             {STAGE_LABELS[stage]}
           </FilterChip>
         ))}
       </div>
+
+      {chips.length ? (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by tag">
+          <span className="text-xs font-medium text-slate-500">Tags</span>
+          {chips.map(({ tag, count }) => (
+            <FilterChip
+              key={tag}
+              active={selectedTags.includes(tag)}
+              onClick={() => setTags(toggleTag(selectedTags, tag))}
+            >
+              {tag}
+              {count !== null ? <span className="ml-1 opacity-70">{count}</span> : null}
+            </FilterChip>
+          ))}
+          {selectedTags.length ? (
+            <button
+              type="button"
+              onClick={() => setTags([])}
+              className="text-xs text-indigo-600 hover:underline"
+            >
+              Clear tags
+            </button>
+          ) : null}
+          {selectedTags.length > 1 ? (
+            <span className="text-xs text-slate-500">
+              Showing candidates with every selected tag.
+            </span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

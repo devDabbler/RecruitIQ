@@ -45,8 +45,11 @@ export class ApiError extends Error {
 type FetchOptions = Omit<RequestInit, "body"> & {
   /** Serialized as JSON unless it is already a string or FormData. */
   body?: unknown;
-  /** Appended as a query string; null and undefined entries are dropped. */
-  query?: Record<string, string | number | boolean | null | undefined>;
+  /**
+   * Appended as a query string; null and undefined entries are dropped. An
+   * array repeats the key (`?tag=a&tag=b`).
+   */
+  query?: Record<string, string | number | boolean | string[] | null | undefined>;
   /** Bearer token. Server Components read it from the cookie via `session.ts`. */
   token?: string | null;
 };
@@ -54,7 +57,9 @@ type FetchOptions = Omit<RequestInit, "body"> & {
 function buildUrl(path: string, query: FetchOptions["query"]): string {
   const url = new URL(API_BASE_URL + path);
   for (const [key, value] of Object.entries(query ?? {})) {
-    if (value !== null && value !== undefined && value !== "") {
+    if (Array.isArray(value)) {
+      for (const item of value) if (item) url.searchParams.append(key, item);
+    } else if (value !== null && value !== undefined && value !== "") {
       url.searchParams.set(key, String(value));
     }
   }

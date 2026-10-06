@@ -227,6 +227,66 @@ def time_in_stage(db: Session, scope: Scope) -> list[dict]:
     ]
 
 
+def _outcome_columns():
+    """Median days from applying to hired, and to rejected, plus how many of each.
+
+    A hire is the Hired outcome passing; a rejection is a round failing.
+    Declined offers and withdrawals are neither. percentile_cont skips the
+    NULLs the CASEs give every other row, so one pass yields both medians.
+    """
+    days = cast(extract("epoch", ApplicationStage.completed_at - JobApplication.applied_at), Float) / 86400.0
+    hired = and_(PipelineStage.key == "hired", ApplicationStage.status == ps.PASSED)
+    rejected = and_(PipelineStage.kind == ps.ROUND, ApplicationStage.status == ps.FAILED)
+    hire_days = case((hired, days))
+    reject_days = case((rejected, days))
+    columns = (
+        func.percentile_cont(0.5).within_group(hire_days),
+        func.count(hire_days),
+        func.percentile_cont(0.5).within_group(reject_days),
+        func.count(reject_days),
+    )
+    # Same rule as time_in_stage: an outcome stamped at the instant the
+    # application was created is history written in one go, not time taken.
+    where = (
+        or_(hired, rejected),
+        JobApplication.applied_at.isnot(None),
+        ApplicationStage.completed_at > JobApplication.applied_at,
+    )
+    return columns, where
+
+
+def _outcome_timing(hire_median, hires, reject_median, rejections) -> dict:
+    return {
+        "median_days_to_hire": None if hire_median is None else round(float(hire_median), 2),
+        "hires": hires or 0,
+        "median_days_to_reject": None if reject_median is None else round(float(reject_median), 2),
+        "rejections": rejections or 0,
+    }
+
+
+def time_to_outcome(db: Session, scope: Scope) -> dict:
+    """Median days from applying to being hired, and to being rejected (Track 2 Phase 5)."""
+    columns, where = _outcome_columns()
+    row = _scoped(_stage_rows(db, *columns).filter(*where), scope).one()
+    return _outcome_timing(*row)
+
+
+def time_to_outcome_by_job(db: Session, scope: Scope) -> list[dict]:
+    """time_to_outcome per job, for jobs with at least one hire or rejection, by title."""
+    columns, where = _outcome_columns()
+    query = (
+        _stage_rows(db, Job.id, Job.title, *columns)
+        .join(Job, Job.id == JobApplication.job_id)
+        .filter(*where)
+        .group_by(Job.id, Job.title)
+        .order_by(Job.title, Job.id)
+    )
+    return [
+        {"job_id": job_id, "job_title": _title(title), **_outcome_timing(*rest)}
+        for job_id, title, *rest in _scoped(query, scope).all()
+    ]
+
+
 def no_movement(
     db: Session,
     scope: Scope,
@@ -572,6 +632,7 @@ def dashboard(db: Session, scope: Scope, now: datetime, viewer: Optional[User] =
         "no_movement_total": waiting_total,
         "pending_feedback": pending_feedback(db, scope, now, viewer=viewer, limit=8),
         "activity": activity(db, scope, limit=12),
+        "time_to_outcome": time_to_outcome(db, scope),
     }
 
 
@@ -584,6 +645,8 @@ def reports(db: Session, scope: Scope, now: datetime) -> dict:
         "total_applications": total_applications(db, scope),
         "funnel": stage_funnel(db, scope),
         "time_in_stage": time_in_stage(db, scope),
+        "time_to_outcome": time_to_outcome(db, scope),
+        "time_to_outcome_by_job": time_to_outcome_by_job(db, scope),
         "no_movement": waiting,
         "no_movement_total": waiting_total,
         "source_mix": source_mix(db, scope),

@@ -41,6 +41,7 @@ from ..crud.candidate_crud import get_candidate as crud_get_candidate
 from ..utils.performance import async_timed
 from ..services.access_service import request_user, visible_candidate_ids
 from ..utils.permissions import DATA_EXPORT, require
+from ..utils.tags import normalize_tag
 
 router = APIRouter(prefix="/candidates")
 
@@ -210,11 +211,14 @@ def _filtered_candidates(
     position: Optional[str] = None,
     skills: Optional[str] = None,
     job_id: Optional[int] = None,
+    tags: Optional[List[str]] = None,
 ):
     """The candidate query behind both the list and the CSV export.
 
     One function so the export can never contain a row the list would hide,
-    including the interviewer visibility rule (ATS Phase B and C).
+    including the interviewer visibility rule (ATS Phase B and C). `tags`
+    must all match (Track 2 Phase 5); they are normalized first, so
+    `?tag=Relocation OK` finds `relocation-ok`.
     """
     query = db.query(Candidate)
 
@@ -275,7 +279,41 @@ def _filtered_candidates(
         )
         query = query.filter(applied)
 
+    for tag in normalized_tags(tags):
+        tagged = (
+            db.query(CandidateTag)
+            .filter(CandidateTag.candidate_id == Candidate.id, CandidateTag.tag == tag)
+            .exists()
+        )
+        query = query.filter(tagged)
+
     return query
+
+
+def normalized_tags(tags: Optional[List[str]]) -> List[str]:
+    """Filter tags as stored, without duplicates. A tag with nothing usable is a 422."""
+    out: List[str] = []
+    for raw in tags or []:
+        try:
+            tag = normalize_tag(raw)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        if tag not in out:
+            out.append(tag)
+    return out
+
+
+def tags_by_candidate(db: Session, ids: List[str]) -> Dict[str, List[str]]:
+    """Each candidate's tags, alphabetical, in one query."""
+    out: Dict[str, List[str]] = defaultdict(list)
+    if ids:
+        for candidate_id, tag in (
+            db.query(CandidateTag.candidate_id, CandidateTag.tag)
+            .filter(CandidateTag.candidate_id.in_(ids))
+            .order_by(CandidateTag.tag)
+        ):
+            out[candidate_id].append(tag)
+    return out
 
 
 @router.post("/", response_model=CandidateResponse)
@@ -385,6 +423,7 @@ def export_candidates_csv(
     keyword: Optional[str] = None,
     status: Optional[CandidateStatus] = None,
     job_id: Optional[int] = None,
+    tag: Optional[List[str]] = Query(None, description="Only candidates carrying every one of these tags."),
     db: Session = Depends(get_db),
 ) -> Response:
     """The candidate list as CSV, with the same filters as the list (ATS Phase C).
@@ -399,6 +438,7 @@ def export_candidates_csv(
             keyword=keyword,
             status=status.value if status else None,
             job_id=job_id,
+            tags=tag,
         )
         .order_by(Candidate.last_name, Candidate.first_name, Candidate.id)
         .limit(EXPORT_ROW_LIMIT)
@@ -406,15 +446,9 @@ def export_candidates_csv(
     )
     ids = [c.id for c in candidates]
 
-    tags_by: dict[str, list[str]] = defaultdict(list)
+    tags_by = tags_by_candidate(db, ids)
     applications_by: dict[str, list[str]] = defaultdict(list)
     if ids:
-        for candidate_id, tag in (
-            db.query(CandidateTag.candidate_id, CandidateTag.tag)
-            .filter(CandidateTag.candidate_id.in_(ids))
-            .order_by(CandidateTag.tag)
-        ):
-            tags_by[candidate_id].append(tag)
         rows = (
             db.query(
                 JobApplication.candidate_id,
@@ -751,6 +785,7 @@ def search_candidates(
     position: Optional[str] = None,
     skills: Optional[str] = None,
     job_id: Optional[int] = None,
+    tag: Optional[List[str]] = Query(None, description="Only candidates carrying every one of these tags."),
     sort_by: str = "created_at",
     sort_order: str = "desc",
     page: int = Query(1, ge=1),
@@ -769,6 +804,8 @@ def search_candidates(
         raise HTTPException(status_code=400, detail="Sorting by fit needs a job_id.")
     job = db.get(Job, job_id) if job_id is not None else None
     user = request_user(http_request)
+    # Before the try below, which would turn a bad tag's 422 into a 500.
+    tag = normalized_tags(tag)
     try:
         logging.info(f"Searching candidates with filters: keyword={keyword}, status={status}, position={position}, skills={skills}")
         
@@ -780,6 +817,7 @@ def search_candidates(
             position=position,
             skills=skills,
             job_id=job_id,
+            tags=tag,
         )
 
         # Apply sorting
@@ -820,6 +858,8 @@ def search_candidates(
             if job is not None:
                 fits = applicant_fit.score_applicants(db, job, [c.id for c in candidates], user)
         
+        tags_by = tags_by_candidate(db, [c.id for c in candidates])
+
         # Convert candidates to response model format
         results = []
         for candidate in candidates:
@@ -878,6 +918,7 @@ def search_candidates(
                 candidate_dict.setdefault('created_at', datetime.utcnow())
                 candidate_dict.setdefault('updated_at', datetime.utcnow())
                 candidate_dict['fit'] = fits.get(candidate.id)
+                candidate_dict['tags'] = tags_by.get(candidate.id, [])
                 
                 # Add to results
                 results.append(CandidateResponse(**candidate_dict))

@@ -23,6 +23,7 @@
       "skills": [],
       "source": "null",
       "status": "str",
+      "tags": [],
       "updated_at": "str",
       "work_experience": []
     },
@@ -85,6 +86,7 @@
       ],
       "source": "str",
       "status": "str",
+      "tags": [],
       "updated_at": "str",
       "work_experience": []
     },
@@ -134,6 +136,7 @@
           ],
           "source": "str",
           "status": "str",
+          "tags": [],
           "updated_at": "str",
           "work_experience": []
         }
