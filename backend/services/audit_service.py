@@ -136,6 +136,8 @@ NOT_AUDITED: list[tuple[re.Pattern[str], str]] = [
         (r"PUT /api/jobs/\{job_id\}/stages/\{stage_key\}/default-interviewers", "a job's stage configuration"),
         (r"POST /api/job-drafts/description", "job description drafting"),
         (r"[A-Z]+ /api/email-templates(/\{key\})?", "email templates"),
+        (r"[A-Z]+ /api/feedback-templates(/\{template_id\})?", "feedback templates"),
+        (r"GET /api/interviews/pending-count", "a count of the caller's own pending feedback"),
         (r"GET /api/tags", "tag counts"),
         (r"GET /api/candidates/skills_breakdown", "skill counts"),
         (r"GET /api/reports/.+", "aggregate counts"),

@@ -20,22 +20,28 @@ from ..models.feedback import (
     AssignRequest,
     DefaultInterviewersRequest,
     DefaultInterviewersResponse,
+    FeedbackDraftIn,
+    FeedbackDraftOut,
     FeedbackIn,
     FeedbackOut,
+    FeedbackTemplateIn,
+    FeedbackTemplateList,
+    FeedbackTemplateOut,
     InterviewListItem,
     InterviewListResponse,
     InterviewOut,
+    PendingCount,
     StageDefaults,
     TeamMemberBrief,
 )
-from ..models.models import Candidate, Interview, Job, JobApplication, User
+from ..models.models import Candidate, FeedbackTemplate, Interview, Job, JobApplication, User
 from ..models.team import MessageOut
 from ..services import feedback_service as fs
 from ..services import pipeline_service as ps
 from ..services.access_service import can_see_score, request_user
 from ..utils.auth import ROLE_INTERVIEWER, request_identity
 from ..utils.database import get_db
-from ..utils.permissions import FEEDBACK_SUBMIT, JOBS_WRITE, PIPELINE_MOVE, require
+from ..utils.permissions import FEEDBACK_SUBMIT, JOBS_WRITE, PIPELINE_MOVE, TEMPLATES_MANAGE, require
 
 router = APIRouter()
 
@@ -63,8 +69,10 @@ def _interview_or_404(db: Session, interview_id: int) -> Interview:
 
 def _interview_out(db: Session, interview: Interview, viewer: Optional[User]) -> InterviewOut:
     row = interview.application_stage
-    feedback = interview.feedback
+    feedback = interview.submitted_feedback
+    draft = interview.draft_feedback
     visible = fs.can_view_feedback(db, viewer, interview)
+    is_author = viewer is not None and interview.interviewer_id == viewer.id
     return InterviewOut(
         id=interview.id,
         application_id=row.application_id,
@@ -86,6 +94,17 @@ def _interview_out(db: Session, interview: Interview, viewer: Optional[User]) ->
             else None
         ),
         feedback_hidden=feedback is not None and not visible,
+        # Drafts are the author's alone: nobody else learns one exists.
+        draft=(
+            FeedbackDraftOut(
+                rating=draft.rating,
+                recommendation=draft.recommendation,
+                notes=draft.notes,
+                updated_at=draft.updated_at,
+            )
+            if draft is not None and is_author
+            else None
+        ),
     )
 
 
@@ -192,6 +211,31 @@ def submit_feedback(
     return _interview_out(db, interview, actor)
 
 
+@router.put("/interviews/{interview_id}/feedback", response_model=InterviewOut)
+def save_feedback_draft(
+    interview_id: int,
+    payload: FeedbackDraftIn,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require(FEEDBACK_SUBMIT)),
+) -> InterviewOut:
+    """Save the author's draft (Track 2 Phase 4). Seen by nobody else; the
+    form autosaves through this and submits with POST."""
+    interview = _interview_or_404(db, interview_id)
+    try:
+        fs.save_draft(db, interview, actor, payload.rating, payload.recommendation, payload.notes)
+    except fs.FeedbackError as exc:
+        _refuse(db, exc)
+    db.commit()
+    return _interview_out(db, interview, actor)
+
+
+@router.get("/interviews/pending-count", response_model=PendingCount)
+def my_pending_count(request: Request, db: Session = Depends(get_db)) -> PendingCount:
+    """How many feedback forms the signed-in person owes (the nav badge)."""
+    _, user = request_identity(request, db)
+    return PendingCount(count=fs.pending_count(db, user.id) if user is not None else 0)
+
+
 @router.get("/interviews", response_model=InterviewListResponse)
 def list_interviews(
     request: Request,
@@ -249,3 +293,68 @@ def set_default_interviewers(
         _refuse(db, exc)
     db.commit()
     return _defaults(db, job)
+
+
+# --- feedback templates (Track 2 Phase 4) -------------------------------------
+
+
+def _template_or_404(db: Session, template_id: int) -> FeedbackTemplate:
+    template = db.get(FeedbackTemplate, template_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return template
+
+
+@router.get("/feedback-templates", response_model=FeedbackTemplateList)
+def list_feedback_templates(
+    job_id: Optional[int] = Query(None, description="That job's templates first, then the global ones."),
+    db: Session = Depends(get_db),
+) -> FeedbackTemplateList:
+    return FeedbackTemplateList(
+        items=[FeedbackTemplateOut.model_validate(t) for t in fs.list_templates(db, job_id)]
+    )
+
+
+@router.post(
+    "/feedback-templates", response_model=FeedbackTemplateOut, status_code=status.HTTP_201_CREATED
+)
+def create_feedback_template(
+    payload: FeedbackTemplateIn,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require(TEMPLATES_MANAGE)),
+) -> FeedbackTemplateOut:
+    try:
+        template = fs.create_template(db, actor, payload.name, payload.body, payload.job_id)
+    except fs.FeedbackError as exc:
+        _refuse(db, exc)
+    db.commit()
+    return FeedbackTemplateOut.model_validate(template)
+
+
+@router.put("/feedback-templates/{template_id}", response_model=FeedbackTemplateOut)
+def update_feedback_template(
+    template_id: int,
+    payload: FeedbackTemplateIn,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require(TEMPLATES_MANAGE)),
+) -> FeedbackTemplateOut:
+    template = _template_or_404(db, template_id)
+    try:
+        fs.update_template(db, template, payload.name, payload.body)
+    except fs.FeedbackError as exc:
+        _refuse(db, exc)
+    db.commit()
+    return FeedbackTemplateOut.model_validate(template)
+
+
+@router.delete("/feedback-templates/{template_id}", response_model=MessageOut)
+def delete_feedback_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require(TEMPLATES_MANAGE)),
+) -> MessageOut:
+    template = _template_or_404(db, template_id)
+    name = template.name
+    db.delete(template)
+    db.commit()
+    return MessageOut(message=f"Deleted the template {name}.")

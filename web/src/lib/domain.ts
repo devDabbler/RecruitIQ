@@ -48,6 +48,8 @@ export type ApplicationSource = Schemas["ApplicationSource"];
 export type Profile = Schemas["ProfileResponse"];
 export type InterviewEntry = Schemas["InterviewOut"];
 export type InterviewListItem = Schemas["InterviewListItem"];
+export type FeedbackDraft = Schemas["FeedbackDraftOut"];
+export type FeedbackTemplate = Schemas["FeedbackTemplateOut"];
 export type StageDefaults = Schemas["StageDefaults"];
 export type InterviewScope = "mine" | "pending" | "all";
 

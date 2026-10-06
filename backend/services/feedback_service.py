@@ -11,13 +11,16 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Iterable, Optional
 
+from sqlalchemy import and_, func, null
 from sqlalchemy.orm import Session
 
 from backend.models.models import (
     ApplicationStage,
     Candidate,
     Feedback,
+    FeedbackTemplate,
     Interview,
+    Job,
     PipelineStage,
     StageDefaultInterviewer,
     User,
@@ -31,6 +34,11 @@ MANUAL = "manual"
 DEFAULT = "default"
 
 RECOMMENDATIONS = ("strong_hire", "hire", "no_hire", "strong_no_hire")
+
+# Track 2 Phase 4. A draft is visible only to its author, does not unlock
+# score visibility, and leaves the interview pending.
+DRAFT = "draft"
+SUBMITTED = "submitted"
 
 FEEDBACK_USED_FOR = [
     "Shown to the hiring team on the candidate's page, next to the stage it was given for.",
@@ -94,7 +102,8 @@ def assign(db: Session, row: ApplicationStage, user: Optional[User], source: str
 
 
 def unassign(db: Session, interview: Interview) -> None:
-    if interview.feedback is not None:
+    """A draft goes with the interview; submitted feedback stays."""
+    if interview.submitted_feedback is not None:
         raise FeedbackError("Feedback has been submitted for this interview, so it stays on the record.")
     db.delete(interview)
     db.flush()
@@ -130,6 +139,43 @@ def set_default_interviewers(db: Session, stage: PipelineStage, user_ids: Iterab
     return users
 
 
+def _writable_by(interview: Interview, user: User, verb: str) -> None:
+    if interview.interviewer_id != user.id:
+        raise FeedbackError(f"Only the assigned interviewer can {verb} this feedback.", 403)
+    if interview.submitted_feedback is not None:
+        raise FeedbackError("Feedback for this interview has already been submitted.")
+    if interview.application_stage.status not in _STARTED:
+        raise FeedbackError("This stage has not started yet, so there is nothing to give feedback on.")
+
+
+def save_draft(
+    db: Session,
+    interview: Interview,
+    user: User,
+    rating: Optional[int],
+    recommendation: Optional[str],
+    notes: Optional[str],
+) -> Feedback:
+    """Create or overwrite the author's draft. Any field may be empty."""
+    _writable_by(interview, user, "edit")
+    if recommendation is not None and recommendation not in RECOMMENDATIONS:
+        raise FeedbackError("Choose one of the four recommendations.", 422)
+    if rating is not None and not 1 <= int(rating) <= 5:
+        raise FeedbackError("A rating is from 1 to 5.", 422)
+    feedback = interview.feedback
+    if feedback is None:
+        # null(), not None: the column has a server default, and the ORM leaves
+        # a None out of the INSERT, which would stamp the draft as submitted.
+        feedback = Feedback(status=DRAFT, submitted_at=null())
+        interview.feedback = feedback
+    feedback.rating = int(rating) if rating is not None else None
+    feedback.recommendation = recommendation
+    feedback.notes = notes or None
+    feedback.updated_at = datetime.utcnow()
+    db.flush()
+    return feedback
+
+
 def submit_feedback(
     db: Session,
     interview: Interview,
@@ -138,30 +184,30 @@ def submit_feedback(
     recommendation: str,
     notes: Optional[str],
 ) -> Feedback:
-    if interview.interviewer_id != user.id:
-        raise FeedbackError("Only the assigned interviewer can submit this feedback.", 403)
-    if interview.feedback is not None:
-        raise FeedbackError("Feedback for this interview has already been submitted.")
-    if interview.application_stage.status not in _STARTED:
-        raise FeedbackError("This stage has not started yet, so there is nothing to give feedback on.")
+    """Final. Turns the author's draft, if any, into the submitted record."""
+    _writable_by(interview, user, "submit")
     if recommendation not in RECOMMENDATIONS:
         raise FeedbackError("Choose one of the four recommendations.", 422)
     if not 1 <= int(rating) <= 5:
         raise FeedbackError("A rating is from 1 to 5.", 422)
-    feedback = Feedback(
-        rating=int(rating),
-        recommendation=recommendation,
-        notes=(notes or "").strip() or None,
-        submitted_at=datetime.utcnow(),
-    )
-    interview.feedback = feedback
+    now = datetime.utcnow()
+    feedback = interview.feedback
+    if feedback is None:
+        feedback = Feedback()
+        interview.feedback = feedback
+    feedback.status = SUBMITTED
+    feedback.rating = int(rating)
+    feedback.recommendation = recommendation
+    feedback.notes = (notes or "").strip() or None
+    feedback.submitted_at = now
+    feedback.updated_at = now
     db.flush()
     return feedback
 
 
 def interview_state(interview: Interview) -> str:
-    """upcoming, waiting (for feedback), submitted, or skipped."""
-    if interview.feedback is not None:
+    """upcoming, waiting (for feedback), submitted, or skipped. A draft is still waiting."""
+    if interview.submitted_feedback is not None:
         return "submitted"
     status = interview.application_stage.status
     if status in _STARTED:
@@ -171,17 +217,66 @@ def interview_state(interview: Interview) -> str:
     return "upcoming"
 
 
-def pending_feedback(db: Session, interviewer_id: Optional[str] = None) -> list[Interview]:
-    """Interviews whose stage has started and that have no feedback yet, oldest first."""
+def _pending_query(db: Session, interviewer_id: Optional[str]):
     query = (
         db.query(Interview)
         .join(ApplicationStage, Interview.application_stage_id == ApplicationStage.id)
-        .outerjoin(Feedback, Feedback.interview_id == Interview.id)
+        .outerjoin(Feedback, and_(Feedback.interview_id == Interview.id, Feedback.status == SUBMITTED))
         .filter(Feedback.id.is_(None), ApplicationStage.status.in_(_STARTED))
     )
     if interviewer_id is not None:
         query = query.filter(Interview.interviewer_id == interviewer_id)
-    return query.order_by(ApplicationStage.started_at, Interview.id).all()
+    return query
+
+
+def pending_feedback(db: Session, interviewer_id: Optional[str] = None) -> list[Interview]:
+    """Interviews whose stage has started and that have no submitted feedback
+    yet (a draft still counts as pending), oldest first."""
+    return _pending_query(db, interviewer_id).order_by(ApplicationStage.started_at, Interview.id).all()
+
+
+def pending_count(db: Session, interviewer_id: str) -> int:
+    """How many feedback forms this person owes: the nav badge."""
+    return _pending_query(db, interviewer_id).with_entities(func.count(Interview.id)).scalar() or 0
+
+
+# --- templates ---------------------------------------------------------------
+
+
+def list_templates(db: Session, job_id: Optional[int] = None) -> list[FeedbackTemplate]:
+    """With `job_id`: that job's templates, then the global ones. Without:
+    every template (pages that span jobs filter by job themselves)."""
+    query = db.query(FeedbackTemplate)
+    if job_id is not None:
+        query = query.filter((FeedbackTemplate.job_id == job_id) | FeedbackTemplate.job_id.is_(None))
+    # Job-specific first, then global; alphabetical inside each.
+    return query.order_by(FeedbackTemplate.job_id.is_(None), FeedbackTemplate.name, FeedbackTemplate.id).all()
+
+
+def create_template(db: Session, user: User, name: str, body: str, job_id: Optional[int]) -> FeedbackTemplate:
+    if job_id is not None and db.get(Job, job_id) is None:
+        raise FeedbackError("Job not found.", 404)
+    template = FeedbackTemplate(
+        name=name.strip(), body=body.strip(), job_id=job_id, created_by=user.id, updated_at=datetime.utcnow()
+    )
+    _require_text(template)
+    db.add(template)
+    db.flush()
+    return template
+
+
+def update_template(db: Session, template: FeedbackTemplate, name: str, body: str) -> FeedbackTemplate:
+    template.name = name.strip()
+    template.body = body.strip()
+    _require_text(template)
+    template.updated_at = datetime.utcnow()
+    db.flush()
+    return template
+
+
+def _require_text(template: FeedbackTemplate) -> None:
+    if not template.name or not template.body:
+        raise FeedbackError("A template needs a name and some text.", 422)
 
 
 def can_view_feedback(db: Session, viewer: Optional[User], interview: Interview) -> bool:

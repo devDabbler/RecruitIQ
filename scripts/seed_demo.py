@@ -42,6 +42,7 @@ from backend.models.models import (
     CandidateSkill,
     CandidateTag,
     Feedback,
+    FeedbackTemplate,
     Interview,
     Job,
     JobApplication,
@@ -204,6 +205,52 @@ FEEDBACK_NOTES = {
         "Not enough depth in the core skills for this level.",
     ],
 }
+# Track 2 Phase 4: starting text for interviewers' notes. `job` None = global.
+SEED_FEEDBACK_TEMPLATES = [
+    {
+        "name": "General interview",
+        "job": None,
+        "body": (
+            "Strengths:\n- \n\n"
+            "Concerns:\n- \n\n"
+            "Evidence (what they said or did):\n- \n\n"
+            "Open questions for the next round:\n- "
+        ),
+    },
+    {
+        "name": "Hiring manager review",
+        "job": None,
+        "body": (
+            "Fit for the role as scoped:\n\n"
+            "Level (under, at, or above what we need):\n\n"
+            "Motivation and timing:\n\n"
+            "Recommendation and why:"
+        ),
+    },
+    {
+        "name": "Technical interview",
+        "job": None,
+        "body": (
+            "Problem worked:\n\n"
+            "Approach and reasoning:\n\n"
+            "Code quality and testing:\n\n"
+            "Communication while solving:\n\n"
+            "Signals for level:"
+        ),
+    },
+    {
+        "name": "ML system design",
+        "job": "Machine Learning Engineer",
+        "body": (
+            "Problem framing (objective, metric, baseline):\n\n"
+            "Data and features:\n\n"
+            "Model choice and trade-offs:\n\n"
+            "Serving, monitoring, and retraining:\n\n"
+            "Where they went deeper than expected:"
+        ),
+    },
+]
+
 NEW_JOBS = [
     {
         "title": "Machine Learning Engineer",
@@ -892,6 +939,7 @@ def _spread_stage_timeline(db, application: JobApplication, now: datetime) -> bo
             feedback = interview.feedback
             if feedback is not None and feedback.submitted_at == flat_at:
                 feedback.submitted_at = completed or started or feedback.submitted_at
+                feedback.updated_at = feedback.submitted_at
     application.applied_at = applied_at
     return True
 
@@ -949,6 +997,7 @@ def _reanchor_stage_timeline(db, application: JobApplication, now: datetime) -> 
             feedback = interview.feedback
             if feedback is not None and feedback.submitted_at in (old_completed, old_started):
                 feedback.submitted_at = completed if feedback.submitted_at == old_completed else started
+                feedback.updated_at = feedback.submitted_at
     application.applied_at = applied_at
     return True
 
@@ -1152,7 +1201,9 @@ def seed_interviews(db, team: dict[str, list[User]], jobs: list[Job]) -> None:
         if row.status in ("passed", "failed"):
             passed = row.status == "passed"
             notes = FEEDBACK_NOTES[row.status]
+            submitted_at = row.completed_at or row.started_at or datetime.utcnow()
             interview.feedback = Feedback(
+                status="submitted",
                 rating=(4 + stable_index(f"rating-{row.id}", 2)) if passed else 2,
                 recommendation=(
                     ("strong_hire" if stable_index(f"rec-{row.id}", 3) == 0 else "hire")
@@ -1160,9 +1211,30 @@ def seed_interviews(db, team: dict[str, list[User]], jobs: list[Job]) -> None:
                     else "no_hire"
                 ),
                 notes=notes[stable_index(f"note-{row.id}", len(notes))],
-                submitted_at=row.completed_at or row.started_at or datetime.utcnow(),
+                submitted_at=submitted_at,
+                updated_at=submitted_at,
             )
     db.commit()
+
+
+def seed_feedback_templates(db) -> int:
+    """Track 2 Phase 4: global templates plus one for a seeded job, keyed on
+    (name, job). Additive: never changes a template someone has edited."""
+    added = 0
+    for spec in SEED_FEEDBACK_TEMPLATES:
+        job_id = None
+        if spec["job"] is not None:
+            job = db.query(Job).filter(Job.title == spec["job"]).order_by(Job.id).first()
+            if job is None:
+                continue
+            job_id = job.id
+        same_job = FeedbackTemplate.job_id.is_(None) if job_id is None else FeedbackTemplate.job_id == job_id
+        exists = db.query(FeedbackTemplate).filter(FeedbackTemplate.name == spec["name"], same_job).first()
+        if exists is None:
+            db.add(FeedbackTemplate(name=spec["name"], body=spec["body"], job_id=job_id))
+            added += 1
+    db.commit()
+    return added
 
 
 def embed(db, candidates: list[Candidate], jobs: list[Job], force: bool = False) -> None:
@@ -1249,6 +1321,14 @@ def main() -> int:
             "(Track 2 Phase 3) where missing. Never changes a number someone has set"
         ),
     )
+    parser.add_argument(
+        "--feedback-templates-only",
+        action="store_true",
+        help=(
+            "only add the demo feedback templates (Track 2 Phase 4). Additive: "
+            "never changes or removes a template"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
@@ -1258,6 +1338,10 @@ def main() -> int:
         if args.hygiene_only:
             print(f"  departments added: {seed_departments(db)}")
             print(f"  jobs given requisition numbers: {seed_requisitions(db)}")
+            return 0
+
+        if args.feedback_templates_only:
+            print(f"  feedback templates added: {seed_feedback_templates(db)}")
             return 0
 
         if args.requirements_only:
@@ -1301,6 +1385,7 @@ def main() -> int:
         seed_pipeline(db, candidates, jobs)
         seed_interviews(db, seed_team(db), jobs)
         seed_notes_and_tags(db, candidates)
+        seed_feedback_templates(db)
 
         if args.no_embeddings:
             print("  embeddings skipped (--no-embeddings)")

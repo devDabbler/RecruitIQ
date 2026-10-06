@@ -116,7 +116,7 @@ def remove(
     has_feedback = (
         db.query(Feedback.id)
         .join(Interview, Feedback.interview_id == Interview.id)
-        .filter(Interview.interviewer_id == user.id)
+        .filter(Interview.interviewer_id == user.id, Feedback.status == "submitted")
         .first()
     )
     if has_feedback is not None:

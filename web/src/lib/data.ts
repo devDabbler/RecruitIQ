@@ -23,6 +23,7 @@ import type {
   Department,
   EmailLogEntry,
   EmailTemplates,
+  FeedbackTemplate,
   InterviewEntry,
   InterviewListItem,
   InterviewScope,
@@ -255,6 +256,23 @@ export async function getApplicationInterviews(applicationId: number): Promise<I
       token: await getToken(),
     })) ?? []
   );
+}
+
+/** Feedback templates (Track 2 Phase 4). With a job: its own first, then global. */
+export async function listFeedbackTemplates(jobId?: number): Promise<FeedbackTemplate[]> {
+  const result = await apiFetch<{ items: FeedbackTemplate[] }>("/api/feedback-templates", {
+    token: await getToken(),
+    query: { job_id: jobId },
+  });
+  return result.items;
+}
+
+/** How many feedback forms the signed-in person owes: the nav badge. */
+export async function getPendingFeedbackCount(): Promise<number> {
+  const token = await getToken();
+  if (!token) return 0;
+  const result = await apiFetchOptional<{ count: number }>("/api/interviews/pending-count", { token });
+  return result?.count ?? 0;
 }
 
 export async function getDefaultInterviewers(jobId: number): Promise<StageDefaults[] | null> {

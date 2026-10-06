@@ -318,7 +318,8 @@ def pending_feedback(
         .join(Candidate, Candidate.id == JobApplication.candidate_id)
         .join(Job, Job.id == JobApplication.job_id)
         .join(interviewer, interviewer.id == Interview.interviewer_id)
-        .outerjoin(Feedback, Feedback.interview_id == Interview.id)
+        # A draft is still pending (Track 2 Phase 4).
+        .outerjoin(Feedback, and_(Feedback.interview_id == Interview.id, Feedback.status == "submitted"))
         .filter(Feedback.id.is_(None), ApplicationStage.status.in_(REACHED))
     )
     if viewer is not None and viewer.role == ROLE_INTERVIEWER:

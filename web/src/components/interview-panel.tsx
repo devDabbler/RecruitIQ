@@ -1,6 +1,6 @@
 import { AssignInterviewer } from "@/components/assign-interviewer";
 import { FeedbackForm } from "@/components/feedback-form";
-import type { ApplicationDetail, InterviewEntry, TeamMember } from "@/lib/domain";
+import type { ApplicationDetail, FeedbackTemplate, InterviewEntry, TeamMember } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
 import { INTERVIEW_STATE_LABELS, RECOMMENDATION_LABELS, memberName } from "@/lib/interviews";
 
@@ -17,12 +17,15 @@ export function InterviewPanel({
   team,
   viewerId,
   canAssign,
+  templates = [],
 }: {
   application: ApplicationDetail;
   interviews: InterviewEntry[];
   team: TeamMember[];
   viewerId: string | null;
   canAssign: boolean;
+  /** Feedback templates for this job, its own first (Track 2 Phase 4). */
+  templates?: FeedbackTemplate[];
 }) {
   const rounds = application.stages
     .filter((s) => s.kind === "round" && s.enabled && s.status !== "skipped")
@@ -63,7 +66,12 @@ export function InterviewPanel({
                   Feedback submitted. You will see it after you submit your own.
                 </p>
               ) : interview.interviewer_id === viewerId && interview.state === "waiting" ? (
-                <FeedbackForm interviewId={interview.id} stageName={interview.stage_name} />
+                <FeedbackForm
+                  interviewId={interview.id}
+                  stageName={interview.stage_name}
+                  draft={interview.draft ?? null}
+                  templates={templates}
+                />
               ) : null}
             </li>
           ))}

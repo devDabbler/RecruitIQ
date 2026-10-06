@@ -371,6 +371,25 @@ def test_an_interviewer_sees_only_their_own_pending_feedback(db_session, timelin
     assert rs.pending_feedback(db_session, _scope(timeline), NOW, viewer=timeline["ian"]) == []
 
 
+def test_a_draft_is_still_pending_feedback(db_session, timeline):
+    """Track 2 Phase 4: a saved draft has not been given yet."""
+    feedback = (
+        db_session.query(Feedback)
+        .join(Interview, Feedback.interview_id == Interview.id)
+        .join(ApplicationStage, Interview.application_stage_id == ApplicationStage.id)
+        .join(JobApplication, ApplicationStage.application_id == JobApplication.id)
+        .filter(JobApplication.job_id == timeline["job_id"])
+        .one()
+    )
+    feedback.status = "draft"
+    db_session.commit()
+    try:
+        assert len(rs.pending_feedback(db_session, _scope(timeline), NOW)) == 2
+    finally:
+        feedback.status = "submitted"
+        db_session.commit()
+
+
 def test_source_mix(db_session, timeline):
     # D's blank source groups as "unknown", labelled "Not recorded". Ties sort by name.
     assert rs.source_mix(db_session, _scope(timeline)) == [

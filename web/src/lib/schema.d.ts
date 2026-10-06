@@ -925,6 +925,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/feedback-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Feedback Templates */
+        get: operations["list_feedback_templates_api_feedback_templates_get"];
+        put?: never;
+        /** Create Feedback Template */
+        post: operations["create_feedback_template_api_feedback_templates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/feedback-templates/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Feedback Template */
+        put: operations["update_feedback_template_api_feedback_templates__template_id__put"];
+        post?: never;
+        /** Delete Feedback Template */
+        delete: operations["delete_feedback_template_api_feedback_templates__template_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/intelligence/benchmark_salary": {
         parameters: {
             query?: never;
@@ -1105,6 +1141,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/interviews/pending-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Pending Count
+         * @description How many feedback forms the signed-in person owes (the nav badge).
+         */
+        get: operations["my_pending_count_api_interviews_pending_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/interviews/{interview_id}": {
         parameters: {
             query?: never;
@@ -1130,7 +1186,12 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        put?: never;
+        /**
+         * Save Feedback Draft
+         * @description Save the author's draft (Track 2 Phase 4). Seen by nobody else; the
+         *     form autosaves through this and submits with POST.
+         */
+        put: operations["save_feedback_draft_api_interviews__interview_id__feedback_put"];
         /** Submit Feedback */
         post: operations["submit_feedback_api_interviews__interview_id__feedback_post"];
         delete?: never;
@@ -3260,6 +3321,35 @@ export interface components {
              */
             years_range_penalty: number;
         };
+        /**
+         * FeedbackDraftIn
+         * @description A work in progress: every field optional, validated only on submit.
+         */
+        FeedbackDraftIn: {
+            /**
+             * Notes
+             * @default
+             */
+            notes: string;
+            /** Rating */
+            rating?: number | null;
+            /** Recommendation */
+            recommendation?: ("strong_hire" | "hire" | "no_hire" | "strong_no_hire") | null;
+        };
+        /** FeedbackDraftOut */
+        FeedbackDraftOut: {
+            /** Notes */
+            notes?: string | null;
+            /** Rating */
+            rating?: number | null;
+            /** Recommendation */
+            recommendation?: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
         /** FeedbackIn */
         FeedbackIn: {
             /**
@@ -3295,6 +3385,36 @@ export interface components {
             never_used_for: string[];
             /** Used For */
             used_for: string[];
+        };
+        /** FeedbackTemplateIn */
+        FeedbackTemplateIn: {
+            /** Body */
+            body: string;
+            /** Job Id */
+            job_id?: number | null;
+            /** Name */
+            name: string;
+        };
+        /** FeedbackTemplateList */
+        FeedbackTemplateList: {
+            /** Items */
+            items: components["schemas"]["FeedbackTemplateOut"][];
+        };
+        /** FeedbackTemplateOut */
+        FeedbackTemplateOut: {
+            /** Body */
+            body: string;
+            /** Id */
+            id: number;
+            /** Job Id */
+            job_id?: number | null;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /** FinalPenalty */
         FinalPenalty: {
@@ -3333,6 +3453,7 @@ export interface components {
             candidate_id: string;
             /** Candidate Name */
             candidate_name: string;
+            draft?: components["schemas"]["FeedbackDraftOut"] | null;
             feedback?: components["schemas"]["FeedbackOut"] | null;
             /**
              * Feedback Hidden
@@ -3374,6 +3495,7 @@ export interface components {
             application_id: number;
             /** Assignment Source */
             assignment_source: string;
+            draft?: components["schemas"]["FeedbackDraftOut"] | null;
             feedback?: components["schemas"]["FeedbackOut"] | null;
             /**
              * Feedback Hidden
@@ -3841,6 +3963,11 @@ export interface components {
             current_password: string;
             /** New Password */
             new_password: string;
+        };
+        /** PendingCount */
+        PendingCount: {
+            /** Count */
+            count: number;
         };
         /** PendingFeedbackRow */
         PendingFeedbackRow: {
@@ -6591,6 +6718,137 @@ export interface operations {
             };
         };
     };
+    list_feedback_templates_api_feedback_templates_get: {
+        parameters: {
+            query?: {
+                /** @description That job's templates first, then the global ones. */
+                job_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackTemplateList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_feedback_template_api_feedback_templates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackTemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_feedback_template_api_feedback_templates__template_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackTemplateIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackTemplateOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_feedback_template_api_feedback_templates__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     post_salary_benchmark_api_intelligence_benchmark_salary_post: {
         parameters: {
             query?: never;
@@ -6907,6 +7165,26 @@ export interface operations {
             };
         };
     };
+    my_pending_count_api_interviews_pending_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingCount"];
+                };
+            };
+        };
+    };
     unassign_interviewer_api_interviews__interview_id__delete: {
         parameters: {
             query?: never;
@@ -6925,6 +7203,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_feedback_draft_api_interviews__interview_id__feedback_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interview_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackDraftIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InterviewOut"];
                 };
             };
             /** @description Validation Error */

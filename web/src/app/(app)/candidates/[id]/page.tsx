@@ -26,12 +26,14 @@ import {
   getCandidateTags,
   getEmailLog,
   getEmailTemplates,
+  listFeedbackTemplates,
   getStatusLink,
   listJobs,
   listTeam,
   matchJobsForCandidate,
 } from "@/lib/data";
 import { fullName, initials } from "@/lib/domain";
+import { templatesForJob } from "@/lib/feedback";
 import { formatDate } from "@/lib/format";
 import { dataExportHref } from "@/lib/intake";
 import { can, DATA_EXPORT } from "@/lib/permissions";
@@ -83,7 +85,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
   // Interviews and outreach (ATS Phase E: status link, templates, email
   // history) are optional context per application: a failure in any of them
   // must not take down the profile, so each falls back to empty.
-  const [interviewPairs, templates, statusLinks, emailLogs] = await Promise.all([
+  const [interviewPairs, templates, statusLinks, emailLogs, feedbackTemplates] = await Promise.all([
     Promise.all(
       details.map(async (detail) => [detail.id, await getApplicationInterviews(detail.id)] as const),
     ),
@@ -94,6 +96,8 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
       details.map((d) => (writable ? getStatusLink(d.id).catch(() => null) : Promise.resolve(null))),
     ),
     Promise.all(details.map((d) => getEmailLog(d.id).catch(() => []))),
+    // Track 2 Phase 4: starting text for a signed-in interviewer's form.
+    details.length && user ? listFeedbackTemplates().catch(() => []) : Promise.resolve([]),
   ]);
   const interviews = new Map(interviewPairs);
 
@@ -249,6 +253,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
                   team={team}
                   viewerId={user?.id ?? null}
                   canAssign={writable}
+                  templates={templatesForJob(feedbackTemplates, detail.job_id)}
                 />
                 {user?.role !== "interviewer" ? (
                   <ApplicationOutreach

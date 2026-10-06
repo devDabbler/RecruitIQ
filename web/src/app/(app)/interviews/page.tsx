@@ -119,7 +119,7 @@ export default async function InterviewsPage({ searchParams }: PageProps<"/inter
                       </span>
                       {yours && item.state === "waiting" ? (
                         <Link href={href} className="text-xs font-medium text-indigo-700 hover:underline">
-                          Give feedback
+                          {item.draft ? "Finish your draft" : "Give feedback"}
                         </Link>
                       ) : null}
                     </span>

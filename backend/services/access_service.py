@@ -54,7 +54,11 @@ def can_see_score(db: Session, user: Optional[User], candidate_id: str) -> bool:
         .join(Interview, Feedback.interview_id == Interview.id)
         .join(ApplicationStage, Interview.application_stage_id == ApplicationStage.id)
         .join(JobApplication, ApplicationStage.application_id == JobApplication.id)
-        .filter(Interview.interviewer_id == user.id, JobApplication.candidate_id == candidate_id)
+        .filter(
+            Interview.interviewer_id == user.id,
+            JobApplication.candidate_id == candidate_id,
+            Feedback.status == "submitted",  # a draft does not unlock the score
+        )
         .first()
     )
     return submitted is not None
@@ -72,7 +76,11 @@ def score_visible_ids(db: Session, user: Optional[User], candidate_ids) -> Optio
         .join(ApplicationStage, ApplicationStage.application_id == JobApplication.id)
         .join(Interview, Interview.application_stage_id == ApplicationStage.id)
         .join(Feedback, Feedback.interview_id == Interview.id)
-        .filter(Interview.interviewer_id == user.id, JobApplication.candidate_id.in_(ids))
+        .filter(
+            Interview.interviewer_id == user.id,
+            JobApplication.candidate_id.in_(ids),
+            Feedback.status == "submitted",
+        )
         .distinct()
         .all()
     )
@@ -106,6 +114,8 @@ INTERVIEWER_PATHS: list[tuple[re.Pattern[str], Optional[str]]] = [
         (r"/auth/(me|login|demo)", None),
         (r"/api/team/me(/password)?", None),
         (r"/api/interviews", None),  # the handler limits interviewers to scope=mine
+        (r"/api/interviews/pending-count", None),  # the caller's own count
+        (r"/api/feedback-templates", None),  # starting text for the form; writes need templates.manage
         (r"/api/interviews/\d+/feedback", None),  # the handler checks the assignee
         (r"/api/jobs", None),
         (r"/api/jobs/\d+", None),

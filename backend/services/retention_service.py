@@ -51,7 +51,7 @@ ACTIVITY_COLUMNS: dict[str, tuple[str, ...]] = {
     "job_applications": ("applied_at", "updated_at"),
     "application_stages": ("started_at", "completed_at"),
     "interviews": ("created_at",),
-    "feedback": ("submitted_at",),
+    "feedback": ("submitted_at", "updated_at"),
     "email_log": ("created_at",),
     "notes": ("created_at",),
     "candidate_tags": ("created_at",),
