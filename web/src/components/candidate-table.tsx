@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowRight, ArrowUp, Loader2, X } from "lucide-react";
+import { ArrowDown, ArrowRight, ArrowUp, Loader2, Tag, X } from "lucide-react";
 
 import { FitChip } from "@/components/fit-chip";
 import { StageBadge } from "@/components/stage-badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -17,9 +18,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { type BulkTransitionResult, type Candidate, fullName, initials } from "@/lib/domain";
+import {
+  type BulkTagResult,
+  type BulkTransitionResult,
+  type Candidate,
+  fullName,
+  initials,
+} from "@/lib/domain";
 import type { FitSort } from "@/lib/fit";
-import { type ActiveApplication, bulkSummary, describeError } from "@/lib/intake";
+import {
+  type ActiveApplication,
+  TAG_GUIDANCE,
+  bulkSummary,
+  bulkTagSummary,
+  describeError,
+  normalizeTag,
+  selectionLabel,
+} from "@/lib/intake";
 
 /** Present when the list is filtered to one job: who can be moved, and where they are. */
 export interface BulkContext {
@@ -40,39 +55,53 @@ interface Outcome {
 }
 
 /**
- * The candidates table. With a job filter it gains checkboxes and a bar to
- * advance or reject the selection; every candidate who could not be moved is
- * listed by name with the reason, because the server moves the rest anyway.
+ * The candidates table. A writer gets checkboxes and a bar to tag the
+ * selection (Track 2 Phase 5); with a job filter the bar can also advance or
+ * reject it. Every candidate the server could not tag or move is listed by
+ * name with the reason, because the server handles the rest anyway.
  */
 export function CandidateTable({
   candidates,
   bulk,
   fit = null,
+  taggable = false,
 }: {
   candidates: Candidate[];
   bulk: BulkContext | null;
   fit?: FitColumn | null;
+  /** Show checkboxes and the Tag action. Writers only; the API refuses the rest. */
+  taggable?: boolean;
 }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Candidate ids. Advance and Reject send the matching application ids.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmReject, setConfirmReject] = useState(false);
+  const [tagging, setTagging] = useState(false);
+  const [tagDraft, setTagDraft] = useState("");
   const [note, setNote] = useState("");
-  const [busy, setBusy] = useState<"advance" | "reject" | null>(null);
+  const [busy, setBusy] = useState<"advance" | "reject" | "tag" | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const selecting = taggable || bulk !== null;
   const selectable = useMemo(
     () =>
-      bulk
-        ? candidates.flatMap((c) =>
-            bulk.applications[c.id] ? [bulk.applications[c.id].applicationId] : [],
-          )
-        : [],
-    [bulk, candidates],
+      taggable
+        ? candidates.map((c) => c.id)
+        : bulk
+          ? candidates.filter((c) => bulk.applications[c.id]).map((c) => c.id)
+          : [],
+    [bulk, candidates, taggable],
   );
   const allSelected = selectable.length > 0 && selectable.every((id) => selected.has(id));
+  const movable = bulk
+    ? [...selected].flatMap((id) =>
+        bulk.applications[id] ? [bulk.applications[id].applicationId] : [],
+      )
+    : [];
+  const tagPreview = tagDraft.trim() ? normalizeTag(tagDraft) : "";
 
-  function toggle(id: number) {
+  function toggle(id: string) {
     setSelected((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
@@ -81,8 +110,44 @@ export function CandidateTable({
     });
   }
 
+  async function runTag() {
+    if (busy || selected.size === 0 || !tagPreview) return;
+    setBusy("tag");
+    setError(null);
+    setOutcome(null);
+    try {
+      const response = await fetch("/api/candidates/bulk/tag", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_ids: [...selected], tag: tagDraft }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        (BulkTagResult & { detail?: unknown }) | null;
+      if (!response.ok || !payload?.results) {
+        throw new Error(describeError(payload?.detail, response.status));
+      }
+      setOutcome({
+        summary: bulkTagSummary(payload.tag, payload.succeeded, payload.failed),
+        failures: payload.results
+          .filter((r) => !r.ok)
+          .map((r) => ({
+            name: r.candidate_name ?? "A candidate",
+            detail: r.detail ?? "Not tagged.",
+          })),
+      });
+      setSelected(new Set());
+      setTagging(false);
+      setTagDraft("");
+      router.refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function run(action: "advance" | "reject") {
-    if (busy || selected.size === 0) return;
+    if (busy || movable.length === 0) return;
     setBusy(action);
     setError(null);
     setOutcome(null);
@@ -91,7 +156,7 @@ export function CandidateTable({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          application_ids: [...selected],
+          application_ids: movable,
           note: action === "reject" ? note.trim() || null : null,
         }),
       });
@@ -122,46 +187,108 @@ export function CandidateTable({
 
   return (
     <div className="space-y-3">
-      {bulk ? (
+      {selecting ? (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm">
           <span className="text-slate-600">
-            {selected.size === 0
-              ? `Select candidates in ${bulk.jobTitle} to move them together.`
-              : `${selected.size} selected in ${bulk.jobTitle}`}
+            {selectionLabel(selected.size, movable.length, bulk?.jobTitle ?? null)}
           </span>
-          <span className="ml-auto flex gap-2">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => run("advance")}
-              disabled={selected.size === 0 || busy !== null}
-            >
-              {busy === "advance" ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
-              ) : (
-                <ArrowRight className="mr-2 h-4 w-4" aria-hidden />
-              )}
-              Advance
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setConfirmReject(true)}
-              disabled={selected.size === 0 || busy !== null}
-            >
-              <X className="mr-2 h-4 w-4" aria-hidden />
-              Reject
-            </Button>
+          <span className="ml-auto flex flex-wrap gap-2">
+            {taggable ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setTagging(true);
+                  setConfirmReject(false);
+                }}
+                disabled={selected.size === 0 || busy !== null}
+              >
+                <Tag className="mr-2 h-4 w-4" aria-hidden />
+                Tag
+              </Button>
+            ) : null}
+            {bulk ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => run("advance")}
+                  disabled={movable.length === 0 || busy !== null}
+                >
+                  {busy === "advance" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <ArrowRight className="mr-2 h-4 w-4" aria-hidden />
+                  )}
+                  Advance
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setConfirmReject(true);
+                    setTagging(false);
+                  }}
+                  disabled={movable.length === 0 || busy !== null}
+                >
+                  <X className="mr-2 h-4 w-4" aria-hidden />
+                  Reject
+                </Button>
+              </>
+            ) : null}
           </span>
-          {confirmReject ? (
+          {tagging ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                runTag();
+              }}
+              className="w-full space-y-1 rounded-md border border-indigo-200 bg-indigo-50 p-3"
+            >
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={tagDraft}
+                  onChange={(e) => setTagDraft(e.target.value)}
+                  placeholder="Tag to add"
+                  aria-label="Tag to add to the selected candidates"
+                  maxLength={80}
+                  autoFocus
+                  className="h-8 max-w-xs bg-white text-sm"
+                />
+                <Button type="submit" size="sm" disabled={!tagPreview || busy !== null}>
+                  {busy === "tag" ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : null}
+                  Tag {selected.size} {selected.size === 1 ? "candidate" : "candidates"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() => setTagging(false)}
+                >
+                  Cancel
+                </Button>
+              </div>
+              {tagDraft.trim() && tagPreview !== tagDraft.trim() ? (
+                <p className="text-xs text-slate-600">
+                  {tagPreview ? `Saved as ${tagPreview}` : "Use at least one letter or number."}
+                </p>
+              ) : null}
+              <p className="text-xs text-slate-500">{TAG_GUIDANCE}</p>
+            </form>
+          ) : null}
+          {bulk && confirmReject ? (
             <div
               role="alertdialog"
               aria-label="Reject the selected candidates?"
               className="w-full space-y-2 rounded-md border border-rose-200 bg-rose-50 p-3"
             >
               <p className="font-medium text-rose-900">
-                Reject {selected.size} {selected.size === 1 ? "candidate" : "candidates"} in{" "}
+                Reject {movable.length} {movable.length === 1 ? "candidate" : "candidates"} in{" "}
                 {bulk.jobTitle}? Each application ends at its current stage.
               </p>
               <textarea
@@ -220,14 +347,16 @@ export function CandidateTable({
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
-              {bulk ? (
+              {selecting ? (
                 <TableHead className="w-10">
                   <input
                     type="checkbox"
                     checked={allSelected}
                     disabled={selectable.length === 0}
                     onChange={() => setSelected(allSelected ? new Set() : new Set(selectable))}
-                    aria-label="Select everyone who can be moved"
+                    aria-label={
+                      taggable ? "Select everyone on this page" : "Select everyone who can be moved"
+                    }
                   />
                 </TableHead>
               ) : null}
@@ -255,6 +384,7 @@ export function CandidateTable({
               <TableHead className="hidden md:table-cell">Current role</TableHead>
               <TableHead className="hidden lg:table-cell">Location</TableHead>
               <TableHead className="hidden xl:table-cell">Skills</TableHead>
+              <TableHead className="hidden lg:table-cell">Tags</TableHead>
               <TableHead className="text-right">Stage</TableHead>
             </TableRow>
           </TableHeader>
@@ -263,13 +393,13 @@ export function CandidateTable({
               const application = bulk?.applications[candidate.id];
               return (
                 <TableRow key={candidate.id}>
-                  {bulk ? (
+                  {selecting ? (
                     <TableCell>
                       <input
                         type="checkbox"
-                        checked={application ? selected.has(application.applicationId) : false}
-                        disabled={!application}
-                        onChange={() => application && toggle(application.applicationId)}
+                        checked={selected.has(candidate.id)}
+                        disabled={!taggable && !application}
+                        onChange={() => toggle(candidate.id)}
                         aria-label={`Select ${fullName(candidate)}`}
                       />
                     </TableCell>
@@ -309,6 +439,9 @@ export function CandidateTable({
                   <TableCell className="hidden xl:table-cell">
                     <SkillChips skills={candidate.skills} />
                   </TableCell>
+                  <TableCell className="hidden lg:table-cell">
+                    <TagChips tags={candidate.tags} />
+                  </TableCell>
                   <TableCell className="text-right">
                     {bulk ? (
                       <span className="text-xs text-slate-600">
@@ -339,6 +472,27 @@ function SkillChips({ skills }: { skills: string[] | null | undefined }) {
       ))}
       {skills.length > 3 ? (
         <span className="px-1 py-0.5 text-xs text-slate-400">+{skills.length - 3}</span>
+      ) : null}
+    </span>
+  );
+}
+
+function TagChips({ tags }: { tags: string[] | undefined }) {
+  if (!tags?.length) return <span className="text-xs text-slate-400">None</span>;
+  return (
+    <span className="flex flex-wrap gap-1">
+      {tags.slice(0, 3).map((tag) => (
+        <span
+          key={tag}
+          className="rounded-full border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-700"
+        >
+          {tag}
+        </span>
+      ))}
+      {tags.length > 3 ? (
+        <span className="px-1 py-0.5 text-xs text-slate-400" title={tags.slice(3).join(", ")}>
+          +{tags.length - 3}
+        </span>
       ) : null}
     </span>
   );

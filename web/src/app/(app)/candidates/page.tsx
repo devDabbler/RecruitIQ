@@ -7,7 +7,7 @@ import { type BulkContext, CandidateTable, type FitColumn } from "@/components/c
 import { EmptyState, ErrorState, PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { ApiError } from "@/lib/api";
-import { getJobPipeline, listCandidates, listJobs } from "@/lib/data";
+import { getJobPipeline, listCandidates, listJobs, listTags } from "@/lib/data";
 import type { CandidateSearch } from "@/lib/domain";
 import { fitQuery, fitSortFrom } from "@/lib/fit";
 import { applicationsByCandidate, exportHref } from "@/lib/intake";
@@ -22,12 +22,18 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
   const keyword = first(params.q);
   const status = first(params.status);
   const jobId = first(params.job);
+  // Track 2 Phase 5: repeated `?tag=` params, all of which must match.
+  const tags = all(params.tag);
   // A hand-edited `?page=abc` should land on page 1, not send NaN to the API.
   const page = Math.max(1, Number(first(params.page)) || 1);
   // Track 2 Phase 2: a job's applicants are ranked by fit, best first.
   const fitSort = jobId ? fitSortFrom(first(params.sort)) : null;
 
-  const [writable, jobList] = await Promise.all([canWrite(), listJobs().catch(() => null)]);
+  const [writable, jobList, tagCounts] = await Promise.all([
+    canWrite(),
+    listJobs().catch(() => null),
+    listTags().catch(() => []),
+  ]);
   const jobs = (jobList?.results ?? [])
     .map(({ id, title, department, status: jobStatus }) => ({
       id,
@@ -38,7 +44,7 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
     .sort((a, b) => a.title.localeCompare(b.title));
   const exportLink = (
     <a
-      href={exportHref({ keyword, status, jobId })}
+      href={exportHref({ keyword, status, jobId, tags })}
       className={buttonVariants({ variant: "outline" })}
       download
     >
@@ -53,6 +59,7 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
       keyword,
       status,
       jobId,
+      tags,
       page,
       pageSize: PAGE_SIZE,
       ...(fitSort ? fitQuery(fitSort) : {}),
@@ -70,7 +77,8 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
   }
 
   // Bulk moves need applications, and an application belongs to one job, so
-  // the checkboxes only appear once the list is filtered to a job.
+  // Advance and Reject only appear once the list is filtered to a job. Tag
+  // works on any list (Track 2 Phase 5).
   let bulk: BulkContext | null = null;
   if (writable && jobId) {
     const pipeline = await getJobPipeline(jobId).catch(() => null);
@@ -106,15 +114,17 @@ export default async function CandidatesPage({ searchParams }: PageProps<"/candi
         initialStatus={status ?? ""}
         initialJob={jobId ?? ""}
         jobs={jobs}
+        tagCounts={tagCounts}
+        selectedTags={tags}
       />
 
       {data.results.length === 0 ? (
         <EmptyState
           title="No candidates match those filters"
-          detail="Clear the search box, pick a different stage, or choose All jobs."
+          detail="Clear the search box, pick a different stage or tag, or choose All jobs."
         />
       ) : (
-        <CandidateTable candidates={data.results} bulk={bulk} fit={fit} />
+        <CandidateTable candidates={data.results} bulk={bulk} fit={fit} taggable={writable} />
       )}
 
       {data.total > PAGE_SIZE ? (
@@ -147,8 +157,13 @@ function listHref(
 ): string {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    const single = first(value);
-    if (!(key in changes) && single) query.set(key, single);
+    if (key in changes) continue;
+    // Tags repeat; everything else is single-valued.
+    if (key === "tag") for (const tag of all(value)) query.append(key, tag);
+    else {
+      const single = first(value);
+      if (single) query.set(key, single);
+    }
   }
   for (const [key, value] of Object.entries(changes)) {
     if (value !== null) query.set(key, value);
@@ -160,6 +175,11 @@ function listHref(
 /** Next hands repeated query params through as arrays; take the first. */
 function first(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
+}
+
+/** Every value of a repeatable param, blanks dropped. */
+function all(value: string | string[] | undefined): string[] {
+  return (Array.isArray(value) ? value : value ? [value] : []).filter(Boolean);
 }
 
 function PageLink({

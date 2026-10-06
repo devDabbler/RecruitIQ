@@ -450,6 +450,127 @@ def test_reports_bundle(db_session, timeline):
     assert data["no_movement_total"] == 1
 
 
+def test_time_to_outcome(db_session, timeline):
+    """Track 2 Phase 5. C applied Sep 1, hired Oct 5; D applied Jun 1, rejected Sep 25."""
+    assert rs.time_to_outcome(db_session, _scope(timeline)) == {
+        "median_days_to_hire": pytest.approx(34.0),
+        "hires": 1,
+        "median_days_to_reject": pytest.approx(116.0),
+        "rejections": 1,
+    }
+    only_c = rs.time_to_outcome(db_session, _scope(timeline, candidate_ids={IDS["C"]}))
+    assert (only_c["hires"], only_c["rejections"], only_c["median_days_to_reject"]) == (1, 0, None)
+    nobody = rs.time_to_outcome(db_session, _scope(timeline, candidate_ids=set()))
+    assert nobody == {"median_days_to_hire": None, "hires": 0, "median_days_to_reject": None, "rejections": 0}
+
+
+OUTCOME_JOB_TITLE = "Outcome Timing Test Analyst"
+OUTCOME_IDS = {name: "00000000-0000-4000-8000-0000000e00%02d" % i for i, name in enumerate("HIJKLMNO", start=1)}
+
+# letter -> (application status, applied, {stage key: (status, started, completed)})
+# Hires after 10 and 20 days, rejections after 4 and 8 days (at different
+# rounds), then three that must not count: a declined offer, a withdrawal,
+# and a rejection stamped at the instant the application was created.
+OUTCOME_HISTORY = {
+    "H": ("hired", d(3, 1), {"offer_accepted": ("passed", d(3, 5), d(3, 11)), "hired": ("passed", d(3, 11), d(3, 11))}),
+    "I": ("hired", d(3, 1), {"offer_accepted": ("passed", d(3, 5), d(3, 21)), "hired": ("passed", d(3, 21), d(3, 21))}),
+    "J": ("rejected", d(3, 1), {"resume_submitted": ("failed", d(3, 1), d(3, 5))}),
+    "K": ("rejected", d(3, 1), {"hm_review": ("failed", d(3, 2), d(3, 9))}),
+    "L": ("declined", d(3, 1), {"offer": ("passed", d(3, 2), d(3, 31)), "offer_declined": ("passed", d(3, 31), d(3, 31))}),
+    "M": ("withdrawn", d(3, 1), {"hm_review": ("skipped", d(3, 2), d(3, 13)), "withdrawn": ("passed", d(3, 13), d(3, 13))}),
+    "N": ("rejected", d(3, 1), {"resume_submitted": ("failed", d(3, 1), d(3, 1))}),
+}
+
+
+@pytest.fixture(scope="module")
+def outcome_timeline(db_session, seed):
+    """A second job holding only the OUTCOME_HISTORY rows. Committed, like `timeline`."""
+    job = Job(
+        title=OUTCOME_JOB_TITLE,
+        department="Analytics",
+        job_overview="Exists to give time to outcome a fixed history.",
+        required_qualifications="SQL",
+        location="Remote",
+        location_type="remote",
+        job_type="full_time",
+        experience_level="mid",
+        status="open",
+        skills="SQL",
+        job_metadata={},
+        views=0,
+        applications=len(OUTCOME_HISTORY),
+    )
+    db_session.add(job)
+    db_session.flush()
+    stages = ps.ensure_job_stages(db_session, job.id)
+    for letter, (app_status, applied, history) in OUTCOME_HISTORY.items():
+        db_session.add(
+            Candidate(
+                id=OUTCOME_IDS[letter],
+                first_name="Outcome",
+                last_name=f"Person {letter}",
+                email=f"outcome-{letter.lower()}@{SEED_EMAIL_DOMAIN}",
+                status="active",
+                created_at=d(1, 1),
+                updated_at=d(1, 1),
+            )
+        )
+        db_session.flush()
+        application = JobApplication(
+            job_id=job.id,
+            candidate_id=OUTCOME_IDS[letter],
+            status=app_status,
+            applied_at=applied,
+            updated_at=applied,
+            source="referral",
+        )
+        db_session.add(application)
+        db_session.flush()
+        for stage in stages:
+            status, started, completed = history.get(stage.key, ("pending", None, None))
+            db_session.add(
+                ApplicationStage(
+                    application_id=application.id,
+                    stage_id=stage.id,
+                    status=status,
+                    started_at=started,
+                    completed_at=completed,
+                )
+            )
+    db_session.commit()
+    return {"job_id": job.id}
+
+
+def test_time_to_outcome_takes_the_midpoint_and_skips_declines_and_withdrawals(db_session, outcome_timeline):
+    scope = rs.Scope.of(job_id=outcome_timeline["job_id"])
+    assert rs.time_to_outcome(db_session, scope) == {
+        "median_days_to_hire": pytest.approx(15.0),
+        "hires": 2,
+        "median_days_to_reject": pytest.approx(6.0),
+        "rejections": 2,
+    }
+
+
+def test_time_to_outcome_by_job(db_session, timeline, outcome_timeline):
+    rows = {r["job_id"]: r for r in rs.time_to_outcome_by_job(db_session, rs.Scope.of())}
+    assert rows[timeline["job_id"]]["job_title"] == JOB_TITLE
+    assert rows[timeline["job_id"]]["median_days_to_hire"] == pytest.approx(34.0)
+    ours = rows[outcome_timeline["job_id"]]
+    assert (ours["job_title"], ours["hires"], ours["rejections"]) == (OUTCOME_JOB_TITLE, 2, 2)
+    assert ours["median_days_to_reject"] == pytest.approx(6.0)
+    # Narrowed to one job, only that job is listed.
+    one = rs.time_to_outcome_by_job(db_session, _scope(timeline))
+    assert [r["job_id"] for r in one] == [timeline["job_id"]]
+
+
+def test_time_to_outcome_is_in_both_bundles(db_session, timeline):
+    dashboard = rs.dashboard(db_session, _scope(timeline), NOW)
+    assert dashboard["time_to_outcome"]["median_days_to_hire"] == pytest.approx(34.0)
+    reports = rs.reports(db_session, _scope(timeline), NOW)
+    assert reports["time_to_outcome"]["rejections"] == 1
+    assert [r["job_id"] for r in reports["time_to_outcome_by_job"]] == [timeline["job_id"]]
+
+
 @pytest.fixture(scope="module")
 def interviewer_client(override_get_db, timeline):
     token = create_access_token(timeline["ivy"])
@@ -466,6 +587,8 @@ def test_summary_for_one_job(admin_client, timeline):
     assert hm["median_days"] == pytest.approx(10.0)
     assert len(body["quarters"]) == 2
     assert {s["source"] for s in body["source_mix"]} == {"referral", "linkedin", "unknown"}
+    assert body["time_to_outcome"]["median_days_to_hire"] == pytest.approx(34.0)
+    assert body["time_to_outcome_by_job"][0]["job_title"] == JOB_TITLE
 
 
 def test_summary_for_an_unknown_job_is_404(admin_client):

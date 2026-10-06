@@ -125,6 +125,8 @@ class CandidateResponse(BaseModel):
     resume_id: Optional[int] = None
     # Track 2 Phase 2: set only when the list is filtered to one job.
     fit: Optional[ApplicantFit] = None
+    # Track 2 Phase 5: filled on the list, alphabetical.
+    tags: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
     

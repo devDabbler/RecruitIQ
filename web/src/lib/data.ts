@@ -43,6 +43,7 @@ import type {
   SkillsBreakdown,
   StatusLink,
   StageDefaults,
+  TagCount,
   TeamMember,
   UploadPolicy,
 } from "./domain";
@@ -52,6 +53,8 @@ export interface CandidateQuery {
   keyword?: string;
   status?: string;
   jobId?: string;
+  /** Track 2 Phase 5: candidates carrying every one of these tags. */
+  tags?: string[];
   page?: number;
   pageSize?: number;
   /** Track 2 Phase 2: "fit" ranks a job's applicants; needs `jobId`. */
@@ -63,6 +66,7 @@ export async function listCandidates({
   keyword,
   status,
   jobId,
+  tags,
   page = 1,
   pageSize = 25,
   sortBy,
@@ -74,12 +78,18 @@ export async function listCandidates({
       keyword,
       status,
       job_id: jobId,
+      tag: tags,
       page,
       page_size: pageSize,
       sort_by: sortBy,
       sort_order: sortOrder,
     },
   });
+}
+
+/** Every tag in use with how many visible candidates carry it, most used first. */
+export async function listTags(): Promise<TagCount[]> {
+  return apiFetch<TagCount[]>("/api/tags", { token: await getToken() });
 }
 
 /** The API caps `page_size` at 100, and asking for more is a 422. */
@@ -271,7 +281,9 @@ export async function listFeedbackTemplates(jobId?: number): Promise<FeedbackTem
 export async function getPendingFeedbackCount(): Promise<number> {
   const token = await getToken();
   if (!token) return 0;
-  const result = await apiFetchOptional<{ count: number }>("/api/interviews/pending-count", { token });
+  const result = await apiFetchOptional<{ count: number }>("/api/interviews/pending-count", {
+    token,
+  });
   return result?.count ?? 0;
 }
 

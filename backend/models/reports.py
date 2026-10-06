@@ -24,6 +24,23 @@ class StageTiming(BaseModel):
     completed: int
 
 
+class OutcomeTiming(BaseModel):
+    """Track 2 Phase 5: median days from applying to hired, and to rejected.
+
+    A median is null when nobody has reached that outcome. Declined offers
+    and withdrawals are not rejections.
+    """
+    median_days_to_hire: Optional[float] = None
+    hires: int
+    median_days_to_reject: Optional[float] = None
+    rejections: int
+
+
+class JobOutcomeTiming(OutcomeTiming):
+    job_id: int
+    job_title: str
+
+
 class WaitingApplication(BaseModel):
     application_id: int
     candidate_id: str
@@ -93,6 +110,7 @@ class DashboardResponse(BaseModel):
     no_movement_total: int
     pending_feedback: List[PendingFeedbackRow]
     activity: List[ActivityEvent]
+    time_to_outcome: OutcomeTiming
 
 
 class ReportsResponse(BaseModel):
@@ -102,6 +120,8 @@ class ReportsResponse(BaseModel):
     total_applications: int
     funnel: List[FunnelRow]
     time_in_stage: List[StageTiming]
+    time_to_outcome: OutcomeTiming
+    time_to_outcome_by_job: List[JobOutcomeTiming]
     no_movement: List[WaitingApplication]
     no_movement_total: int
     source_mix: List[SourceRow]

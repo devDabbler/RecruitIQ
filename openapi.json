@@ -935,6 +935,102 @@
         "title": "BulkItemResult",
         "type": "object"
       },
+      "BulkTagItem": {
+        "properties": {
+          "candidate_id": {
+            "title": "Candidate Id",
+            "type": "string"
+          },
+          "candidate_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidate Name"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "ok"
+        ],
+        "title": "BulkTagItem",
+        "type": "object"
+      },
+      "BulkTagRequest": {
+        "description": "Track 2 Phase 5: one tag for many candidates.",
+        "properties": {
+          "candidate_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Candidate Ids",
+            "type": "array"
+          },
+          "tag": {
+            "maxLength": 80,
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_ids",
+          "tag"
+        ],
+        "title": "BulkTagRequest",
+        "type": "object"
+      },
+      "BulkTagResponse": {
+        "properties": {
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BulkTagItem"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "succeeded": {
+            "title": "Succeeded",
+            "type": "integer"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "succeeded",
+          "failed",
+          "results"
+        ],
+        "title": "BulkTagResponse",
+        "type": "object"
+      },
       "BulkTransitionRequest": {
         "properties": {
           "application_ids": {
@@ -1882,6 +1978,13 @@
             "default": "active",
             "title": "Status"
           },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
           "updated_at": {
             "format": "date-time",
             "title": "Updated At",
@@ -2282,6 +2385,9 @@
             "title": "Pending Feedback",
             "type": "array"
           },
+          "time_to_outcome": {
+            "$ref": "#/components/schemas/OutcomeTiming"
+          },
           "total_applications": {
             "title": "Total Applications",
             "type": "integer"
@@ -2295,7 +2401,8 @@
           "no_movement",
           "no_movement_total",
           "pending_feedback",
-          "activity"
+          "activity",
+          "time_to_outcome"
         ],
         "title": "DashboardResponse",
         "type": "object"
@@ -3950,6 +4057,56 @@
         "title": "JobMatchResult",
         "type": "object"
       },
+      "JobOutcomeTiming": {
+        "properties": {
+          "hires": {
+            "title": "Hires",
+            "type": "integer"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "integer"
+          },
+          "job_title": {
+            "title": "Job Title",
+            "type": "string"
+          },
+          "median_days_to_hire": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Days To Hire"
+          },
+          "median_days_to_reject": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Days To Reject"
+          },
+          "rejections": {
+            "title": "Rejections",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hires",
+          "rejections",
+          "job_id",
+          "job_title"
+        ],
+        "title": "JobOutcomeTiming",
+        "type": "object"
+      },
       "JobPipelineResponse": {
         "properties": {
           "columns": {
@@ -4664,6 +4821,47 @@
         "title": "NoteOut",
         "type": "object"
       },
+      "OutcomeTiming": {
+        "description": "Track 2 Phase 5: median days from applying to hired, and to rejected.\n\nA median is null when nobody has reached that outcome. Declined offers\nand withdrawals are not rejections.",
+        "properties": {
+          "hires": {
+            "title": "Hires",
+            "type": "integer"
+          },
+          "median_days_to_hire": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Days To Hire"
+          },
+          "median_days_to_reject": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Median Days To Reject"
+          },
+          "rejections": {
+            "title": "Rejections",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "hires",
+          "rejections"
+        ],
+        "title": "OutcomeTiming",
+        "type": "object"
+      },
       "PairTrace": {
         "properties": {
           "above_threshold": {
@@ -5239,6 +5437,16 @@
             "title": "Time In Stage",
             "type": "array"
           },
+          "time_to_outcome": {
+            "$ref": "#/components/schemas/OutcomeTiming"
+          },
+          "time_to_outcome_by_job": {
+            "items": {
+              "$ref": "#/components/schemas/JobOutcomeTiming"
+            },
+            "title": "Time To Outcome By Job",
+            "type": "array"
+          },
           "total_applications": {
             "title": "Total Applications",
             "type": "integer"
@@ -5249,6 +5457,8 @@
           "total_applications",
           "funnel",
           "time_in_stage",
+          "time_to_outcome",
+          "time_to_outcome_by_job",
           "no_movement",
           "no_movement_total",
           "source_mix",
@@ -8989,6 +9199,27 @@
             }
           },
           {
+            "description": "Only candidates carrying every one of these tags.",
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only candidates carrying every one of these tags.",
+              "title": "Tag"
+            }
+          },
+          {
             "in": "query",
             "name": "sort_by",
             "required": false,
@@ -9100,6 +9331,48 @@
         ]
       }
     },
+    "/api/candidates/bulk/tag": {
+      "post": {
+        "description": "Give many candidates one tag; each one succeeds or fails on its own.\n\nEvery candidate runs in its own savepoint, like the bulk pipeline moves,\nso one at the tag limit is reported by name instead of blocking the\nrest. A candidate who already has the tag counts as done. Works from any\ncandidate list, not only one filtered to a job.",
+        "operationId": "bulk_tag_api_candidates_bulk_tag_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkTagResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Tag",
+        "tags": [
+          "tags"
+        ]
+      }
+    },
     "/api/candidates/export.csv": {
       "get": {
         "description": "The candidate list as CSV, with the same filters as the list (ATS Phase C).\n\nDeliberately contains no match scores and no notes. Declared before\n`/{candidate_id}`, which would otherwise read \"export.csv\" as an id.",
@@ -9151,6 +9424,27 @@
                 }
               ],
               "title": "Job Id"
+            }
+          },
+          {
+            "description": "Only candidates carrying every one of these tags.",
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Only candidates carrying every one of these tags.",
+              "title": "Tag"
             }
           }
         ],

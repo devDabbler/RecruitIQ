@@ -28,6 +28,28 @@ export function formatDays(days: number | null | undefined): string {
   return `${rounded} ${rounded === 1 ? "day" : "days"}`;
 }
 
+/**
+ * A median time to hire or to reject (Track 2 Phase 5). Null means nobody
+ * has reached that outcome yet, which is different from "No completed stages".
+ */
+export function formatOutcomeDays(days: number | null | undefined): string {
+  if (days === null || days === undefined) return "None yet";
+  return formatDays(days);
+}
+
+/** The bare number for a dashboard tile labelled "Median days to ...". */
+export function outcomeDaysValue(days: number | null | undefined): string {
+  if (days === null || days === undefined) return "None yet";
+  if (days < 1) return "Under 1";
+  return String(days < 10 ? Math.round(days * 10) / 10 : Math.round(days));
+}
+
+/** "from 3 hires" under a median, so a median of one is read as one data point. */
+export function outcomeBasis(count: number, noun: "hire" | "rejection"): string {
+  if (count === 0) return `No ${noun}s yet`;
+  return `from ${count} ${count === 1 ? noun : `${noun}s`}`;
+}
+
 export function formatShare(share: number): string {
   return `${Math.round(share * 100)}%`;
 }

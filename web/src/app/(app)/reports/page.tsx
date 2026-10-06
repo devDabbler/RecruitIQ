@@ -18,7 +18,14 @@ import { ApiError } from "@/lib/api";
 import { getReport, listJobs } from "@/lib/data";
 import type { Report } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
-import { canViewReports, daysLabel, exportHref, formatDays } from "@/lib/reports";
+import {
+  canViewReports,
+  daysLabel,
+  exportHref,
+  formatDays,
+  formatOutcomeDays,
+  outcomeBasis,
+} from "@/lib/reports";
 import { sourceLabel } from "@/lib/sources";
 import { getUser } from "@/lib/session";
 
@@ -67,7 +74,10 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
       return (
         <>
           <PageHeader title="Reports" />
-          <EmptyState title="That job does not exist" detail="Pick another job, or show all jobs." />
+          <EmptyState
+            title="That job does not exist"
+            detail="Pick another job, or show all jobs."
+          />
         </>
       );
     }
@@ -155,7 +165,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{quarter.hires}</TableCell>
                     <TableCell className="text-right tabular-nums">{quarter.rejections}</TableCell>
-                    <TableCell className="text-right tabular-nums">{quarter.offers_declined}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {quarter.offers_declined}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -185,7 +197,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                   {report.time_in_stage.map((row) => (
                     <TableRow key={row.key}>
                       <TableCell>{row.name}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatDays(row.median_days)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatDays(row.median_days)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{row.completed}</TableCell>
                     </TableRow>
                   ))}
@@ -193,8 +207,68 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
               </Table>
             )}
             <p className="mt-3 text-xs text-slate-500">
-              Median days from entering a stage to leaving it, over applications that finished
-              the stage. Stages nobody has finished are left out.
+              Median days from entering a stage to leaving it, over applications that finished the
+              stage. Stages nobody has finished are left out.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Time to hire and to reject</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-4 grid grid-cols-2 gap-3">
+              <OutcomeFigure
+                label="Median time to hire"
+                days={report.time_to_outcome.median_days_to_hire}
+                basis={outcomeBasis(report.time_to_outcome.hires, "hire")}
+              />
+              <OutcomeFigure
+                label="Median time to reject"
+                days={report.time_to_outcome.median_days_to_reject}
+                basis={outcomeBasis(report.time_to_outcome.rejections, "rejection")}
+              />
+            </div>
+            {report.time_to_outcome_by_job.length === 0 ? (
+              <p className="text-sm text-slate-500">Nobody has been hired or rejected yet.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Job</TableHead>
+                    <TableHead className="text-right">To hire</TableHead>
+                    <TableHead className="text-right">To reject</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {report.time_to_outcome_by_job.map((row) => (
+                    <TableRow key={row.job_id}>
+                      <TableCell>
+                        <Link href={`/reports?job=${row.job_id}`} className="hover:underline">
+                          {row.job_title}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatOutcomeDays(row.median_days_to_hire)}
+                        <span className="block text-xs text-slate-400">
+                          {outcomeBasis(row.hires, "hire")}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatOutcomeDays(row.median_days_to_reject)}
+                        <span className="block text-xs text-slate-400">
+                          {outcomeBasis(row.rejections, "rejection")}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+            <p className="mt-3 text-xs text-slate-500">
+              Median days from the application to the Hired stage, and to a rejection at any stage.
+              Declined offers and withdrawals are not rejections, so they are left out.
             </p>
           </CardContent>
         </Card>
@@ -272,7 +346,9 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
         </CardHeader>
         <CardContent>
           {report.no_movement.length === 0 ? (
-            <p className="text-sm text-slate-500">Every active candidate moved in the last 7 days.</p>
+            <p className="text-sm text-slate-500">
+              Every active candidate moved in the last 7 days.
+            </p>
           ) : (
             <>
               <Table>
@@ -289,7 +365,10 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                   {report.no_movement.map((row) => (
                     <TableRow key={row.application_id}>
                       <TableCell>
-                        <Link href={`/candidates/${row.candidate_id}`} className="font-medium hover:underline">
+                        <Link
+                          href={`/candidates/${row.candidate_id}`}
+                          className="font-medium hover:underline"
+                        >
                           {row.candidate_name}
                         </Link>
                       </TableCell>
@@ -300,14 +379,17 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
                       </TableCell>
                       <TableCell>{row.stage_name}</TableCell>
                       <TableCell>{formatDate(row.since)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{daysLabel(row.days_waiting)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {daysLabel(row.days_waiting)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
               {report.no_movement_total > report.no_movement.length ? (
                 <p className="mt-3 text-xs text-slate-500">
-                  Showing the {report.no_movement.length} longest waits of {report.no_movement_total}.
+                  Showing the {report.no_movement.length} longest waits of{" "}
+                  {report.no_movement_total}.
                 </p>
               ) : null}
             </>
@@ -317,5 +399,23 @@ export default async function ReportsPage({ searchParams }: PageProps<"/reports"
 
       <p className="mt-6 text-xs text-slate-400">Queried {formatDate(report.generated_at)}.</p>
     </>
+  );
+}
+
+function OutcomeFigure({
+  label,
+  days,
+  basis,
+}: {
+  label: string;
+  days?: number | null;
+  basis: string;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="text-xl font-semibold tabular-nums">{formatOutcomeDays(days)}</p>
+      <p className="text-xs text-slate-400">{basis}</p>
+    </div>
   );
 }

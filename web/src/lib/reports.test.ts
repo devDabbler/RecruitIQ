@@ -7,7 +7,10 @@ import {
   daysLabel,
   exportHref,
   formatDays,
+  formatOutcomeDays,
   formatShare,
+  outcomeBasis,
+  outcomeDaysValue,
   funnelWidth,
 } from "./reports";
 
@@ -73,5 +76,25 @@ describe("canViewReports", () => {
     expect(canViewReports("hiring_team")).toBe(true);
     expect(canViewReports("interviewer")).toBe(false);
     expect(canViewReports(null)).toBe(false);
+  });
+});
+
+describe("time to outcome", () => {
+  it("says None yet when nobody has reached the outcome", () => {
+    expect(formatOutcomeDays(null)).toBe("None yet");
+    expect(formatOutcomeDays(34)).toBe("34 days");
+  });
+
+  it("gives the dashboard tile a bare number", () => {
+    expect(outcomeDaysValue(null)).toBe("None yet");
+    expect(outcomeDaysValue(0.4)).toBe("Under 1");
+    expect(outcomeDaysValue(7.46)).toBe("7.5");
+    expect(outcomeDaysValue(34.77)).toBe("35");
+  });
+
+  it("says how many outcomes a median is drawn from", () => {
+    expect(outcomeBasis(0, "hire")).toBe("No hires yet");
+    expect(outcomeBasis(1, "rejection")).toBe("from 1 rejection");
+    expect(outcomeBasis(4, "hire")).toBe("from 4 hires");
   });
 });

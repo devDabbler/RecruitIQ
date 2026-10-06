@@ -6,7 +6,7 @@ import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MAX_TAGS_PER_CANDIDATE, describeError, normalizeTag } from "@/lib/intake";
+import { MAX_TAGS_PER_CANDIDATE, TAG_GUIDANCE, describeError, normalizeTag } from "@/lib/intake";
 
 /**
  * Tag chips, with add and remove for writers.
@@ -111,6 +111,9 @@ export function CandidateTags({
         <p className="mt-1 text-xs text-slate-500">
           {preview ? `Saved as ${preview}` : "Use at least one letter or number."}
         </p>
+      ) : null}
+      {writable && tags.length < MAX_TAGS_PER_CANDIDATE ? (
+        <p className="mt-1 text-xs text-slate-400">{TAG_GUIDANCE}</p>
       ) : null}
       {error ? <p className="mt-1 text-xs font-medium text-rose-700">{error}</p> : null}
     </div>

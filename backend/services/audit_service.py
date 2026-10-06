@@ -81,6 +81,8 @@ AUDITED_ROUTES: list[AuditRule] = [
     _rule(r"GET /api/candidates/export\.csv", "candidate", action="export"),
     # Above the catch-all below: first match wins, and this one is an export.
     _rule(r"GET /api/candidates/\{candidate_id\}/export(\.txt)?", "candidate", "candidate_id", "export"),
+    # Track 2 Phase 5: one event per candidate tagged.
+    _rule(r"POST /api/candidates/bulk/tag", "candidate", action="update"),
     _rule(r"[A-Z]+ /api/candidates/\{candidate_id\}(/.+)?", "candidate", "candidate_id"),
     _rule(r"GET /api/jobs/(applications|saved)/\{candidate_id\}", "candidate", "candidate_id"),
     _rule(r"GET /api/tasks/candidate/\{candidate_id\}", "candidate", "candidate_id"),

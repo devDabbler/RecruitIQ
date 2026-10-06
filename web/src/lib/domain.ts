@@ -58,6 +58,12 @@ export type Note = Schemas["NoteOut"];
 export type CandidateTags = Schemas["CandidateTagsResponse"];
 export type BulkTransitionResult = Schemas["BulkTransitionResponse"];
 
+/** Track 2 Phase 5: tag counts for the filter, bulk tagging, time to outcome. */
+export type TagCount = Schemas["TagCount"];
+export type BulkTagResult = Schemas["BulkTagResponse"];
+export type OutcomeTiming = Schemas["OutcomeTiming"];
+export type JobOutcomeTiming = Schemas["JobOutcomeTiming"];
+
 /** ATS Phase E: candidate-facing status, email, drafts, and the stage editor. */
 export type PublicStatus = Schemas["PublicStatus"];
 export type PublicStage = Schemas["PublicStage"];

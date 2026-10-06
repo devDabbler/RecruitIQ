@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Briefcase, TrendingUp, Users } from "lucide-react";
+import { Briefcase, CircleCheck, CircleX, TrendingUp, Users } from "lucide-react";
 
 import { ActivityFeed } from "@/components/activity-feed";
 import { AttentionList } from "@/components/attention-list";
@@ -13,7 +13,7 @@ import { redirectInterviewer } from "@/lib/guards";
 import { getDashboard, getSkillsBreakdown, listCandidates, listJobs } from "@/lib/data";
 import { fullName } from "@/lib/domain";
 import type { Dashboard } from "@/lib/domain";
-import { canViewReports } from "@/lib/reports";
+import { canViewReports, outcomeBasis, outcomeDaysValue } from "@/lib/reports";
 import { getUser } from "@/lib/session";
 
 // The dashboard reads live counts; nothing here is safe to prerender.
@@ -24,11 +24,14 @@ function Stat({
   value,
   icon: Icon,
   tint,
+  hint,
 }: {
   label: string;
   value: string | number;
   icon: typeof Users;
   tint: string;
+  /** A small line under the label, e.g. how many hires a median is drawn from. */
+  hint?: string;
 }) {
   return (
     <Card>
@@ -39,6 +42,7 @@ function Stat({
         <span>
           <span className="block text-2xl font-semibold tabular-nums">{value}</span>
           <span className="block text-sm text-slate-500">{label}</span>
+          {hint ? <span className="block text-xs text-slate-400">{hint}</span> : null}
         </span>
       </CardContent>
     </Card>
@@ -99,7 +103,7 @@ export default async function DashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <Stat
           label="Candidates"
           value={candidates.total}
@@ -117,6 +121,20 @@ export default async function DashboardPage() {
           value={dashboard.interviewing_or_later}
           icon={TrendingUp}
           tint="bg-violet-50 text-violet-600"
+        />
+        <Stat
+          label="Median days to hire"
+          value={outcomeDaysValue(dashboard.time_to_outcome.median_days_to_hire)}
+          hint={outcomeBasis(dashboard.time_to_outcome.hires, "hire")}
+          icon={CircleCheck}
+          tint="bg-emerald-50 text-emerald-600"
+        />
+        <Stat
+          label="Median days to reject"
+          value={outcomeDaysValue(dashboard.time_to_outcome.median_days_to_reject)}
+          hint={outcomeBasis(dashboard.time_to_outcome.rejections, "rejection")}
+          icon={CircleX}
+          tint="bg-rose-50 text-rose-600"
         />
       </div>
 

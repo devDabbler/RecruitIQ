@@ -20,6 +20,10 @@ export async function GET(request: NextRequest) {
     const value = request.nextUrl.searchParams.get(key);
     if (value) query.set(key, value);
   }
+  // Track 2 Phase 5: every tag, since all of them must match.
+  for (const tag of request.nextUrl.searchParams.getAll("tag")) {
+    if (tag) query.append("tag", tag);
+  }
   const token = await getToken();
 
   let upstream: Response;

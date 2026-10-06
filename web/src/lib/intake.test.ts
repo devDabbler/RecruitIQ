@@ -4,7 +4,9 @@ import type { JobPipeline } from "./domain";
 import {
   MAX_BULK_FILES,
   applicationsByCandidate,
+  TAG_GUIDANCE,
   bulkSummary,
+  bulkTagSummary,
   candidateNameFromParse,
   dataExportHref,
   describeError,
@@ -12,6 +14,9 @@ import {
   normalizeTag,
   queueFiles,
   rankedUploads,
+  selectionLabel,
+  tagFilterChips,
+  toggleTag,
   updateItem,
   uploadProgress,
 } from "./intake";
@@ -60,6 +65,54 @@ describe("exportHref", () => {
     expect(exportHref({ keyword: "sql", jobId: "7" })).toBe(
       "/api/candidates/export?keyword=sql&job_id=7",
     );
+  });
+
+  it("repeats every tag, since the export must match them all", () => {
+    expect(exportHref({ tags: ["relocation-ok", "strong-sql"] })).toBe(
+      "/api/candidates/export?tag=relocation-ok&tag=strong-sql",
+    );
+  });
+});
+
+describe("tag filter", () => {
+  const counts = Array.from({ length: 15 }, (_, i) => ({ tag: `t${i}`, count: 15 - i }));
+
+  it("shows the most used tags in the API's order", () => {
+    expect(tagFilterChips(counts, [], 3)).toEqual([
+      { tag: "t0", count: 15 },
+      { tag: "t1", count: 14 },
+      { tag: "t2", count: 13 },
+    ]);
+  });
+
+  it("keeps a selected tag visible even when it is not in the top", () => {
+    const chips = tagFilterChips(counts, ["t1", "t14", "gone"], 3);
+    expect(chips.map((c) => c.tag)).toEqual(["t0", "t1", "t2", "t14", "gone"]);
+    expect(chips.at(-1)).toEqual({ tag: "gone", count: null });
+  });
+
+  it("toggles one tag on and off", () => {
+    expect(toggleTag([], "a")).toEqual(["a"]);
+    expect(toggleTag(["a", "b"], "a")).toEqual(["b"]);
+  });
+});
+
+describe("bulk tag wording", () => {
+  it("counts in plain English", () => {
+    expect(bulkTagSummary("relocation-ok", 1, 0)).toBe("Tagged 1 candidate relocation-ok.");
+    expect(bulkTagSummary("x", 3, 1)).toBe("Tagged 3 candidates x. 1 could not be tagged.");
+  });
+
+  it("says who can be moved when some of the selection is not in the job", () => {
+    expect(selectionLabel(0, 0, null)).toBe("Select candidates to tag them together.");
+    expect(selectionLabel(2, 0, null)).toBe("2 selected");
+    expect(selectionLabel(2, 2, "Analyst")).toBe("2 selected in Analyst");
+    expect(selectionLabel(3, 1, "Analyst")).toBe("3 selected, 1 in progress in Analyst");
+  });
+
+  it("warns against tagging protected traits, without an em dash", () => {
+    expect(TAG_GUIDANCE).toMatch(/protected trait/);
+    expect(TAG_GUIDANCE).not.toMatch(/\u2014/);
   });
 });
 
