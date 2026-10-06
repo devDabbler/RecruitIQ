@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 
 import {
   EMPTY_JOB,
+  addSkills,
   applyDraft,
   canRequestDraft,
   copyJobValues,
   draftRequestFrom,
+  educationLabel,
   hasWrittenDescription,
   jobToFormValues,
   toJobPayload,
   validateJob,
+  yearsLabel,
   type JobFormValues,
 } from "./job-form";
 import type { Job } from "./domain";
@@ -207,5 +210,67 @@ describe("AI draft helpers", () => {
     expect(next.job_overview).toBe("O");
     expect(next.required_qualifications).toBe("Q");
     expect(next.title).toBe(filled.title);
+  });
+});
+
+describe("requirements (Track 2 Phase 1)", () => {
+  it("adds skills as chips, splitting commas and skipping duplicates and the other list", () => {
+    expect(addSkills(["Python"], " SQL, python ,  dbt  build ", ["dbt build"])).toEqual([
+      "Python",
+      "SQL",
+    ]);
+    const same = ["Python"];
+    expect(addSkills(same, "  ")).toBe(same);
+  });
+
+  it("sends requirements with blanks as null and no minimum education as null", () => {
+    const payload = toJobPayload(
+      values({ must_have_skills: ["Python"], nice_to_have_skills: [], min_years: "3", max_years: "" }),
+    );
+    expect(payload.requirements).toEqual({
+      must_have_skills: ["Python"],
+      nice_to_have_skills: [],
+      min_years: 3,
+      max_years: null,
+      min_education: null,
+    });
+    expect(
+      (toJobPayload(values({ min_education: "master" })).requirements as { min_education: string })
+        .min_education,
+    ).toBe("master");
+  });
+
+  it("validates the years range and the list limits", () => {
+    expect(validateJob(values({ min_years: "8", max_years: "3" })).max_years).toMatch(/below the minimum/);
+    expect(validateJob(values({ min_years: "2.5" })).min_years).toBeTruthy();
+    expect(validateJob(values({ max_years: "-1" })).max_years).toBeTruthy();
+    const many = Array.from({ length: 21 }, (_, i) => `skill ${i}`);
+    expect(validateJob(values({ must_have_skills: many })).must_have_skills).toMatch(/At most 20/);
+    expect(validateJob(values({ nice_to_have_skills: ["x".repeat(61)] })).nice_to_have_skills).toBeTruthy();
+    expect(validateJob(values({ min_years: "2", max_years: "6" }))).toEqual({});
+  });
+
+  it("reads requirements back from a job, defaulting to none", () => {
+    const job = {
+      title: "T",
+      requirements: { must_have_skills: ["Go"], nice_to_have_skills: [], min_years: 4, max_years: null, min_education: "phd" },
+    } as unknown as Job;
+    const form = jobToFormValues(job);
+    expect(form.must_have_skills).toEqual(["Go"]);
+    expect(form.min_years).toBe("4");
+    expect(form.max_years).toBe("");
+    expect(form.min_education).toBe("phd");
+    expect(jobToFormValues({ title: "T" } as unknown as Job).min_education).toBe("none");
+  });
+
+  it("words the years range and education for the job page", () => {
+    expect(yearsLabel(3, null)).toBe("3+ years");
+    expect(yearsLabel(2, 5)).toBe("2 to 5 years");
+    expect(yearsLabel(null, 3)).toBe("Up to 3 years");
+    expect(yearsLabel(null, null)).toBeNull();
+    expect(educationLabel("master")).toBe("Master's degree or higher");
+    expect(educationLabel("phd")).toBe("PhD");
+    expect(educationLabel("none")).toBeNull();
+    expect(educationLabel(null)).toBeNull();
   });
 });

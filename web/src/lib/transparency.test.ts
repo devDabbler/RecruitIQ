@@ -20,6 +20,7 @@ function trace(overrides: Partial<PairTrace> = {}): PairTrace {
       coverage_bonus: false,
       no_data: false,
       raw_score: 66.7,
+      nice_to_have_bonus: 0,
       penalty_applied: false,
       penalty_factor: 1,
       job_category: "data_science",
@@ -46,6 +47,7 @@ function trace(overrides: Partial<PairTrace> = {}): PairTrace {
       years_diff: -1,
       years_match: 100,
       adjustment: 0,
+      years_range_penalty: 0,
       score: 79,
     },
     tier: {
@@ -109,5 +111,59 @@ describe("scoreLadder", () => {
       trace({ skills: { ...trace().skills, no_data: true, raw_score: 30, score: 30, exact: [], missing: [] } }),
     );
     expect(steps[0].detail).toMatch(/neutral 30/);
+  });
+
+  it("adds nice-to-have, years and requirement rungs when the job sets requirements", () => {
+    const steps = scoreLadder(
+      trace({
+        match_score: 70,
+        skills: { ...trace().skills, nice_to_have_bonus: 5 },
+        experience: { ...trace().experience, years_range_penalty: 20, score: 59 },
+        requirements: {
+          must_have: { skills: ["Python", "Rust"], present: ["Python"], missing: ["Rust"] },
+          nice_to_have: { skills: ["dbt", "Spark"], present: ["dbt"], missing: ["Spark"] },
+          years: {
+            min_years: 6,
+            max_years: null,
+            candidate_years: 4,
+            short_by: 2,
+            over_by: 0,
+            penalty: 20,
+            counts_as_missing: true,
+          },
+          education: {
+            min_education: "master",
+            candidate_education: null,
+            meets: null,
+            counts_as_missing: false,
+          },
+          cap: {
+            missing: ["must-have skill Rust", "at least 6 years of experience"],
+            missing_count: 2,
+            limit: 50,
+            applied: true,
+            score_before: 74.2,
+          },
+        },
+      }),
+    );
+    const byLabel = Object.fromEntries(steps.map((s) => [s.label, s]));
+    expect(byLabel["Nice-to-have skills"].value).toBeCloseTo(71.7);
+    expect(byLabel["Nice-to-have skills"].detail).toContain("1 of 2 (dbt)");
+    expect(byLabel["Seniority"].value).toBe(79);
+    expect(byLabel["Years of experience"].value).toBe(59);
+    expect(byLabel["Years of experience"].detail).toContain("About 4 years recorded against at least 6 years");
+    expect(byLabel["Requirements"].kind).toBe("penalty");
+    expect(byLabel["Requirements"].detail).toContain("Must-haves missing: Rust");
+    expect(byLabel["Requirements"].detail).toContain("capped at 50 (was 74.2)");
+    expect(byLabel["Requirements"].detail).toContain("master's degree was not checked");
+    expect(steps.at(-1)!.kind).toBe("final");
+  });
+
+  it("adds no requirement rungs for a job without requirements", () => {
+    const labels = scoreLadder(trace({ requirements: null })).map((s) => s.label);
+    expect(labels).not.toContain("Requirements");
+    expect(labels).not.toContain("Nice-to-have skills");
+    expect(labels).not.toContain("Years of experience");
   });
 });

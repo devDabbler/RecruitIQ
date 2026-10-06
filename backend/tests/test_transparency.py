@@ -161,16 +161,22 @@ def test_trace_intermediates_add_up(full_trace):
         ) * t["tier"]["multiplier"]
         assert t["weighted_score"] == pytest.approx(weighted)
         expected = weighted * (t["final_penalty_multiplier"] if t["final_penalty_applied"] else 1.0)
+        cap = (t["requirements"] or {}).get("cap") or {}
+        if cap.get("limit") is not None:
+            # Track 2 Phase 1: missing must-haves cap the result.
+            assert cap["score_before"] == pytest.approx(expected)
+            expected = min(expected, cap["limit"])
         assert t["match_score"] == pytest.approx(expected)
         assert t["above_threshold"] == (t["match_score"] >= body["threshold"])
 
         # The skill step accounts for every job skill exactly once.
         accounted = t["skills"]["exact"] + t["skills"]["partial"] + t["skills"]["missing"]
         assert sorted(accounted) == sorted(t["skills"]["job_skills"])
+        boosted = min(t["skills"]["raw_score"] + t["skills"]["nice_to_have_bonus"], 100.0)
         if t["skills"]["penalty_applied"]:
-            assert t["skills"]["score"] == pytest.approx(t["skills"]["raw_score"] * t["skills"]["penalty_factor"])
+            assert t["skills"]["score"] == pytest.approx(boosted * t["skills"]["penalty_factor"])
         else:
-            assert t["skills"]["score"] == pytest.approx(t["skills"]["raw_score"])
+            assert t["skills"]["score"] == pytest.approx(boosted)
 
 
 def _keys_in(value) -> set:

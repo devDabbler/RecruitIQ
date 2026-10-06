@@ -299,7 +299,7 @@ def test_policy_text_has_no_em_dashes(demo_client):
 def test_policy_publishes_matching_inputs_without_identity(demo_client):
     policy = demo_client.get("/api/transparency/upload-policy").json()
 
-    assert policy["matching_reads"] == ["current_position", "skills"]
+    assert policy["matching_reads"] == ["current_position", "skills", "experience dates", "education degree"]
     assert isinstance(policy["hosted_providers"], list)
 
 

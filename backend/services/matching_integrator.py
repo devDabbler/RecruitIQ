@@ -11,6 +11,21 @@ could drift.
 import logging
 from typing import List, Dict, Any, Optional
 
+from .job_requirements import (
+    EDUCATION_LABELS,
+    NICE_TO_HAVE_MAX_BONUS,
+    YEARS_OVER_PENALTY_PER_YEAR,
+    YEARS_SHORT_MAX_PENALTY,
+    YEARS_SHORT_PENALTY_PER_YEAR,
+    YEARS_OVER_MAX_PENALTY,
+    YEARS_SHORT_COUNTS_AS_MISSING,
+    CandidateProfile,
+    cap_for,
+    education_rank,
+    load_profiles,
+    parse_requirements,
+    profile_for,
+)
 from .matching_enhancer import MatchingEnhancer
 
 logger = logging.getLogger(__name__)
@@ -63,13 +78,59 @@ CROSS_DOMAIN_FINAL_PENALTY: Dict[str, Any] = {
 # a statement of intent.
 SCORED_CANDIDATE_FIELDS: List[Dict[str, str]] = [
     {"field": "current_position", "used_for": "role fit (title similarity and role category) and seniority"},
-    {"field": "skills", "used_for": "skill overlap against the job's listed skills"},
+    {"field": "skills", "used_for": "skill overlap against the job's listed skills, and must-have and nice-to-have checks"},
+    {
+        "field": "experience dates",
+        "used_for": "years of recorded experience, read only when the job sets a years range",
+    },
+    {
+        "field": "education degree",
+        "used_for": "highest degree level, read only when the job sets a minimum education",
+    },
 ]
 SCORED_JOB_FIELDS: List[Dict[str, str]] = [
     {"field": "title", "used_for": "role fit, role category, and seniority"},
     {"field": "skills", "used_for": "skill overlap"},
     {"field": "required_qualifications", "used_for": "seniority (years and level keywords only)"},
+    {
+        "field": "requirements",
+        "used_for": "must-have skills (caps), nice-to-have skills (bonus), years range and minimum education",
+    },
 ]
+
+
+def requirement_explanation(nice, must_have, years, education, cap) -> List[str]:
+    """Sentences appended to a match explanation when the job sets requirements."""
+    parts: List[str] = []
+    if must_have:
+        if must_have["missing"]:
+            parts.append(f"Missing must-have skills: {', '.join(must_have['missing'])}")
+        else:
+            parts.append(f"Has all {len(must_have['skills'])} must-have skills")
+    if nice:
+        matched = len(nice["exact"]) + len(nice["partial"])
+        parts.append(f"Has {matched} of {len(nice['skills'])} nice-to-have skills")
+    if years and years["candidate_years"] is not None:
+        if years["short_by"]:
+            parts.append(
+                f"About {years['candidate_years']:g} years of recorded experience against a minimum of {years['min_years']}"
+            )
+        elif years["over_by"]:
+            parts.append(
+                f"About {years['candidate_years']:g} years of recorded experience, above the range of up to {years['max_years']}"
+            )
+    if education and education["meets"] is False:
+        wanted = EDUCATION_LABELS[education["min_education"]]
+        if education["candidate_education"] == "none":
+            parts.append(f"No degree recorded, and the job asks for a {wanted}")
+        else:
+            have = EDUCATION_LABELS[education["candidate_education"]]
+            parts.append(f"Highest recorded degree is a {have}, below the {wanted} asked for")
+    if cap["applied"]:
+        count = cap["missing_count"]
+        what = "one requirement is" if count == 1 else f"{count} requirements are"
+        parts.append(f"Score capped at {cap['limit']:g} because {what} missing")
+    return parts
 UNSCORED_CANDIDATE_FIELDS: List[Dict[str, str]] = [
     {"field": "first_name", "reason": "a name carries gender and ethnicity signal and says nothing about fit"},
     {"field": "last_name", "reason": "same as first name"},
@@ -123,23 +184,38 @@ class MatchingIntegrator:
         """
         self.enhancer = MatchingEnhancer(embedding_model=embedding_model)
 
-    def score_pair(self, job, candidate) -> Dict[str, Any]:
+    def score_pair(self, job, candidate, profile: Optional[CandidateProfile] = None) -> Dict[str, Any]:
         """Score one candidate against one job and return the full trace.
 
         The trace carries every intermediate: the inputs each component read,
         the component scores, which weighting tier fired, and each penalty
         with its before/after. `match_score` is the number the ranking uses.
 
-        Only four things about the candidate are read: current position,
-        skills, and (for the explanation text) position_applied and name.
-        Name, contact details, location, notes, company, source and pipeline
-        status never reach a score. That is a property the tests assert, not
-        just a comment.
+        Only these things about the candidate are read: current position,
+        skills, and (for the explanation text) position_applied and name;
+        and, only when the job sets a years range or a minimum education,
+        the dates of their recorded experience and their degrees. Name,
+        contact details, location, notes, company, source and pipeline status
+        never reach a score. That is a property the tests assert, not just a
+        comment.
+
+        `profile` carries the years and degrees; ranking loops pass it in
+        bulk (`load_profiles`), and when it is missing it is looked up here.
+        A job with no requirements never reads it and scores exactly as it
+        did before requirements existed (test_score_baseline).
         """
         job_title = job.title or ""
         job_description = job.job_overview or ""
         job_requirements = job.required_qualifications or ""
         job_skills = _split_skills(job.skills)
+        requirements = parse_requirements(getattr(job, "requirements", None))
+        if requirements is not None:
+            # A must-have is a skill the job asks for, so it counts in the
+            # overlap too even when it was not also typed into `skills`.
+            listed = {s.lower().strip() for s in job_skills}
+            job_skills = job_skills + [s for s in requirements.must_have_skills if s.lower() not in listed]
+        if requirements is not None and requirements.needs_profile() and profile is None:
+            profile = profile_for(candidate)
 
         job_text = f"{job_title} {job_requirements}"
         job_level, job_years = self.enhancer.extract_experience_level(job_text)
@@ -151,10 +227,13 @@ class MatchingIntegrator:
         )
         candidate_position = candidate.current_position or ""
 
-        # 1. Skill overlap, then the cross-domain discount on it.
+        # 1. Skill overlap, plus any nice-to-have bonus, then the cross-domain
+        # discount on it.
         skills = self.enhancer.skill_match_details(job_skills, candidate_skills)
+        nice = self._nice_to_have(requirements, candidate_skills)
+        skill_before_penalty = min(skills["score"] + nice["bonus"], 100.0) if nice else skills["score"]
         penalty = self.enhancer.cross_domain_skill_penalty_details(
-            skills["score"], job_title, candidate_position
+            skill_before_penalty, job_title, candidate_position
         )
         skill_score = penalty["score"]
         if penalty["applied"]:
@@ -172,7 +251,10 @@ class MatchingIntegrator:
         experience = self.enhancer.experience_match_details(
             job_level, job_years, candidate_level, candidate_years
         )
+        years = self._years_rule(requirements, profile)
         experience_score = experience["score"]
+        if years and years["penalty"]:
+            experience_score = max(experience_score - years["penalty"], 0.0)
 
         logger.debug(
             f"[MatchIntegratorDebug] Candidate {candidate.id} - Position: '{candidate_position}' - "
@@ -201,9 +283,20 @@ class MatchingIntegrator:
                 f"candidate {candidate.id}, final score = {match_score:.1f}%"
             )
 
+        # 6. Requirements: missing must-haves cap the score. Flagged, never
+        # rejected; a person still decides.
+        must_have = self._must_have(requirements, candidate_skills)
+        education = self._education_rule(requirements, profile)
+        cap = self._requirement_cap(match_score, must_have, years, education)
+        match_score = cap["score_after"]
+
         match_explanation = self.enhancer.generate_match_explanation(
             job, candidate, skills["matching_skills"], role_score, skill_score, experience_score
         )
+        if requirements is not None:
+            match_explanation = ". ".join(
+                [match_explanation] + requirement_explanation(nice, must_have, years, education, cap)
+            )
 
         return {
             "match_score": match_score,
@@ -227,6 +320,103 @@ class MatchingIntegrator:
             "weighted_score": weighted_score,
             "final_penalty_applied": final_penalty_applied,
             "final_penalty_multiplier": CROSS_DOMAIN_FINAL_PENALTY["multiplier"],
+            "requirements": requirements.model_dump() if requirements is not None else None,
+            "nice_to_have": nice,
+            "must_have": must_have,
+            "years": years,
+            "education": education,
+            "requirement_cap": cap,
+        }
+
+    # --- requirement rules (Track 2 Phase 1) --------------------------------
+
+    def _nice_to_have(self, requirements, candidate_skills) -> Optional[Dict[str, Any]]:
+        """Up to NICE_TO_HAVE_MAX_BONUS points on the skill score. With no
+        nice-to-have list the job's skills already carry this (no bonus)."""
+        if requirements is None or not requirements.nice_to_have_skills:
+            return None
+        wanted = requirements.nice_to_have_skills
+        details = self.enhancer.skill_match_details(wanted, candidate_skills)
+        credit = len(details["exact"]) + 0.5 * len(details["partial"])
+        return {
+            "skills": list(wanted),
+            "exact": details["exact"],
+            "partial": details["partial"],
+            "missing": details["missing"],
+            "bonus": NICE_TO_HAVE_MAX_BONUS * credit / len(wanted),
+            "max_bonus": NICE_TO_HAVE_MAX_BONUS,
+        }
+
+    def _must_have(self, requirements, candidate_skills) -> Optional[Dict[str, Any]]:
+        """Present or missing per must-have, using the same exact/partial
+        matcher as the skill overlap. A partial match counts as present."""
+        if requirements is None or not requirements.must_have_skills:
+            return None
+        details = self.enhancer.skill_match_details(requirements.must_have_skills, candidate_skills)
+        return {
+            "skills": list(requirements.must_have_skills),
+            "present": details["exact"] + details["partial"],
+            "partial": details["partial"],
+            "missing": details["missing"],
+        }
+
+    @staticmethod
+    def _years_rule(requirements, profile) -> Optional[Dict[str, Any]]:
+        if requirements is None or (requirements.min_years is None and requirements.max_years is None):
+            return None
+        years = profile.years if profile is not None else None
+        short_by = over_by = 0.0
+        if years is not None and requirements.min_years is not None:
+            short_by = max(requirements.min_years - years, 0.0)
+        if years is not None and requirements.max_years is not None:
+            over_by = max(years - requirements.max_years, 0.0)
+        penalty = 0.0
+        if short_by:
+            penalty = min(short_by * YEARS_SHORT_PENALTY_PER_YEAR, YEARS_SHORT_MAX_PENALTY)
+        elif over_by:
+            penalty = min(over_by * YEARS_OVER_PENALTY_PER_YEAR, YEARS_OVER_MAX_PENALTY)
+        return {
+            "min_years": requirements.min_years,
+            "max_years": requirements.max_years,
+            "candidate_years": years,
+            "short_by": round(short_by, 1),
+            "over_by": round(over_by, 1),
+            "penalty": round(penalty, 2),
+            "counts_as_missing": short_by >= YEARS_SHORT_COUNTS_AS_MISSING,
+        }
+
+    @staticmethod
+    def _education_rule(requirements, profile) -> Optional[Dict[str, Any]]:
+        if requirements is None or requirements.min_education in (None, "none"):
+            return None
+        level = profile.education if profile is not None else None
+        meets = None if level is None else education_rank(level) >= education_rank(requirements.min_education)
+        return {
+            "min_education": requirements.min_education,
+            "candidate_education": level,
+            "meets": meets,
+            "counts_as_missing": meets is False,
+        }
+
+    @staticmethod
+    def _requirement_cap(score, must_have, years, education) -> Dict[str, Any]:
+        reasons: List[str] = []
+        if must_have:
+            reasons += [f"must-have skill {s}" for s in must_have["missing"]]
+        if years and years["counts_as_missing"]:
+            reasons.append(f"at least {years['min_years']} years of experience")
+        if education and education["counts_as_missing"]:
+            reasons.append(f"a {EDUCATION_LABELS[education['min_education']]}")
+        cap = cap_for(len(reasons))
+        limit = cap["limit"] if cap else None
+        after = min(score, limit) if limit is not None else score
+        return {
+            "missing": reasons,
+            "missing_count": len(reasons),
+            "limit": limit,
+            "applied": limit is not None and score > limit,
+            "score_before": score,
+            "score_after": after,
         }
 
     async def enhanced_candidate_job_matching(self, job_id: int, db, min_score: float = 20.0, limit: int = 10):
@@ -257,10 +447,19 @@ class MatchingIntegrator:
             logger.warning("No candidates found in database")
             return []
 
+        # Years and degrees in two queries for everyone, rather than two per
+        # candidate, when the job's requirements read them.
+        requirements = parse_requirements(getattr(job, "requirements", None))
+        profiles = (
+            load_profiles(db, [c.id for c in candidates])
+            if requirements is not None and requirements.needs_profile()
+            else {}
+        )
+
         # Process each candidate
         matches = []
         for candidate in candidates:
-            trace = self.score_pair(job, candidate)
+            trace = self.score_pair(job, candidate, profiles.get(candidate.id))
             match_score = trace["match_score"]
 
             # Include candidate if score meets threshold
@@ -329,10 +528,12 @@ class MatchingIntegrator:
             logger.warning("No open jobs found in database")
             return []
 
+        profile = load_profiles(db, [candidate.id]).get(candidate.id)
+
         # Process each job
         matches = []
         for job in jobs:
-            trace = self.score_pair(job, candidate)
+            trace = self.score_pair(job, candidate, profile)
             match_score = trace["match_score"]
 
             # Include job if score meets threshold

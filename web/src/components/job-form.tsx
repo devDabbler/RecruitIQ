@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Loader2, Save, Sparkles } from "lucide-react";
+import { ChevronDown, Loader2, Save, Sparkles, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,11 +16,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  EDUCATION_LEVELS,
   EMPTY_JOB,
   EXPERIENCE_LEVELS,
   JOB_STATUSES,
   JOB_TYPES,
   LOCATION_TYPES,
+  addSkills,
   applyDraft,
   canRequestDraft,
   draftRequestFrom,
@@ -267,6 +269,81 @@ export function JobForm({
 
       <Card>
         <CardContent className="space-y-5 p-6">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-800">Requirements</h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Missing one must-have caps a candidate&apos;s score at 70, and missing two or more
+              caps it at 50. Capped candidates are flagged with the reason, never rejected. Years
+              and education only count for candidates whose resume records them.
+            </p>
+          </div>
+
+          <Field
+            label="Must-have skills"
+            error={errors.must_have_skills}
+            hint="Press Enter or comma after each skill. A close variant counts as a match."
+            group
+          >
+            <SkillChips
+              label="Must-have skills"
+              value={values.must_have_skills}
+              other={values.nice_to_have_skills}
+              onChange={(next) => set("must_have_skills", next)}
+              placeholder="Python, SQL"
+            />
+          </Field>
+
+          <Field
+            label="Nice-to-have skills"
+            error={errors.nice_to_have_skills}
+            hint="Each one a candidate has adds to their skill score, up to 10 points."
+            group
+          >
+            <SkillChips
+              label="Nice-to-have skills"
+              value={values.nice_to_have_skills}
+              other={values.must_have_skills}
+              onChange={(next) => set("nice_to_have_skills", next)}
+              placeholder="dbt, Spark"
+            />
+          </Field>
+
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Min years" error={errors.min_years}>
+                <Input
+                  inputMode="numeric"
+                  value={values.min_years}
+                  onChange={(e) => set("min_years", e.target.value)}
+                  placeholder="3"
+                  aria-invalid={!!errors.min_years}
+                />
+              </Field>
+              <Field label="Max years" error={errors.max_years}>
+                <Input
+                  inputMode="numeric"
+                  value={values.max_years}
+                  onChange={(e) => set("max_years", e.target.value)}
+                  placeholder="8"
+                  aria-invalid={!!errors.max_years}
+                />
+              </Field>
+            </div>
+
+            <Field label="Minimum education">
+              <Choice
+                value={values.min_education}
+                onChange={(v) => set("min_education", v)}
+                options={EDUCATION_LEVELS}
+                label="Minimum education"
+              />
+            </Field>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent className="space-y-5 p-6">
           <h2 className="text-sm font-semibold text-slate-800">Where and how</h2>
 
           <div className="grid gap-5 sm:grid-cols-2">
@@ -420,16 +497,21 @@ function Field({
   error,
   hint,
   required,
+  group,
   children,
 }: {
   label: string;
   error?: string;
   hint?: string;
   required?: boolean;
+  /** A div instead of a label, for controls holding buttons: clicking a
+      label activates its first button, which would remove a chip. */
+  group?: boolean;
   children: React.ReactNode;
 }) {
+  const Wrapper = group ? "div" : "label";
   return (
-    <label className="block text-sm">
+    <Wrapper className="block text-sm">
       <span className="mb-1 block font-medium text-slate-700">
         {label}
         {required ? null : <span className="font-normal text-slate-400"> (optional)</span>}
@@ -440,7 +522,68 @@ function Field({
       ) : hint ? (
         <span className="mt-1 block text-xs text-slate-500">{hint}</span>
       ) : null}
-    </label>
+    </Wrapper>
+  );
+}
+
+/** A list of skills as removable chips with a free-text input at the end. */
+function SkillChips({
+  label,
+  value,
+  other,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string[];
+  /** The opposite list: a skill cannot be both a must-have and a nice-to-have. */
+  other: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function commit() {
+    if (!draft.trim()) return;
+    onChange(addSkills(value, draft, other));
+    setDraft("");
+  }
+
+  return (
+    <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-input bg-white px-2 py-1.5 focus-within:ring-2 focus-within:ring-indigo-200">
+      {value.map((skill) => (
+        <span
+          key={skill}
+          className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-700"
+        >
+          {skill}
+          <button
+            type="button"
+            onClick={() => onChange(value.filter((s) => s !== skill))}
+            className="text-slate-400 hover:text-slate-700"
+            aria-label={`Remove ${skill}`}
+          >
+            <X className="h-3 w-3" aria-hidden />
+          </button>
+        </span>
+      ))}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Backspace" && !draft && value.length) {
+            onChange(value.slice(0, -1));
+          }
+        }}
+        onBlur={commit}
+        aria-label={label}
+        placeholder={value.length ? "" : placeholder}
+        className="min-w-32 flex-1 bg-transparent py-0.5 text-sm outline-none placeholder:text-slate-400"
+      />
+    </div>
   );
 }
 

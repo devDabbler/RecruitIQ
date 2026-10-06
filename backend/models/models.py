@@ -123,6 +123,9 @@ class Job(Base):
     job_metadata = Column(JSON, nullable=True)
     status = Column(String(50), default="open")
     skills = Column(String, nullable=True)
+    # Track 2 Phase 1: must-have / nice-to-have skills, years range, minimum
+    # education. Shape and limits live in services/job_requirements.py.
+    requirements = Column(JSONB, nullable=True)
     views = Column(Integer, default=0, nullable=True)
     applications = Column(Integer, default=0, nullable=True)
     embedding = Column(Vector(768), nullable=True)  # nomic-embed-text over title+overview+quals+skills

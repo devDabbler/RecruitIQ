@@ -11,6 +11,7 @@ change is the intended way to repair a half-populated database.
     poetry run python scripts/seed_demo.py --notes-tags-only # notes and tags only
     poetry run python scripts/seed_demo.py --timelines-only  # stage timestamps only
     poetry run python scripts/seed_demo.py --reanchor-timelines # slide them up to today
+    poetry run python scripts/seed_demo.py --requirements-only  # job requirements only
 
 Authored during Phase 3 rather than Phase 4 because a Dashboard or Matching
 screen cannot be built or verified against an empty database. Phase 4 loads this
@@ -362,6 +363,56 @@ NEW_JOBS = [
     },
 ]
 
+# Track 2 Phase 1: structured requirements on every demo job, chosen so the
+# caps show up live. Several strong candidates miss one must-have (Rachel Kim
+# and Anders Vik have no PyTorch, Elena Vasquez lists no Machine Learning,
+# Yuki Tanaka and Nina Petrova no Large Language Models) and drop to 70 on
+# /matching, with the reason in the explanation. The years and education
+# rules only fire for candidates with recorded history (uploads); seeded
+# candidates have none, so for them those rules read as unknown.
+SEED_REQUIREMENTS = {
+    "Machine Learning Engineer": {
+        "must_have_skills": ["Python", "PyTorch"],
+        "nice_to_have_skills": ["Kubernetes", "MLflow", "Feature Engineering"],
+        "min_years": 3, "max_years": None, "min_education": "bachelor",
+    },
+    "Engineering Manager, Platform": {
+        "must_have_skills": ["Kubernetes", "Leadership"],
+        "nice_to_have_skills": ["Terraform", "Hiring", "Mentorship"],
+        "min_years": 6, "max_years": None, "min_education": None,
+    },
+    "Senior Data Scientist": {
+        "must_have_skills": ["Python", "SQL", "Machine Learning"],
+        "nice_to_have_skills": ["Statistics", "Experimentation", "Causal Inference"],
+        "min_years": 5, "max_years": None, "min_education": "master",
+    },
+    "Junior Data Scientist": {
+        "must_have_skills": ["Python", "SQL"],
+        "nice_to_have_skills": ["Pandas", "Scikit-learn"],
+        "min_years": None, "max_years": 3, "min_education": "bachelor",
+    },
+    "Software Development Engineer": {
+        "must_have_skills": ["Python", "Docker"],
+        "nice_to_have_skills": ["REST APIs", "CI/CD", "Git"],
+        "min_years": 2, "max_years": None, "min_education": "bachelor",
+    },
+    "Product Manager": {
+        "must_have_skills": ["Roadmapping"],
+        "nice_to_have_skills": ["User Research", "SQL", "Agile"],
+        "min_years": 3, "max_years": None, "min_education": "bachelor",
+    },
+    "Gen AI Engineer": {
+        "must_have_skills": ["Python", "Large Language Models"],
+        "nice_to_have_skills": ["RAG", "Prompt Engineering", "Transformers"],
+        "min_years": 3, "max_years": None, "min_education": "master",
+    },
+    "Data Engineer": {
+        "must_have_skills": ["Python", "SQL", "Airflow"],
+        "nice_to_have_skills": ["Spark", "Kafka", "dbt"],
+        "min_years": 2, "max_years": None, "min_education": "bachelor",
+    },
+}
+
 # All 40 candidates, entirely synthetic. The original script only carried 17
 # and leaned on 23 legacy rows in the dev database - rows that included real
 # parsed resumes, which the spec (§6) bars from the public demo, and which a
@@ -548,6 +599,26 @@ def seed_jobs(db) -> list[Job]:
             job.views = 18 + stable_index(f"views-{job.id}", 322)
     db.commit()
     return jobs
+
+
+def seed_requirements(db, only_missing: bool = False) -> int:
+    """Put SEED_REQUIREMENTS on the seeded jobs. With only_missing, a job that
+    already has requirements (someone set them) is left alone."""
+    changed = 0
+    for spec in NEW_JOBS:
+        job = (
+            db.query(Job)
+            .filter(Job.title == spec["title"], Job.department == spec["department"])
+            .first()
+        )
+        wanted = SEED_REQUIREMENTS.get(spec["title"])
+        if job is None or wanted is None or (only_missing and job.requirements):
+            continue
+        if job.requirements != wanted:
+            job.requirements = dict(wanted)
+            changed += 1
+    db.commit()
+    return changed
 
 
 def seed_candidates(db, rng: random.Random) -> list[Candidate]:
@@ -1101,11 +1172,23 @@ def main() -> int:
             "flat ones. Never changes an application a person has moved"
         ),
     )
+    parser.add_argument(
+        "--requirements-only",
+        action="store_true",
+        help=(
+            "only add structured requirements (Track 2 Phase 1) to the seeded jobs "
+            "that have none. Never changes requirements someone has set"
+        ),
+    )
     args = parser.parse_args()
 
     db = SessionLocal()
     try:
         get_or_create_demo_user(db)
+
+        if args.requirements_only:
+            print(f"  jobs given requirements: {seed_requirements(db, only_missing=True)}")
+            return 0
 
         if args.reanchor_timelines:
             changed = seed_timelines(db, datetime.utcnow(), reanchor=True)
@@ -1136,6 +1219,7 @@ def main() -> int:
             return 0
 
         jobs = seed_jobs(db)
+        seed_requirements(db)
         candidates = seed_candidates(db, random.Random(SEED_FIELDS))
         seed_pipeline(db, candidates, jobs)
         seed_interviews(db, seed_team(db), jobs)

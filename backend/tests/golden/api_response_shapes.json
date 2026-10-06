@@ -213,6 +213,7 @@
       "recruiter": "null",
       "recruiter_id": "null",
       "required_qualifications": "str",
+      "requirements": "null",
       "skills": [],
       "start_date": "null",
       "status": "str",
@@ -249,6 +250,7 @@
       "recruiter": "str",
       "recruiter_id": "null",
       "required_qualifications": "str",
+      "requirements": "null",
       "skills": [
         "str"
       ],
@@ -309,6 +311,7 @@
           "recruiter": "str",
           "recruiter_id": "null",
           "required_qualifications": "str",
+          "requirements": "null",
           "skills": [
             "str"
           ],
@@ -351,6 +354,7 @@
       "recruiter": "null",
       "recruiter_id": "null",
       "required_qualifications": "str",
+      "requirements": "null",
       "skills": [],
       "start_date": "null",
       "status": "str",

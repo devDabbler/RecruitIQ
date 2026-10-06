@@ -2995,6 +2995,17 @@ export interface components {
             /** Stages */
             stages: components["schemas"]["StageDefaults"][];
         };
+        /** EducationCheck */
+        EducationCheck: {
+            /** Candidate Education */
+            candidate_education?: string | null;
+            /** Counts As Missing */
+            counts_as_missing: boolean;
+            /** Meets */
+            meets?: boolean | null;
+            /** Min Education */
+            min_education: string;
+        };
         /** EmailLogOut */
         EmailLogOut: {
             /** Body */
@@ -3106,6 +3117,11 @@ export interface components {
             years_diff: number;
             /** Years Match */
             years_match: number;
+            /**
+             * Years Range Penalty
+             * @default 0
+             */
+            years_range_penalty: number;
         };
         /** FeedbackIn */
         FeedbackIn: {
@@ -3352,6 +3368,7 @@ export interface components {
             recruiter_id?: string | null;
             /** Required Qualifications */
             required_qualifications: string;
+            requirements?: components["schemas"]["JobRequirements"] | null;
             /** Skills */
             skills?: string[];
             /** Start Date */
@@ -3433,12 +3450,29 @@ export interface components {
             id: number;
             /** Level */
             level: string;
+            requirements?: components["schemas"]["JobRequirements"] | null;
             /** Skills */
             skills: string[];
             /** Title */
             title: string;
             /** Years */
             years: number;
+        };
+        /**
+         * JobRequirements
+         * @description What `jobs.requirements` holds. Every field is optional.
+         */
+        JobRequirements: {
+            /** Max Years */
+            max_years?: number | null;
+            /** Min Education */
+            min_education?: ("none" | "bachelor" | "master" | "phd") | null;
+            /** Min Years */
+            min_years?: number | null;
+            /** Must Have Skills */
+            must_have_skills?: string[];
+            /** Nice To Have Skills */
+            nice_to_have_skills?: string[];
         };
         /**
          * JobResponse
@@ -3492,6 +3526,7 @@ export interface components {
             recruiter_id?: string | null;
             /** Required Qualifications */
             required_qualifications: string;
+            requirements?: components["schemas"]["JobRequirements"] | null;
             /** Skills */
             skills?: string[];
             /** Start Date */
@@ -3645,6 +3680,7 @@ export interface components {
             match_score: number;
             /** Rank */
             rank: number;
+            requirements?: components["schemas"]["RequirementsStep"] | null;
             role: components["schemas"]["RoleStep"];
             skills: components["schemas"]["SkillStep"];
             tier: components["schemas"]["WeightTier"];
@@ -3828,6 +3864,60 @@ export interface components {
             time_in_stage: components["schemas"]["StageTiming"][];
             /** Total Applications */
             total_applications: number;
+        };
+        /** RequirementCap */
+        RequirementCap: {
+            /** Condition */
+            condition: string;
+            /** Limit */
+            limit: number;
+            /** Min Missing */
+            min_missing: number;
+        };
+        /** RequirementCapStep */
+        RequirementCapStep: {
+            /** Applied */
+            applied: boolean;
+            /** Limit */
+            limit?: number | null;
+            /** Missing */
+            missing: string[];
+            /** Missing Count */
+            missing_count: number;
+            /** Score Before */
+            score_before: number;
+        };
+        /**
+         * RequirementRules
+         * @description Track 2 Phase 1: what a job's structured requirements do to a score.
+         */
+        RequirementRules: {
+            /** Caps */
+            caps: components["schemas"]["RequirementCap"][];
+            /** Nice To Have Max Bonus */
+            nice_to_have_max_bonus: number;
+            /** Years Over Max Penalty */
+            years_over_max_penalty: number;
+            /** Years Over Penalty Per Year */
+            years_over_penalty_per_year: number;
+            /** Years Short Counts As Missing */
+            years_short_counts_as_missing: number;
+            /** Years Short Max Penalty */
+            years_short_max_penalty: number;
+            /** Years Short Penalty Per Year */
+            years_short_penalty_per_year: number;
+        };
+        /**
+         * RequirementsStep
+         * @description How the job's requirements treated this candidate. Absent when the job
+         *     sets none, in which case the score is built exactly as before.
+         */
+        RequirementsStep: {
+            cap: components["schemas"]["RequirementCapStep"];
+            education?: components["schemas"]["EducationCheck"] | null;
+            must_have?: components["schemas"]["SkillCheck"] | null;
+            nice_to_have?: components["schemas"]["SkillCheck"] | null;
+            years?: components["schemas"]["YearsCheck"] | null;
         };
         /**
          * ResumeConfirmRequest
@@ -4037,6 +4127,7 @@ export interface components {
             final_penalty: components["schemas"]["FinalPenalty"];
             /** Job Fields Scored */
             job_fields_scored: components["schemas"]["ScoredField"][];
+            requirement_rules: components["schemas"]["RequirementRules"];
             /** Role Score Caps */
             role_score_caps: {
                 [key: string]: number;
@@ -4167,6 +4258,15 @@ export interface components {
             /** Similar Jobs */
             similar_jobs: components["schemas"]["SimilarJobResult"][];
         };
+        /** SkillCheck */
+        SkillCheck: {
+            /** Missing */
+            missing: string[];
+            /** Present */
+            present: string[];
+            /** Skills */
+            skills: string[];
+        };
         /** SkillStep */
         SkillStep: {
             /** Candidate Category */
@@ -4183,6 +4283,11 @@ export interface components {
             job_skills: string[];
             /** Missing */
             missing: string[];
+            /**
+             * Nice To Have Bonus
+             * @default 0
+             */
+            nice_to_have_bonus: number;
             /** No Data */
             no_data: boolean;
             /** Partial */
@@ -4582,6 +4687,23 @@ export interface components {
             weights: {
                 [key: string]: number;
             };
+        };
+        /** YearsCheck */
+        YearsCheck: {
+            /** Candidate Years */
+            candidate_years?: number | null;
+            /** Counts As Missing */
+            counts_as_missing: boolean;
+            /** Max Years */
+            max_years?: number | null;
+            /** Min Years */
+            min_years?: number | null;
+            /** Over By */
+            over_by: number;
+            /** Penalty */
+            penalty: number;
+            /** Short By */
+            short_by: number;
         };
         /**
          * MessageResponse

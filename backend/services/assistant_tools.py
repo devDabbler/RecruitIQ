@@ -24,6 +24,7 @@ from sqlalchemy.orm import Session
 # Relevance banding (strong/moderate/weak, with the lexical-evidence rule for
 # "moderate") lives in search_relevance; RELEVANCE_BANDS and relevance_band
 # are re-exported because the transparency endpoint imports them from here.
+from backend.services.job_requirements import parse_requirements
 from backend.services.search_relevance import (  # noqa: F401
     RELEVANCE_BANDS,
     SEARCH_POOL_SIZE,
@@ -69,6 +70,9 @@ def _job_summary(j, include_details: bool = False) -> dict:
     if include_details:
         data["overview"] = j.job_overview
         data["required_qualifications"] = j.required_qualifications
+        requirements = parse_requirements(getattr(j, "requirements", None))
+        if requirements is not None:
+            data["requirements"] = requirements.model_dump()
     return data
 
 
@@ -442,23 +446,27 @@ def build_assistant_tools(db: Session, user=None) -> List[Tool]:
         cand_info = await get_candidate(candidate)
         if "error" in cand_info:
             return cand_info
-        job_skills = {s.lower() for s in job_info.get("skills", [])}
-        cand_skills = {s.lower() for s in cand_info.get("skills", [])}
-        overlap = sorted(job_skills & cand_skills)
-        missing = sorted(job_skills - cand_skills)
-        match_result = await _rank_for_job(str(job_info["id"]), limit=50)
-        score = next(
-            (m["match_score"] for m in match_result.get("matches", []) if m["id"] == cand_info["id"]),
-            None,
-        )
-        return {
+        # The same score_pair the ranking runs, for this one pair, so the
+        # explanation (requirement caps included) is the ranking's own.
+        job_row = db.query(Job).filter(Job.id == job_info["id"]).first()
+        cand_row = db.query(Candidate).filter(Candidate.id == cand_info["id"]).first()
+        trace = registry.matching_integrator.score_pair(job_row, cand_row)
+        out = {
             "job": {"id": job_info["id"], "title": job_info["title"]},
             "candidate": {"id": cand_info["id"], "name": cand_info["name"]},
-            "match_score": score,
-            "matching_skills": overlap,
-            "missing_skills": missing,
+            "match_score": round(float(trace["match_score"]), 1),
+            "explanation": trace["match_explanation"],
+            "matching_skills": trace["skills"]["exact"] + trace["skills"]["partial"],
+            "missing_skills": trace["skills"]["missing"],
             "candidate_position": cand_info.get("current_position"),
         }
+        if trace["must_have"]:
+            out["missing_must_have_skills"] = trace["must_have"]["missing"]
+        cap = trace["requirement_cap"]
+        if cap["applied"]:
+            out["score_capped_at"] = cap["limit"]
+            out["capped_because_missing"] = cap["missing"]
+        return out
 
     async def get_market_data(role: str, location: str, experience_level: Optional[str] = None) -> dict:
         service = registry.market_research_service

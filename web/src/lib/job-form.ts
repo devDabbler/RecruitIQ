@@ -41,6 +41,17 @@ export const EXPERIENCE_LEVELS = [
   { value: "executive", label: "Executive" },
 ] as const;
 
+/** Mirrors JobRequirements in backend/services/job_requirements.py. */
+export const EDUCATION_LEVELS = [
+  { value: "none", label: "No minimum" },
+  { value: "bachelor", label: "Bachelor's degree" },
+  { value: "master", label: "Master's degree" },
+  { value: "phd", label: "PhD" },
+] as const;
+
+export const MAX_REQUIREMENT_SKILLS = 20;
+export const MAX_SKILL_LENGTH = 60;
+
 export interface JobFormValues {
   title: string;
   department: string;
@@ -58,6 +69,12 @@ export interface JobFormValues {
   recruiter: string;
   application_deadline: string;
   start_date: string;
+  /** Track 2 Phase 1: structured requirements. */
+  must_have_skills: string[];
+  nice_to_have_skills: string[];
+  min_years: string;
+  max_years: string;
+  min_education: string;
 }
 
 export const EMPTY_JOB: JobFormValues = {
@@ -77,6 +94,11 @@ export const EMPTY_JOB: JobFormValues = {
   recruiter: "",
   application_deadline: "",
   start_date: "",
+  must_have_skills: [],
+  nice_to_have_skills: [],
+  min_years: "",
+  max_years: "",
+  min_education: "none",
 };
 
 /** Turn an API job into form values. Every field becomes a string. */
@@ -99,7 +121,29 @@ export function jobToFormValues(job: Job): JobFormValues {
     // <input type="date"> wants YYYY-MM-DD; the API sends a full timestamp.
     application_deadline: (job.application_deadline ?? "").slice(0, 10),
     start_date: (job.start_date ?? "").slice(0, 10),
+    must_have_skills: [...(job.requirements?.must_have_skills ?? [])],
+    nice_to_have_skills: [...(job.requirements?.nice_to_have_skills ?? [])],
+    min_years: job.requirements?.min_years == null ? "" : String(job.requirements.min_years),
+    max_years: job.requirements?.max_years == null ? "" : String(job.requirements.max_years),
+    min_education: job.requirements?.min_education ?? "none",
   };
+}
+
+/**
+ * Add a typed skill to a chip list. Commas split several at once; blanks,
+ * case-insensitive duplicates, and anything already in `other` (the opposite
+ * list) are skipped. Returns the list unchanged when nothing was added.
+ */
+export function addSkills(list: string[], typed: string, other: string[] = []): string[] {
+  const taken = new Set([...list, ...other].map((s) => s.toLowerCase()));
+  const next = [...list];
+  for (const raw of typed.split(",")) {
+    const skill = raw.replace(/\s+/g, " ").trim();
+    if (!skill || taken.has(skill.toLowerCase())) continue;
+    taken.add(skill.toLowerCase());
+    next.push(skill);
+  }
+  return next.length === list.length ? list : next;
 }
 
 export type FieldErrors = Partial<Record<keyof JobFormValues, string>>;
@@ -140,6 +184,24 @@ export function validateJob(values: JobFormValues): FieldErrors {
     errors.max_salary = "The maximum cannot be below the minimum.";
   }
 
+  const years = (value: string) => (value.trim() === "" ? null : Number(value));
+  const minYears = years(values.min_years);
+  const maxYears = years(values.max_years);
+  const badYears = (n: number | null) => n !== null && (!Number.isInteger(n) || n < 0 || n > 50);
+  if (badYears(minYears)) errors.min_years = "Enter whole years from 0 to 50, or leave it blank.";
+  if (badYears(maxYears)) errors.max_years = "Enter whole years from 0 to 50, or leave it blank.";
+  if (!errors.min_years && !errors.max_years && minYears !== null && maxYears !== null && minYears > maxYears) {
+    errors.max_years = "The maximum cannot be below the minimum.";
+  }
+
+  for (const key of ["must_have_skills", "nice_to_have_skills"] as const) {
+    if (values[key].length > MAX_REQUIREMENT_SKILLS) {
+      errors[key] = `At most ${MAX_REQUIREMENT_SKILLS} skills.`;
+    } else if (values[key].some((skill) => skill.length > MAX_SKILL_LENGTH)) {
+      errors[key] = `Keep each skill under ${MAX_SKILL_LENGTH} characters.`;
+    }
+  }
+
   return errors;
 }
 
@@ -178,6 +240,13 @@ export function toJobPayload(values: JobFormValues): Record<string, unknown> {
     recruiter: orNull(values.recruiter),
     application_deadline: orNullDate(values.application_deadline),
     start_date: orNullDate(values.start_date),
+    requirements: {
+      must_have_skills: values.must_have_skills,
+      nice_to_have_skills: values.nice_to_have_skills,
+      min_years: orNullNumber(values.min_years),
+      max_years: orNullNumber(values.max_years),
+      min_education: values.min_education === "none" ? null : values.min_education || null,
+    },
   };
 }
 
@@ -222,4 +291,19 @@ export function applyDraft(values: JobFormValues, draft: DescriptionDraft): JobF
     job_overview: draft.job_overview,
     required_qualifications: draft.required_qualifications,
   };
+}
+
+/** "3+ years", "2 to 5 years", "Up to 3 years", or null when no range is set. */
+export function yearsLabel(min?: number | null, max?: number | null): string | null {
+  if (min != null && max != null) return min === max ? `${min} years` : `${min} to ${max} years`;
+  if (min != null) return `${min}+ years`;
+  if (max != null) return `Up to ${max} years`;
+  return null;
+}
+
+/** "Master's degree or higher", or null when there is no minimum. */
+export function educationLabel(level?: string | null): string | null {
+  const found = EDUCATION_LEVELS.find((option) => option.value === level);
+  if (!found || found.value === "none") return null;
+  return found.value === "phd" ? "PhD" : `${found.label} or higher`;
 }
