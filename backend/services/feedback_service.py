@@ -43,6 +43,10 @@ SUBMITTED = "submitted"
 FEEDBACK_USED_FOR = [
     "Shown to the hiring team on the candidate's page, next to the stage it was given for.",
     "Counted on the Interviews page so nobody's feedback is forgotten.",
+    (
+        "Summarized by an AI model on request, for people who can already read all of it. Only "
+        "submitted forms are sent, with names removed, and the summary is not saved."
+    ),
 ]
 FEEDBACK_NEVER_USED_FOR = [
     "The match score. The ranker reads the candidate's profile and the job, never feedback.",

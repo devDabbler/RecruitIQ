@@ -1,8 +1,14 @@
 import { AssignInterviewer } from "@/components/assign-interviewer";
 import { FeedbackForm } from "@/components/feedback-form";
+import { FeedbackSummary } from "@/components/feedback-summary";
 import type { ApplicationDetail, FeedbackTemplate, InterviewEntry, TeamMember } from "@/lib/domain";
 import { formatDate } from "@/lib/format";
-import { INTERVIEW_STATE_LABELS, RECOMMENDATION_LABELS, memberName } from "@/lib/interviews";
+import {
+  INTERVIEW_STATE_LABELS,
+  RECOMMENDATION_LABELS,
+  canSummarizeFeedback,
+  memberName,
+} from "@/lib/interviews";
 
 /**
  * Who interviews this candidate for this job, and what they thought
@@ -16,6 +22,7 @@ export function InterviewPanel({
   interviews,
   team,
   viewerId,
+  viewerRole = null,
   canAssign,
   templates = [],
 }: {
@@ -23,6 +30,8 @@ export function InterviewPanel({
   interviews: InterviewEntry[];
   team: TeamMember[];
   viewerId: string | null;
+  /** Decides whether the AI feedback summary is offered (Track 2 Phase 6). */
+  viewerRole?: string | null;
   canAssign: boolean;
   /** Feedback templates for this job, its own first (Track 2 Phase 4). */
   templates?: FeedbackTemplate[];
@@ -77,6 +86,7 @@ export function InterviewPanel({
           ))}
         </ul>
       )}
+      {canSummarizeFeedback(interviews, viewerRole) ? <FeedbackSummary applicationId={application.id} /> : null}
       {canAssign && application.status === "active" ? (
         <AssignInterviewer
           applicationId={application.id}

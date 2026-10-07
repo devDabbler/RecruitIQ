@@ -3132,6 +3132,65 @@
         "title": "FeedbackPolicy",
         "type": "object"
       },
+      "FeedbackSummaryOut": {
+        "description": "Generated on request and never stored; the screen labels it as AI output.",
+        "properties": {
+          "agreements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Agreements",
+            "type": "array"
+          },
+          "application_id": {
+            "title": "Application Id",
+            "type": "integer"
+          },
+          "disagreements": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Disagreements",
+            "type": "array"
+          },
+          "feedback_count": {
+            "title": "Feedback Count",
+            "type": "integer"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "open_questions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Open Questions",
+            "type": "array"
+          },
+          "tally": {
+            "description": "Counted from the forms, not written by the model.",
+            "title": "Tally",
+            "type": "string"
+          },
+          "themes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Themes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "application_id",
+          "feedback_count",
+          "tally",
+          "generated_at"
+        ],
+        "title": "FeedbackSummaryOut",
+        "type": "object"
+      },
       "FeedbackTemplateIn": {
         "properties": {
           "body": {
@@ -8413,6 +8472,49 @@
         "summary": "Preview Email",
         "tags": [
           "email"
+        ]
+      }
+    },
+    "/api/applications/{application_id}/feedback-summary": {
+      "get": {
+        "description": "An AI brief of the submitted feedback (Track 2 Phase 6), generated now\nand never stored. Only for someone who can already read every form it\nsummarizes, so it never reveals feedback the viewer could not open.\n\nPlain `def` with asyncio.run, like the matching routes: the ORM work is\nsynchronous and must stay off the event loop.",
+        "operationId": "summarize_application_feedback_api_applications__application_id__feedback_summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "application_id",
+            "required": true,
+            "schema": {
+              "title": "Application Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackSummaryOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Summarize Application Feedback",
+        "tags": [
+          "interviews"
         ]
       }
     },

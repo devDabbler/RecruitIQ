@@ -166,6 +166,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/applications/{application_id}/feedback-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Summarize Application Feedback
+         * @description An AI brief of the submitted feedback (Track 2 Phase 6), generated now
+         *     and never stored. Only for someone who can already read every form it
+         *     summarizes, so it never reveals feedback the viewer could not open.
+         *
+         *     Plain `def` with asyncio.run, like the matching routes: the ORM work is
+         *     synchronous and must stay off the event loop.
+         */
+        get: operations["summarize_application_feedback_api_applications__application_id__feedback_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/applications/{application_id}/interviews": {
         parameters: {
             query?: never;
@@ -3446,6 +3471,34 @@ export interface components {
             /** Used For */
             used_for: string[];
         };
+        /**
+         * FeedbackSummaryOut
+         * @description Generated on request and never stored; the screen labels it as AI output.
+         */
+        FeedbackSummaryOut: {
+            /** Agreements */
+            agreements?: string[];
+            /** Application Id */
+            application_id: number;
+            /** Disagreements */
+            disagreements?: string[];
+            /** Feedback Count */
+            feedback_count: number;
+            /**
+             * Generated At
+             * Format: date-time
+             */
+            generated_at: string;
+            /** Open Questions */
+            open_questions?: string[];
+            /**
+             * Tally
+             * @description Counted from the forms, not written by the model.
+             */
+            tally: string;
+            /** Themes */
+            themes?: string[];
+        };
         /** FeedbackTemplateIn */
         FeedbackTemplateIn: {
             /** Body */
@@ -5398,6 +5451,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EmailPreview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_application_feedback_api_applications__application_id__feedback_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                application_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackSummaryOut"];
                 };
             };
             /** @description Validation Error */

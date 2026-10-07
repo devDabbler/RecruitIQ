@@ -11,9 +11,12 @@ Mounted *before* the pipeline router in main.py: Phase A's
 """
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..models.feedback import (
@@ -23,6 +26,7 @@ from ..models.feedback import (
     FeedbackDraftIn,
     FeedbackDraftOut,
     FeedbackIn,
+    FeedbackSummaryOut,
     FeedbackOut,
     FeedbackTemplateIn,
     FeedbackTemplateList,
@@ -37,8 +41,10 @@ from ..models.feedback import (
 from ..models.models import Candidate, FeedbackTemplate, Interview, Job, JobApplication, User
 from ..models.team import MessageOut
 from ..services import feedback_service as fs
+from ..services import feedback_summary as summaries
 from ..services import pipeline_service as ps
 from ..services.access_service import can_see_score, request_user
+from ..services.llm.base import AllProvidersFailedError
 from ..utils.auth import ROLE_INTERVIEWER, request_identity
 from ..utils.database import get_db
 from ..utils.permissions import FEEDBACK_SUBMIT, JOBS_WRITE, PIPELINE_MOVE, TEMPLATES_MANAGE, require
@@ -153,6 +159,54 @@ def list_application_interviews(
     out = [_interview_out(db, interview, viewer) for row in rows for interview in row.interviews]
     db.commit()
     return out
+
+
+@router.get("/applications/{application_id}/feedback-summary", response_model=FeedbackSummaryOut)
+def summarize_application_feedback(
+    application_id: int, request: Request, db: Session = Depends(get_db)
+) -> FeedbackSummaryOut:
+    """An AI brief of the submitted feedback (Track 2 Phase 6), generated now
+    and never stored. Only for someone who can already read every form it
+    summarizes, so it never reveals feedback the viewer could not open.
+
+    Plain `def` with asyncio.run, like the matching routes: the ORM work is
+    synchronous and must stay off the event loop.
+    """
+    application = _application_or_404(db, application_id)
+    entries = summaries.submitted_entries(application)
+    viewer = request_user(request)
+    if not all(fs.can_view_feedback(db, viewer, interview) for _, interview, _ in entries):
+        raise HTTPException(
+            status_code=403,
+            detail="The summary is for people who can read every interviewer's feedback on this candidate.",
+        )
+    if len(entries) < summaries.MIN_SUBMISSIONS:
+        raise HTTPException(
+            status_code=409,
+            detail=f"A summary needs at least {summaries.MIN_SUBMISSIONS} submitted feedback forms. "
+            f"This application has {len(entries)}.",
+        )
+    prompt = summaries.build_prompt(application, entries)
+    db.commit()  # release the connection before the model call
+    try:
+        summary = asyncio.run(summaries.summarize(prompt, split=summaries.split_note(entries)))
+    except AllProvidersFailedError:
+        raise HTTPException(
+            status_code=503,
+            detail="The summary service is unavailable right now. Try again later, or read the feedback below.",
+        )
+    except (ValidationError, ValueError):
+        raise HTTPException(
+            status_code=502,
+            detail="The summary came back in a shape we could not use. Try again, or read the feedback below.",
+        )
+    return FeedbackSummaryOut(
+        **summary.model_dump(),
+        application_id=application_id,
+        feedback_count=len(entries),
+        tally=summaries.tally(entries),
+        generated_at=datetime.utcnow(),
+    )
 
 
 @router.post(
