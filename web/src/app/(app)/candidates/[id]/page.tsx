@@ -252,6 +252,7 @@ export default async function CandidateDetailPage({ params }: PageProps<"/candid
                   interviews={interviews.get(detail.id) ?? []}
                   team={team}
                   viewerId={user?.id ?? null}
+                  viewerRole={user?.role ?? null}
                   canAssign={writable}
                   templates={templatesForJob(feedbackTemplates, detail.job_id)}
                 />

@@ -50,6 +50,7 @@ export type InterviewEntry = Schemas["InterviewOut"];
 export type InterviewListItem = Schemas["InterviewListItem"];
 export type FeedbackDraft = Schemas["FeedbackDraftOut"];
 export type FeedbackTemplate = Schemas["FeedbackTemplateOut"];
+export type FeedbackSummary = Schemas["FeedbackSummaryOut"];
 export type StageDefaults = Schemas["StageDefaults"];
 export type InterviewScope = "mine" | "pending" | "all";
 

@@ -117,3 +117,19 @@ class DefaultInterviewersResponse(BaseModel):
 
 class DefaultInterviewersRequest(BaseModel):
     user_ids: List[str] = Field(default_factory=list, max_length=20)
+
+
+class FeedbackSummaryDraft(BaseModel):
+    """What the model returns for a committee brief (Track 2 Phase 6)."""
+    themes: List[str] = Field(default_factory=list)
+    agreements: List[str] = Field(default_factory=list)
+    disagreements: List[str] = Field(default_factory=list)
+    open_questions: List[str] = Field(default_factory=list)
+
+
+class FeedbackSummaryOut(FeedbackSummaryDraft):
+    """Generated on request and never stored; the screen labels it as AI output."""
+    application_id: int
+    feedback_count: int
+    tally: str = Field(description="Counted from the forms, not written by the model.")
+    generated_at: datetime

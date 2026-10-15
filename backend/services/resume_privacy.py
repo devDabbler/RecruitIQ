@@ -70,23 +70,31 @@ _LINK_RE = re.compile(
 )
 
 
-def _name_patterns(name: str) -> List[re.Pattern]:
+def name_parts(name: str) -> List[str]:
     """The full name first, then each part of two or more characters.
 
-    Parts are matched as whole words and case-insensitively, so "Priya" in a
-    bullet is caught but "Priya" inside "Supriya" is not. A short part such as
-    "Al" can collide with ordinary text; a lost word in an advisory prompt is
-    the cheaper mistake.
+    Shared with feedback_summary (Track 2 Phase 6), which swaps several
+    people's names for different placeholders in one pass.
     """
     name = (name or "").strip()
     if not name:
         return []
-    patterns = [re.compile(r"\b" + re.escape(name) + r"\b", re.IGNORECASE)]
+    parts = [name]
     for part in re.split(r"[\s,.]+", name):
         part = part.strip("()'\"")
         if len(part) >= 2:
-            patterns.append(re.compile(r"\b" + re.escape(part) + r"\b", re.IGNORECASE))
-    return patterns
+            parts.append(part)
+    return parts
+
+
+def name_patterns_for(name: str) -> List[re.Pattern]:
+    """`name_parts` as whole-word, case-insensitive patterns.
+
+    Whole words, so "Priya" in a bullet is caught but "Priya" inside
+    "Supriya" is not. A short part such as "Al" can collide with ordinary
+    text; a lost word in an advisory prompt is the cheaper mistake.
+    """
+    return [re.compile(r"\b" + re.escape(part) + r"\b", re.IGNORECASE) for part in name_parts(name)]
 
 
 def scrub_text(text: str, name_patterns: List[re.Pattern], counts: Dict[str, int]) -> str:
@@ -132,7 +140,7 @@ def anonymize_parsed_resume(parsed: Dict[str, Any]) -> Tuple[Dict[str, Any], Dic
 
     removed = [field for field in IDENTIFYING_FIELDS if personal.get(field)]
     name = personal.get("name") if isinstance(personal.get("name"), str) else ""
-    name_patterns = _name_patterns(name)
+    name_patterns = name_patterns_for(name)
 
     safe["personal_info"] = {"summary": personal.get("summary")} if personal.get("summary") else {}
     for key in DROPPED_KEYS:

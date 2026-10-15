@@ -74,6 +74,11 @@ class Settings(BaseSettings):
     llm_provider_order_job_description: str = Field(
         default=os.getenv("LLM_PROVIDER_ORDER_JOB_DESCRIPTION", "")
     )
+    # Track 2 Phase 6 feedback summaries. Empty means the default chain, so a
+    # private deployment keeps them on the local model.
+    llm_provider_order_feedback_summary: str = Field(
+        default=os.getenv("LLM_PROVIDER_ORDER_FEEDBACK_SUMMARY", "")
+    )
     
     # Database settings
     postgres_conn: str = Field(
